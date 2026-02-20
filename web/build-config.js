@@ -6,11 +6,13 @@ var path = require("path");
 var supabaseUrl = process.env.SUPABASE_URL || "";
 var supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "";
 var apiBase = process.env.API_BASE || "";
+var baiduMapAk = process.env.BAIDU_MAP_AK || "";
 var out = path.join(__dirname, "config.js");
 var js = "// Generated at build time from env\nwindow.SMARTDIAODU_CONFIG=" + JSON.stringify({
   supabaseUrl: supabaseUrl,
   supabaseAnonKey: supabaseAnonKey,
-  apiBase: apiBase
+  apiBase: apiBase,
+  baiduMapAk: baiduMapAk
 }, null, 2) + ";\n";
 fs.writeFileSync(out, js, "utf8");
 console.log("Wrote " + out);

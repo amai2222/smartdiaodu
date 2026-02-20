@@ -13,9 +13,9 @@
     .container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
     h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
     .subtitle { color: var(--muted); font-size: 0.8rem; margin-bottom: 1rem; }
-    .tabs { display: flex; gap: 0.25rem; margin-bottom: 1rem; flex-wrap: wrap; }
-    .tabs a { padding: 0.5rem 1rem; border-radius: 6px; background: var(--card); border: 1px solid var(--border); color: var(--text); text-decoration: none; font-size: 0.9rem; }
-    .tabs a:hover { background: var(--border); }
+    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; padding: 0.25rem 0; border-bottom: 1px solid var(--border); }
+    .tabs a { padding: 0.6rem 1.25rem; border-radius: 8px; background: var(--card); border: 1px solid var(--border); color: var(--text); text-decoration: none; font-size: 0.95rem; cursor: pointer; min-width: 6em; text-align: center; }
+    .tabs a:hover { background: var(--border); color: var(--text); }
     .tabs a.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     .panel { display: none; }
     .panel.active { display: block; }
@@ -41,12 +41,12 @@
 <body>
   <div class="container">
     <h1>顺风车智能调度 · 控制台 <span id="userName" style="font-size:0.75rem;color:var(--muted);"></span> <button type="button" class="btn btn-sm" id="btnLogout" style="margin-left:0.5rem;">退出</button></h1>
-    <p class="subtitle">按模式分标签：模式1 规划找单、模式2/3 行程与地图、设置。单页完成，无需多文件。</p>
+    <p class="subtitle">点击下方标签切换：规划找单 / 行程与地图 / 设置</p>
 
-    <nav class="tabs" id="tabNav">
-      <a href="#plan" data-tab="plan" class="active">模式1 规划找单</a>
-      <a href="#route" data-tab="route">行程与地图</a>
-      <a href="#settings" data-tab="settings">设置</a>
+    <nav class="tabs" id="tabNav" role="tablist" aria-label="功能标签">
+      <a href="#plan" data-tab="plan" class="active" role="tab" aria-selected="true">模式1 规划找单</a>
+      <a href="#route" data-tab="route" role="tab" aria-selected="false">模式2/3 行程与地图</a>
+      <a href="#settings" data-tab="settings" role="tab" aria-selected="false">设置</a>
     </nav>
 
     <!-- 模式1：出发前规划 -->
@@ -87,6 +87,7 @@
       </div>
       <div class="card map-wrap">
         <h2>地图 · 乘客起终点与路径规划</h2>
+        <p class="hint" style="margin-bottom:0.5rem;">地图类型：<select id="mapType"><option value="baidu" selected>百度地图</option><option value="osm">OpenStreetMap</option></select></p>
         <div id="map"></div>
       </div>
       <div class="card">
@@ -99,16 +100,8 @@
     <!-- 设置 -->
     <section id="panel-settings" class="panel">
       <div class="card">
-        <h2>网页内推送（与 Bark 同时）</h2>
-        <label>Supabase 项目 URL</label>
-        <input type="url" id="supabaseUrl" placeholder="从 config 或登录后读取" />
-        <label>Supabase Anon Key（用于 Realtime 订阅）</label>
-        <input type="text" id="supabaseAnonKey" placeholder="从 config 或登录后读取" autocomplete="off" />
-        <p class="hint">可选。填写后顺路单推送会同时出现在本页「行程与地图」的实时推送区。需先执行 migration 002 并配置后端 SUPABASE_URL + SERVICE_ROLE_KEY。</p>
-      </div>
-      <div class="card">
         <h2>当前模式</h2>
-        <p id="modeStatus" style="font-size:0.9rem;margin-bottom:0.5rem;">当前：从 config 读取 API 后加载</p>
+        <p id="modeStatus" style="font-size:0.9rem;margin-bottom:0.5rem;">当前：—</p>
         <button type="button" class="btn" data-mode="mode1">出发前找单</button>
         <button type="button" class="btn" data-mode="mode2">路上接满</button>
         <button type="button" class="btn" data-mode="mode3">送人后周边</button>
@@ -140,8 +133,6 @@
   var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
 
   function runApp() {
-  var supabaseUrlInput = document.getElementById("supabaseUrl");
-  var supabaseAnonInput = document.getElementById("supabaseAnonKey");
   var pushEventsStatus = document.getElementById("pushEventsStatus");
   var pushEventsList = document.getElementById("pushEventsList");
   var modeStatus = document.getElementById("modeStatus");
@@ -171,18 +162,41 @@
 
   var modeLabels = { mode1: "出发前找单", mode2: "路上接满", mode3: "送人后周边", pause: "停止接单" };
   var map = null;
+  var bmap = null;
   var markers = [];
   var routeLine = null;
+  var lastRouteData = null;
+  var mapTypeEl = document.getElementById("mapType");
+  function getBaiduMapAk() { return (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.baiduMapAk) || ""; }
+  function wgs84ToBd09(lat, lng) {
+    var x_PI = (3.14159265358979324 * 3000.0) / 180.0, a = 6378245.0, ee = 0.00669342162296594323;
+    function trLat(x, y) {
+      var r = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+      r += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
+      r += (20 * Math.sin(y * Math.PI) + 40 * Math.sin(y / 3 * Math.PI)) * 2 / 3;
+      return r;
+    }
+    function trLng(x, y) {
+      var r = 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+      r += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
+      r += (20 * Math.sin(x * Math.PI) + 40 * Math.sin(x / 3 * Math.PI)) * 2 / 3;
+      return r;
+    }
+    var dlat = trLat(lng - 105, lat - 35), dlng = trLng(lng - 105, lat - 35);
+    var radlat = (lat / 180) * Math.PI, magic = 1 - ee * Math.sin(radlat) * Math.sin(radlat), sqrtmagic = Math.sqrt(magic);
+    dlat = (dlat * 180) / ((a * (1 - ee)) / (magic * sqrtmagic) * Math.PI);
+    dlng = (dlng * 180) / (a / sqrtmagic * Math.cos(radlat) * Math.PI);
+    var mglat = lat + dlat, mglng = lng + dlng;
+    return [ mglng + 0.0065 * Math.cos(mglat * x_PI), mglat + 0.006 * Math.sin(mglng * x_PI) ];
+  }
 
   var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
   function getApiBase() {
     var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) || cfg.apiBase || "";
     return (v || "").trim().replace(/\/$/, "");
   }
-  function getSupabaseUrl() { return (supabaseUrlInput && supabaseUrlInput.value || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_URL) || "" : ""); }
-  function getSupabaseAnon() { return (supabaseAnonInput && supabaseAnonInput.value || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_ANON) || "" : ""); }
-  function setSupabaseUrl(v) { if (supabaseUrlInput) supabaseUrlInput.value = v; if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_SUPABASE_URL, v || ""); }
-  function setSupabaseAnon(v) { if (supabaseAnonInput) supabaseAnonInput.value = v; if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_SUPABASE_ANON, v || ""); }
+  function getSupabaseUrl() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_URL) || "" : "") || (cfg.supabaseUrl || ""); }
+  function getSupabaseAnon() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_ANON) || "" : "") || (cfg.supabaseAnonKey || ""); }
 
   function parseLines(ta) { return (ta.value || "").split(/\n/).map(function(s){ return s.trim(); }).filter(Boolean); }
   function getCurrentState() {
@@ -196,17 +210,28 @@
   // ---------- 标签切换 ----------
   function switchTab(tabId) {
     [].forEach.call(document.querySelectorAll(".panel"), function(p){ p.classList.remove("active"); });
-    [].forEach.call(document.querySelectorAll(".tabs a"), function(a){ a.classList.remove("active"); });
+    [].forEach.call(document.querySelectorAll(".tabs a"), function(a){
+      a.classList.remove("active");
+      a.setAttribute("aria-selected", "false");
+    });
     var panel = document.getElementById("panel-" + tabId);
     var link = document.querySelector('.tabs a[data-tab="' + tabId + '"]');
     if (panel) panel.classList.add("active");
-    if (link) link.classList.add("active");
-    if (tabId === "route" && mapEl && !map) {
+    if (link) {
+      link.classList.add("active");
+      link.setAttribute("aria-selected", "true");
+    }
+    try { window.history.replaceState(null, "", "#" + tabId); } catch (e) {}
+    if (tabId === "route" && mapEl && !map && !bmap) {
       setTimeout(function(){ if (document.getElementById("map").offsetParent) initMap(); }, 100);
     }
   }
   [].forEach.call(document.querySelectorAll(".tabs a"), function(a){
-    a.onclick = function(e){ e.preventDefault(); switchTab(a.getAttribute("data-tab")); };
+    a.onclick = function(e){
+      e.preventDefault();
+      var t = a.getAttribute("data-tab");
+      if (t) switchTab(t);
+    };
   });
   if (location.hash) {
     var t = location.hash.slice(1);
@@ -216,14 +241,14 @@
   // ---------- 模式 ----------
   function refreshMode() {
     var base = getApiBase();
-    if (!base) { modeStatus.textContent = "当前：请配置 API 地址（config / 环境变量 API_BASE）"; return; }
+    if (!base) { modeStatus.textContent = "当前：—"; return; }
     fetch(base + "/driver_mode").then(function(r){ return r.json(); }).then(function(d){
       modeStatus.textContent = "当前：" + (modeLabels[d.mode] || d.mode);
       [].forEach.call(document.querySelectorAll("[data-mode]"), function(btn){
         btn.classList.remove("active");
         if (btn.getAttribute("data-mode") === d.mode) btn.classList.add("active");
       });
-    }).catch(function(){ modeStatus.textContent = "当前：获取失败"; });
+    }).catch(function(){ modeStatus.textContent = "当前：—"; });
   }
   [].forEach.call(document.querySelectorAll("[data-mode]"), function(btn){
     btn.onclick = function(){
@@ -237,7 +262,7 @@
   var planStatus = document.getElementById("planStatus");
   document.getElementById("btnSavePlan").onclick = function(){
     var base = getApiBase();
-    if (!base) { planStatus.textContent = "请配置 API 地址（config / 环境变量 API_BASE）"; return; }
+    if (!base) { planStatus.textContent = "未配置"; return; }
     var body = {
       origin: document.getElementById("planOrigin").value.trim() || "如东荣生花苑",
       destination: document.getElementById("planDest").value.trim() || "上海",
@@ -290,43 +315,106 @@
   };
 
   // ---------- 地图 ----------
+  function getMapType() { return (mapTypeEl && mapTypeEl.value) || "osm"; }
+  function destroyMap() {
+    if (map) { map.remove(); map = null; }
+    if (bmap) { try { bmap.destroy(); } catch (e) {} bmap = null; }
+    markers = []; routeLine = null;
+  }
   function initMap() {
-    if (map) return;
+    var useBaidu = getMapType() === "baidu";
+    var ak = getBaiduMapAk();
+    if (useBaidu && !ak) {
+      routeInfo.textContent = "未配置百度地图 AK（环境变量 BAIDU_MAP_AK），或暂选 OpenStreetMap";
+      return;
+    }
+    destroyMap();
+    if (useBaidu) {
+      if (!window.BMap) {
+        var script = document.createElement("script");
+        script.src = "https://api.map.baidu.com/api?v=3.0&ak=" + ak + "&s=1";
+        script.onload = function() { initBaiduMap(); if (lastRouteData) drawRoute(lastRouteData); };
+        document.head.appendChild(script);
+        return;
+      }
+      initBaiduMap();
+      if (lastRouteData) drawRoute(lastRouteData);
+      return;
+    }
     map = L.map("map").setView([32.0, 121.0], 10);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OSM" }).addTo(map);
+    if (lastRouteData) drawRoute(lastRouteData);
+  }
+  function initBaiduMap() {
+    if (bmap) return;
+    var c = new window.BMap.Point(121.0, 32.0);
+    bmap = new window.BMap.Map("map");
+    bmap.centerAndZoom(c, 10);
+    bmap.enableScrollWheelZoom(true);
   }
   function clearMapOverlays() {
-    if (!map) return;
-    markers.forEach(function(m){ map.removeLayer(m); });
-    markers = [];
-    if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+    if (map) {
+      markers.forEach(function(m){ map.removeLayer(m); });
+      markers = [];
+      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+    }
+    if (bmap) {
+      bmap.clearOverlays();
+    }
   }
   var typeColor = { driver: "#3b82f6", pickup: "#22c55e", delivery: "#ef4444" };
   var typeLabel = { driver: "司机", pickup: "接", delivery: "送" };
+  function getPointLabel(i, types, labels, addresses) {
+    if (labels && labels[i]) return labels[i] + (addresses[i] ? " " + (addresses[i].length > 12 ? addresses[i].slice(0,12)+"…" : addresses[i]) : "");
+    var t = types[i] || "driver";
+    return (typeLabel[t] || "途经") + (i > 0 ? i : "") + (addresses[i] ? " " + (addresses[i].length > 12 ? addresses[i].slice(0,12)+"…" : addresses[i]) : "");
+  }
   function drawRoute(data) {
-    clearMapOverlays();
+    lastRouteData = data;
     var coords = data.route_coords || [];
     var addresses = data.route_addresses || [];
     var types = data.point_types || [];
+    var labels = data.point_labels || [];
     if (coords.length === 0) return;
-    var latlngs = coords.map(function(c){ return [c[0], c[1]]; });
-    routeLine = L.polyline(latlngs, { color: "#58a6ff", weight: 4 }).addTo(map);
-    map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
-    coords.forEach(function(c, i){
-      var t = types[i] || "driver";
-      var color = typeColor[t] || "#888";
-      var label = (typeLabel[t] || "途经") + (i > 0 ? i : "");
-      if (addresses[i]) label += " " + (addresses[i].length > 14 ? addresses[i].slice(0,14)+"…" : addresses[i]);
-      var marker = L.circleMarker([c[0], c[1]], { radius: 8, fillColor: color, color: "#fff", weight: 2, fillOpacity: 1 }).addTo(map);
-      marker.bindPopup(label);
-      markers.push(marker);
-    });
+    clearMapOverlays();
+    var useBaidu = getMapType() === "baidu" && bmap;
+    if (useBaidu) {
+      var points = [];
+      coords.forEach(function(c, i){
+        var lat = c[0], lng = c[1];
+        var bd = wgs84ToBd09(lat, lng);
+        points.push(new window.BMap.Point(bd[0], bd[1]));
+        var label = getPointLabel(i, types, labels, addresses);
+        var mk = new window.BMap.Marker(new window.BMap.Point(bd[0], bd[1]));
+        mk.setLabel(new window.BMap.Label(label, { offset: new window.BMap.Size(10, -10) }));
+        bmap.addOverlay(mk);
+      });
+      var poly = new window.BMap.Polyline(points, { strokeColor: "#58a6ff", strokeWeight: 4 });
+      bmap.addOverlay(poly);
+      bmap.setViewport(points);
+    } else if (map) {
+      var latlngs = coords.map(function(c){ return [c[0], c[1]]; });
+      routeLine = L.polyline(latlngs, { color: "#58a6ff", weight: 4 }).addTo(map);
+      map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+      coords.forEach(function(c, i){
+        var t = types[i] || "driver";
+        var color = typeColor[t] || "#888";
+        var label = getPointLabel(i, types, labels, addresses);
+        var marker = L.circleMarker([c[0], c[1]], { radius: 8, fillColor: color, color: "#fff", weight: 2, fillOpacity: 1 }).addTo(map);
+        marker.bindPopup(label);
+        markers.push(marker);
+      });
+    }
     var totalMin = Math.round((data.total_time_seconds || 0) / 60);
-    routeInfo.textContent = "途经 " + addresses.length + " 点（蓝=司机 绿=接 红=送），预估总行驶约 " + totalMin + " 分钟";
+    routeInfo.textContent = "途经 " + addresses.length + " 点（司机→乘客1起点/终点→…），预估总行驶约 " + totalMin + " 分钟";
   }
+  if (mapTypeEl) mapTypeEl.addEventListener("change", function(){
+    destroyMap();
+    initMap();
+  });
   btnUpdateMap.onclick = function(){
     var base = getApiBase();
-    if (!base) { routeInfo.textContent = "请配置 API 地址（config / 环境变量 API_BASE）"; return; }
+    if (!base) { routeInfo.textContent = "未配置"; return; }
     initMap();
     var state = getCurrentState();
     routeInfo.textContent = "加载中…";
@@ -364,12 +452,6 @@
   }
   window.addEventListener("smartdiaodu_push", function(e) { if (e.detail) addPushEvent(e.detail); });
 
-  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL)) setSupabaseUrl(localStorage.getItem(STORAGE_SUPABASE_URL));
-  else if (cfg.supabaseUrl) setSupabaseUrl(cfg.supabaseUrl);
-  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON)) setSupabaseAnon(localStorage.getItem(STORAGE_SUPABASE_ANON));
-  else if (cfg.supabaseAnonKey) setSupabaseAnon(cfg.supabaseAnonKey);
-  if (supabaseUrlInput) supabaseUrlInput.addEventListener("change", function(){ setSupabaseUrl(supabaseUrlInput.value.trim()); });
-  if (supabaseAnonInput) supabaseAnonInput.addEventListener("change", function(){ setSupabaseAnon(supabaseAnonInput.value.trim()); });
   refreshMode();
   }
 

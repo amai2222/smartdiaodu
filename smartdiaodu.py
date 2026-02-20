@@ -49,7 +49,9 @@ app.add_middleware(
 )
 
 # ================= 配置区 =================
-BAIDU_AK = "xhDemVJisNK1JU962l0LKNGARjJvovdp"
+# 百度地图服务器端：AK + 应用 Service ID（地理编码、路网矩阵）
+BAIDU_AK = "wxw2PvK3nWeOCGk1rZDe2krnlc1jbzsc"
+BAIDU_SERVICE_ID = "119231078"
 BARK_KEY = "bGPZAHqjNjdiQZTg5GeWWG"
 MAX_DETOUR_SECONDS = 900  # 绕路容忍阈值（秒），例如 15 分钟
 REQUEST_TIMEOUT = 5       # 所有外部 API 统一超时（秒）
@@ -655,6 +657,7 @@ async def current_route_preview(req: dict) -> dict:
                 "route_addresses": [driver_loc],
                 "route_coords": [[wgs_lat, wgs_lng]],
                 "point_types": ["driver"],
+                "point_labels": ["司机"],
                 "total_time_seconds": 0,
             }
         except Exception as e:
@@ -670,13 +673,17 @@ async def current_route_preview(req: dict) -> dict:
     n_pairs = len(pickups)
     route_addresses = [addresses[i] for i in route_indices]
     point_types = []
+    point_labels = []
     for i in route_indices:
         if i == 0:
             point_types.append("driver")
+            point_labels.append("司机")
         elif 1 <= i <= n_pairs:
             point_types.append("pickup")
+            point_labels.append(f"乘客{i}起点")
         else:
             point_types.append("delivery")
+            point_labels.append(f"乘客{i - n_pairs}终点")
     route_coords = []
     for i in route_indices:
         parts = coords[i].split(",", 1)
@@ -687,6 +694,7 @@ async def current_route_preview(req: dict) -> dict:
         "route_addresses": route_addresses,
         "route_coords": route_coords,
         "point_types": point_types,
+        "point_labels": point_labels,
         "total_time_seconds": total_time,
     }
 
