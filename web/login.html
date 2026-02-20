@@ -27,10 +27,12 @@
     <h1>顺风车智能调度</h1>
     <p class="subtitle">网页直连 Supabase 登录（HTTPS，无需自建后端）</p>
     <form id="loginForm">
-      <label>Supabase 项目 URL</label>
-      <input type="url" id="supabaseUrl" placeholder="https://xxx.supabase.co" />
-      <label>Supabase Anon Key（公开密钥）</label>
-      <input type="text" id="supabaseAnon" placeholder="eyJhbG..." />
+      <div id="configFields">
+        <label>Supabase 项目 URL</label>
+        <input type="url" id="supabaseUrl" placeholder="https://xxx.supabase.co" />
+        <label>Supabase Anon Key（公开密钥）</label>
+        <input type="text" id="supabaseAnon" placeholder="eyJhbG..." />
+      </div>
       <label>邮箱</label>
       <input type="email" id="email" placeholder="admin@你的域名.com" autocomplete="username" />
       <label>密码</label>
@@ -38,7 +40,7 @@
       <button type="submit" class="btn" id="btnSubmit">登录</button>
       <p id="err" class="err"></p>
     </form>
-    <p class="hint">在 Supabase 控制台 → Authentication → Users 里添加用户（邮箱+密码）；API 设置里复制 URL 与 anon public key。</p>
+    <p class="hint" id="hintText">在 Supabase 控制台 → Authentication → Users 里添加用户（邮箱+密码）；API 设置里复制 URL 与 anon public key。</p>
   </div>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script>
@@ -56,12 +58,20 @@
   var errEl = document.getElementById("err");
 
   var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
-  if (typeof localStorage !== "undefined") {
-    supabaseUrlInput.value = localStorage.getItem(STORAGE_SUPABASE_URL) || cfg.supabaseUrl || "";
-    supabaseAnonInput.value = localStorage.getItem(STORAGE_SUPABASE_ANON) || cfg.supabaseAnonKey || "";
+  var hasConfig = !!(cfg.supabaseUrl && cfg.supabaseAnonKey);
+  var configFieldsEl = document.getElementById("configFields");
+  var hintEl = document.getElementById("hintText");
+  if (hasConfig && configFieldsEl) {
+    configFieldsEl.style.display = "none";
+    if (hintEl) hintEl.textContent = "已从 config 读取 Supabase 配置，请输入邮箱和密码登录。";
   } else {
-    supabaseUrlInput.value = cfg.supabaseUrl || "";
-    supabaseAnonInput.value = cfg.supabaseAnonKey || "";
+    if (typeof localStorage !== "undefined") {
+      supabaseUrlInput.value = localStorage.getItem(STORAGE_SUPABASE_URL) || cfg.supabaseUrl || "";
+      supabaseAnonInput.value = localStorage.getItem(STORAGE_SUPABASE_ANON) || cfg.supabaseAnonKey || "";
+    } else {
+      supabaseUrlInput.value = cfg.supabaseUrl || "";
+      supabaseAnonInput.value = cfg.supabaseAnonKey || "";
+    }
   }
 
   function showErr(msg) {
@@ -71,13 +81,13 @@
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
-    var url = (supabaseUrlInput.value || "").trim();
-    var anon = (supabaseAnonInput.value || "").trim();
+    var url = (supabaseUrlInput.value || cfg.supabaseUrl || "").trim();
+    var anon = (supabaseAnonInput.value || cfg.supabaseAnonKey || "").trim();
     var email = (emailInput.value || "").trim();
     var password = passwordInput.value || "";
     showErr("");
-    if (!url) { showErr("请填写 Supabase 项目 URL"); return; }
-    if (!anon) { showErr("请填写 Supabase Anon Key"); return; }
+    if (!url) { showErr("请填写 Supabase 项目 URL 或在 config 中配置"); return; }
+    if (!anon) { showErr("请填写 Supabase Anon Key 或在 config 中配置"); return; }
     if (!email) { showErr("请填写邮箱"); return; }
     if (!password) { showErr("请填写密码"); return; }
     btnSubmit.disabled = true;
