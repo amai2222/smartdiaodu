@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录 · 顺风车智能调度</title>
+  <style>
+    :root { --bg: #0f1419; --card: #1a2332; --border: #2d3a4d; --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --red: #f85149; }
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", "PingFang SC", sans-serif; background: var(--bg); color: var(--text); margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; max-width: 360px; width: 100%; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem 0; }
+    .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; }
+    input[type="text"], input[type="password"], input[type="url"] { width: 100%; padding: 0.6rem 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 1rem; margin-bottom: 1rem; }
+    input:focus { outline: none; border-color: var(--accent); }
+    .btn { width: 100%; padding: 0.75rem; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; background: var(--accent); color: #fff; margin-top: 0.5rem; }
+    .btn:hover { filter: brightness(1.1); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .err { color: var(--red); font-size: 0.9rem; margin-top: 0.75rem; display: none; }
+    .hint { font-size: 0.8rem; color: var(--muted); margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>顺风车智能调度</h1>
+    <p class="subtitle">请登录后使用控制台</p>
+    <form id="loginForm">
+      <label>API 地址</label>
+      <input type="url" id="apiBase" placeholder="https://api.yourdomain.com 或留空用当前域名" />
+      <label>用户名</label>
+      <input type="text" id="username" placeholder="admin" autocomplete="username" />
+      <label>密码</label>
+      <input type="password" id="password" placeholder="密码" autocomplete="current-password" />
+      <button type="submit" class="btn" id="btnSubmit">登录</button>
+      <p id="err" class="err"></p>
+    </form>
+    <p class="hint">默认账号：admin / 123456（需后端已配置 Supabase 并执行 migration 003）</p>
+  </div>
+  <script>
+(function () {
+  var STORAGE_API = "smartdiaodu_api_base";
+  var STORAGE_TOKEN = "smartdiaodu_token";
+  var STORAGE_USERNAME = "smartdiaodu_username";
+  var form = document.getElementById("loginForm");
+  var apiInput = document.getElementById("apiBase");
+  var usernameInput = document.getElementById("username");
+  var passwordInput = document.getElementById("password");
+  var btnSubmit = document.getElementById("btnSubmit");
+  var errEl = document.getElementById("err");
+
+  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) {
+    apiInput.value = localStorage.getItem(STORAGE_API);
+  }
+
+  function getApiBase() {
+    var v = (apiInput.value || "").trim();
+    if (!v && typeof localStorage !== "undefined") v = localStorage.getItem(STORAGE_API) || "";
+    if (!v) v = window.location.origin;
+    return v.replace(/\/$/, "");
+  }
+
+  function showErr(msg) {
+    errEl.textContent = msg || "";
+    errEl.style.display = msg ? "block" : "none";
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var base = getApiBase();
+    var username = (usernameInput.value || "").trim();
+    var password = passwordInput.value || "";
+    showErr("");
+    if (!username) { showErr("请输入用户名"); return; }
+    btnSubmit.disabled = true;
+    fetch(base + "/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: username, password: password })
+    }).then(function (r) {
+      if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || "登录失败"); });
+      return r.json();
+    }).then(function (d) {
+      if (d.token) {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(STORAGE_TOKEN, d.token);
+          if (d.username) localStorage.setItem(STORAGE_USERNAME, d.username);
+          localStorage.setItem(STORAGE_API, base);
+        }
+        window.location.href = "index.html";
+      } else {
+        showErr("未返回 token");
+        btnSubmit.disabled = false;
+      }
+    }).catch(function (e) {
+      showErr(e.message || "网络错误");
+      btnSubmit.disabled = false;
+    });
+  });
+})();
+  </script>
+</body>
+</html>

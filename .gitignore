@@ -1,0 +1,11 @@
+# 环境变量（含密钥），勿提交
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.log
+.venv/
+venv/

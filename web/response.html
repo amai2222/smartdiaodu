@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>接单 / 是否继续接单</title>
+  <style>
+    body { font-family: sans-serif; max-width: 360px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.1rem; }
+    .btn { display: block; width: 100%; margin: 0.5rem 0; padding: 0.75rem; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; text-decoration: none; text-align: center; color: #fff; }
+    .btn-accept-continue { background: #22c55e; }
+    .btn-accept-stop   { background: #3b82f6; }
+    .btn-decline-continue { background: #eab308; color: #000; }
+    .btn-decline-stop  { background: #ef4444; }
+    .msg { margin-top: 1rem; padding: 0.75rem; border-radius: 8px; display: none; }
+    .msg.ok { background: #dcfce7; display: block; }
+  </style>
+</head>
+<body>
+  <h1>收到一单推送，请选择：</h1>
+  <p id="hint">接单 / 不接，以及是否继续接收顺路单推送。</p>
+  <div id="buttons">
+    <a class="btn btn-accept-continue" id="ac1">接单，并继续接单</a>
+    <a class="btn btn-accept-stop" id="ac0">接单，但暂停推送</a>
+    <a class="btn btn-decline-continue" id="dc1">不接，继续接单</a>
+    <a class="btn btn-decline-stop" id="dc0">不接，暂停推送</a>
+  </div>
+  <p id="msg" class="msg"></p>
+
+  <script>
+    (function () {
+      var API_BASE = "";  // 填大脑 API 地址，如 https://api.yourdomain.com（与 Bark 推送里的一致）
+      var params = new URLSearchParams(window.location.search);
+      var fp = params.get("fp") || params.get("fingerprint") || "";
+      if (!fp) {
+        document.getElementById("hint").textContent = "缺少订单参数（fp），请从推送链接进入。";
+        document.getElementById("buttons").innerHTML = "";
+        return;
+      }
+      function go(accepted, continueAccepting) {
+        var url = (API_BASE || window.location.origin) + "/order_response?fingerprint=" + encodeURIComponent(fp) + "&accepted=" + (accepted ? "1" : "0") + "&continue_accepting=" + (continueAccepting ? "1" : "0");
+        var msgEl = document.getElementById("msg");
+        fetch(url).then(function (r) { return r.json(); }).then(function (d) {
+          msgEl.textContent = d.message || "已记录";
+          msgEl.className = "msg ok";
+        }).catch(function () {
+          msgEl.textContent = "请求失败，请检查 API 地址或网络";
+          msgEl.className = "msg ok";
+        });
+      }
+      document.getElementById("ac1").onclick = function (e) { e.preventDefault(); go(true, true); };
+      document.getElementById("ac0").onclick = function (e) { e.preventDefault(); go(true, false); };
+      document.getElementById("dc1").onclick = function (e) { e.preventDefault(); go(false, true); };
+      document.getElementById("dc0").onclick = function (e) { e.preventDefault(); go(false, false); };
+    })();
+  </script>
+</body>
+</html>

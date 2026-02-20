@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>顺风车智能调度 · 控制台</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root { --bg: #0f1419; --card: #1a2332; --border: #2d3a4d; --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149; }
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", "PingFang SC", sans-serif; background: var(--bg); color: var(--text); margin: 0; min-height: 100vh; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
+    .subtitle { color: var(--muted); font-size: 0.8rem; margin-bottom: 1rem; }
+    .tabs { display: flex; gap: 0.25rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .tabs a { padding: 0.5rem 1rem; border-radius: 6px; background: var(--card); border: 1px solid var(--border); color: var(--text); text-decoration: none; font-size: 0.9rem; }
+    .tabs a:hover { background: var(--border); }
+    .tabs a.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+    .card h2 { font-size: 0.9rem; color: var(--muted); margin: 0 0 0.75rem 0; }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; }
+    input[type="text"], input[type="url"], input[type="number"], textarea { width: 100%; padding: 0.5rem 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.9rem; margin-bottom: 0.75rem; }
+    textarea { min-height: 60px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 768px) { .row { grid-template-columns: 1fr; } }
+    .btn { display: inline-block; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.9rem; cursor: pointer; border: none; background: var(--accent); color: #fff; margin-right: 0.5rem; margin-bottom: 0.5rem; }
+    .btn:hover { filter: brightness(1.1); }
+    .btn.active { background: var(--green); }
+    .btn.pause { background: var(--muted); }
+    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.85rem; }
+    #map { height: 420px; border-radius: 8px; border: 1px solid var(--border); margin-top: 0.5rem; }
+    .map-wrap { margin-bottom: 1rem; }
+    .route-info { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+    .hint { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
+    .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>顺风车智能调度 · 控制台 <span id="userName" style="font-size:0.75rem;color:var(--muted);"></span> <button type="button" class="btn btn-sm" id="btnLogout" style="margin-left:0.5rem;">退出</button></h1>
+    <p class="subtitle">按模式分标签：模式1 规划找单、模式2/3 行程与地图、设置。单页完成，无需多文件。</p>
+
+    <nav class="tabs" id="tabNav">
+      <a href="#plan" data-tab="plan" class="active">模式1 规划找单</a>
+      <a href="#route" data-tab="route">行程与地图</a>
+      <a href="#settings" data-tab="settings">设置</a>
+    </nav>
+
+    <!-- 模式1：出发前规划 -->
+    <section id="panel-plan" class="panel active">
+      <div class="card">
+        <h2>规划任务（出发地、目的地、时间、2～4 单）</h2>
+        <p class="hint">设定后探针/筛选可按此条件盯单，批量优化接口可后续扩展。</p>
+        <label>出发地</label>
+        <input type="text" id="planOrigin" placeholder="如东荣生花苑" />
+        <label>目的地</label>
+        <input type="text" id="planDest" placeholder="上海" />
+        <div class="row">
+          <div><label>计划出发时间</label><input type="text" id="planTime" placeholder="06:00" /></div>
+          <div><label>时间窗（±分钟）</label><input type="number" id="planWindow" placeholder="30" value="30" /></div>
+        </div>
+        <div class="row">
+          <div><label>最少接单数</label><input type="number" id="planMin" placeholder="2" value="2" /></div>
+          <div><label>最多接单数</label><input type="number" id="planMax" placeholder="4" value="4" /></div>
+        </div>
+        <button type="button" class="btn" id="btnSavePlan">保存规划任务</button>
+        <button type="button" class="btn btn-sm" id="btnLoadPlan">读取当前</button>
+        <p id="planStatus" class="route-info"></p>
+      </div>
+    </section>
+
+    <!-- 模式2/3 共用：当前行程 + 地图 -->
+    <section id="panel-route" class="panel">
+      <div class="card">
+        <h2>当前状态（司机位置 + 已接订单起终点）</h2>
+        <label>司机当前位置</label>
+        <input type="text" id="driverLoc" placeholder="如东县委党校" />
+        <label>已接订单 · 接客地址（每行一个）</label>
+        <textarea id="pickups" placeholder="如东县掘港镇荣生豪景花苑2号楼"></textarea>
+        <label>已接订单 · 送客地址（每行一个）</label>
+        <textarea id="deliveries" placeholder="上海市外滩"></textarea>
+        <button type="button" class="btn" id="btnUpdateMap">更新地图</button>
+        <p id="routeInfo" class="route-info"></p>
+      </div>
+      <div class="card map-wrap">
+        <h2>地图 · 乘客起终点与路径规划</h2>
+        <div id="map"></div>
+      </div>
+      <div class="card">
+        <h2>实时推送（与 Bark 同时）</h2>
+        <p id="pushEventsStatus" class="hint">未配置 Supabase 时仅 Bark 推送；在设置中填 Supabase URL + Anon Key 即可页内收到推送。</p>
+        <ul id="pushEventsList" style="list-style:none;padding:0;margin:0.5rem 0 0 0;max-height:200px;overflow-y:auto;"></ul>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section id="panel-settings" class="panel">
+      <div class="card">
+        <h2>API 地址</h2>
+        <input type="url" id="apiBase" placeholder="https://api.yourdomain.com 或 http://localhost:8000" />
+        <p class="hint">可存到本地，刷新后仍生效。</p>
+      </div>
+      <div class="card">
+        <h2>网页内推送（与 Bark 同时）</h2>
+        <label>Supabase 项目 URL</label>
+        <input type="url" id="supabaseUrl" placeholder="https://zqcctbcwibnqmumtqweu.supabase.co" />
+        <label>Supabase Anon Key（用于 Realtime 订阅）</label>
+        <input type="text" id="supabaseAnonKey" placeholder="sb_publishable_..." autocomplete="off" />
+        <p class="hint">可选。填写后顺路单推送会同时出现在本页「行程与地图」的实时推送区。需先执行 migration 002 并配置后端 SUPABASE_URL + SERVICE_ROLE_KEY。</p>
+      </div>
+      <div class="card">
+        <h2>当前模式</h2>
+        <p id="modeStatus" style="font-size:0.9rem;margin-bottom:0.5rem;">当前：请先填 API 并加载</p>
+        <button type="button" class="btn" data-mode="mode1">出发前找单</button>
+        <button type="button" class="btn" data-mode="mode2">路上接满</button>
+        <button type="button" class="btn" data-mode="mode3">送人后周边</button>
+        <button type="button" class="btn pause" data-mode="pause">停止接单</button>
+      </div>
+      <div class="card">
+        <h2>模式参数（可选）</h2>
+        <div class="config-grid">
+          <div><label>模式2 耽误下限(分)</label><input type="number" id="cfgDetourMin" placeholder="20" /></div>
+          <div><label>模式2 耽误上限(分)</label><input type="number" id="cfgDetourMax" placeholder="60" /></div>
+          <div><label>模式2 高收益门槛(元)</label><input type="number" id="cfgHighProfit" placeholder="100" /></div>
+          <div><label>模式3 接人时效(分)</label><input type="number" id="cfgPickupMin" placeholder="30" /></div>
+          <div><label>模式3 剩余耽误上限(分)</label><input type="number" id="cfgDetour3" placeholder="25" /></div>
+        </div>
+        <button type="button" class="btn btn-sm" id="btnLoadCfg">读取</button>
+        <button type="button" class="btn btn-sm" id="btnSaveCfg">保存</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+(function () {
+  var STORAGE_API = "smartdiaodu_api_base";
+  var STORAGE_TOKEN = "smartdiaodu_token";
+  var STORAGE_USERNAME = "smartdiaodu_username";
+  var STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
+  var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
+  if (typeof localStorage !== "undefined" && !localStorage.getItem(STORAGE_TOKEN)) {
+    window.location.replace("login.html");
+    return;
+  }
+  var apiInput = document.getElementById("apiBase");
+  var supabaseUrlInput = document.getElementById("supabaseUrl");
+  var supabaseAnonInput = document.getElementById("supabaseAnonKey");
+  var pushEventsStatus = document.getElementById("pushEventsStatus");
+  var pushEventsList = document.getElementById("pushEventsList");
+  var modeStatus = document.getElementById("modeStatus");
+  var driverLoc = document.getElementById("driverLoc");
+  var pickupsEl = document.getElementById("pickups");
+  var deliveriesEl = document.getElementById("deliveries");
+  var btnUpdateMap = document.getElementById("btnUpdateMap");
+  var routeInfo = document.getElementById("routeInfo");
+  var mapEl = document.getElementById("map");
+  var userNameEl = document.getElementById("userName");
+  var btnLogout = document.getElementById("btnLogout");
+  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_USERNAME)) {
+    if (userNameEl) userNameEl.textContent = "（" + localStorage.getItem(STORAGE_USERNAME) + "）";
+  }
+  if (btnLogout) btnLogout.onclick = function () {
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(STORAGE_TOKEN);
+      localStorage.removeItem(STORAGE_USERNAME);
+    }
+    window.location.replace("login.html");
+  };
+
+  var modeLabels = { mode1: "出发前找单", mode2: "路上接满", mode3: "送人后周边", pause: "停止接单" };
+  var map = null;
+  var markers = [];
+  var routeLine = null;
+
+  function getApiBase() {
+    var v = (apiInput.value || "").trim();
+    if (!v && typeof localStorage !== "undefined") v = localStorage.getItem(STORAGE_API) || "";
+    return v ? v.replace(/\/$/, "") : "";
+  }
+  function setApiBase(v) {
+    apiInput.value = v;
+    if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_API, v);
+  }
+  function getSupabaseUrl() { return (supabaseUrlInput && supabaseUrlInput.value || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_URL) || "" : ""); }
+  function getSupabaseAnon() { return (supabaseAnonInput && supabaseAnonInput.value || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_ANON) || "" : ""); }
+  function setSupabaseUrl(v) { if (supabaseUrlInput) supabaseUrlInput.value = v; if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_SUPABASE_URL, v || ""); }
+  function setSupabaseAnon(v) { if (supabaseAnonInput) supabaseAnonInput.value = v; if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_SUPABASE_ANON, v || ""); }
+
+  function parseLines(ta) { return (ta.value || "").split(/\n/).map(function(s){ return s.trim(); }).filter(Boolean); }
+  function getCurrentState() {
+    return {
+      driver_loc: driverLoc.value.trim() || "如东县委党校",
+      pickups: parseLines(pickupsEl),
+      deliveries: parseLines(deliveriesEl)
+    };
+  }
+
+  // ---------- 标签切换 ----------
+  function switchTab(tabId) {
+    [].forEach.call(document.querySelectorAll(".panel"), function(p){ p.classList.remove("active"); });
+    [].forEach.call(document.querySelectorAll(".tabs a"), function(a){ a.classList.remove("active"); });
+    var panel = document.getElementById("panel-" + tabId);
+    var link = document.querySelector('.tabs a[data-tab="' + tabId + '"]');
+    if (panel) panel.classList.add("active");
+    if (link) link.classList.add("active");
+    if (tabId === "route" && mapEl && !map) {
+      setTimeout(function(){ if (document.getElementById("map").offsetParent) initMap(); }, 100);
+    }
+  }
+  [].forEach.call(document.querySelectorAll(".tabs a"), function(a){
+    a.onclick = function(e){ e.preventDefault(); switchTab(a.getAttribute("data-tab")); };
+  });
+  if (location.hash) {
+    var t = location.hash.slice(1);
+    if (t === "plan" || t === "route" || t === "settings") switchTab(t);
+  }
+
+  // ---------- 模式 ----------
+  function refreshMode() {
+    var base = getApiBase();
+    if (!base) { modeStatus.textContent = "当前：请先填写 API 地址"; return; }
+    fetch(base + "/driver_mode").then(function(r){ return r.json(); }).then(function(d){
+      modeStatus.textContent = "当前：" + (modeLabels[d.mode] || d.mode);
+      [].forEach.call(document.querySelectorAll("[data-mode]"), function(btn){
+        btn.classList.remove("active");
+        if (btn.getAttribute("data-mode") === d.mode) btn.classList.add("active");
+      });
+    }).catch(function(){ modeStatus.textContent = "当前：获取失败"; });
+  }
+  [].forEach.call(document.querySelectorAll("[data-mode]"), function(btn){
+    btn.onclick = function(){
+      var mode = this.getAttribute("data-mode");
+      fetch(getApiBase() + "/driver_mode", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: mode }) })
+        .then(function(){ refreshMode(); });
+    };
+  });
+
+  // ---------- 模式1 规划 ----------
+  var planStatus = document.getElementById("planStatus");
+  document.getElementById("btnSavePlan").onclick = function(){
+    var base = getApiBase();
+    if (!base) { planStatus.textContent = "请先填 API 地址（设置页）"; return; }
+    var body = {
+      origin: document.getElementById("planOrigin").value.trim() || "如东荣生花苑",
+      destination: document.getElementById("planDest").value.trim() || "上海",
+      departure_time: document.getElementById("planTime").value.trim() || "06:00",
+      time_window_minutes: parseInt(document.getElementById("planWindow").value, 10) || 30,
+      min_orders: parseInt(document.getElementById("planMin").value, 10) || 2,
+      max_orders: parseInt(document.getElementById("planMax").value, 10) || 4
+    };
+    fetch(base + "/planned_trip", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function(r){ return r.json(); })
+      .then(function(){ planStatus.textContent = "已保存规划任务"; })
+      .catch(function(e){ planStatus.textContent = "失败：" + (e.message || e); });
+  };
+  document.getElementById("btnLoadPlan").onclick = function(){
+    var base = getApiBase();
+    if (!base) return;
+    fetch(base + "/planned_trip").then(function(r){ return r.json(); }).then(function(d){
+      if (d.origin) document.getElementById("planOrigin").value = d.origin;
+      if (d.destination) document.getElementById("planDest").value = d.destination;
+      if (d.departure_time) document.getElementById("planTime").value = d.departure_time;
+      if (d.time_window_minutes != null) document.getElementById("planWindow").value = d.time_window_minutes;
+      if (d.min_orders != null) document.getElementById("planMin").value = d.min_orders;
+      if (d.max_orders != null) document.getElementById("planMax").value = d.max_orders;
+      planStatus.textContent = d.set ? "已加载当前规划" : "当前无规划";
+    });
+  };
+
+  // ---------- 设置：读取/保存模式参数 ----------
+  document.getElementById("btnLoadCfg").onclick = function(){
+    var base = getApiBase();
+    if (!base) return;
+    fetch(base + "/driver_mode_config").then(function(r){ return r.json(); }).then(function(c){
+      if (c.mode2_detour_min != null) document.getElementById("cfgDetourMin").value = c.mode2_detour_min;
+      if (c.mode2_detour_max != null) document.getElementById("cfgDetourMax").value = c.mode2_detour_max;
+      if (c.mode2_high_profit_threshold != null) document.getElementById("cfgHighProfit").value = c.mode2_high_profit_threshold;
+      if (c.mode3_max_minutes_to_pickup != null) document.getElementById("cfgPickupMin").value = c.mode3_max_minutes_to_pickup;
+      if (c.mode3_max_detour_minutes != null) document.getElementById("cfgDetour3").value = c.mode3_max_detour_minutes;
+    });
+  };
+  document.getElementById("btnSaveCfg").onclick = function(){
+    var base = getApiBase();
+    if (!base) return;
+    var body = {};
+    var v = document.getElementById("cfgDetourMin").value; if (v) body.mode2_detour_min = parseInt(v, 10);
+    v = document.getElementById("cfgDetourMax").value; if (v) body.mode2_detour_max = parseInt(v, 10);
+    v = document.getElementById("cfgHighProfit").value; if (v) body.mode2_high_profit_threshold = parseFloat(v);
+    v = document.getElementById("cfgPickupMin").value; if (v) body.mode3_max_minutes_to_pickup = parseInt(v, 10);
+    v = document.getElementById("cfgDetour3").value; if (v) body.mode3_max_detour_minutes = parseInt(v, 10);
+    fetch(base + "/driver_mode_config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(function(){ refreshMode(); });
+  };
+
+  // ---------- 地图 ----------
+  function initMap() {
+    if (map) return;
+    map = L.map("map").setView([32.0, 121.0], 10);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OSM" }).addTo(map);
+  }
+  function clearMapOverlays() {
+    if (!map) return;
+    markers.forEach(function(m){ map.removeLayer(m); });
+    markers = [];
+    if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+  }
+  var typeColor = { driver: "#3b82f6", pickup: "#22c55e", delivery: "#ef4444" };
+  var typeLabel = { driver: "司机", pickup: "接", delivery: "送" };
+  function drawRoute(data) {
+    clearMapOverlays();
+    var coords = data.route_coords || [];
+    var addresses = data.route_addresses || [];
+    var types = data.point_types || [];
+    if (coords.length === 0) return;
+    var latlngs = coords.map(function(c){ return [c[0], c[1]]; });
+    routeLine = L.polyline(latlngs, { color: "#58a6ff", weight: 4 }).addTo(map);
+    map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+    coords.forEach(function(c, i){
+      var t = types[i] || "driver";
+      var color = typeColor[t] || "#888";
+      var label = (typeLabel[t] || "途经") + (i > 0 ? i : "");
+      if (addresses[i]) label += " " + (addresses[i].length > 14 ? addresses[i].slice(0,14)+"…" : addresses[i]);
+      var marker = L.circleMarker([c[0], c[1]], { radius: 8, fillColor: color, color: "#fff", weight: 2, fillOpacity: 1 }).addTo(map);
+      marker.bindPopup(label);
+      markers.push(marker);
+    });
+    var totalMin = Math.round((data.total_time_seconds || 0) / 60);
+    routeInfo.textContent = "途经 " + addresses.length + " 点（蓝=司机 绿=接 红=送），预估总行驶约 " + totalMin + " 分钟";
+  }
+  btnUpdateMap.onclick = function(){
+    var base = getApiBase();
+    if (!base) { routeInfo.textContent = "请先在设置页填写 API 地址"; return; }
+    initMap();
+    var state = getCurrentState();
+    routeInfo.textContent = "加载中…";
+    fetch(base + "/current_route_preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current_state: state })
+    }).then(function(r){
+      if (!r.ok) return r.json().then(function(d){ throw new Error(d.detail || r.statusText); });
+      return r.json();
+    }).then(drawRoute).catch(function(e){
+      routeInfo.textContent = "失败：" + (e.message || e);
+      clearMapOverlays();
+    });
+  };
+
+  // ---------- 实时推送（Realtime 推送由下方 module 脚本派发事件） ----------
+  function addPushEvent(row) {
+    if (!pushEventsList) return;
+    var li = document.createElement("li");
+    li.style.cssText = "margin-bottom:0.75rem;padding:0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:0.85rem;";
+    var text = "接 " + (row.pickup || "").slice(0, 20) + " → 送 " + (row.delivery || "").slice(0, 20) + " · " + (row.price || "") + " 元 · 绕路 " + (row.extra_mins != null ? row.extra_mins : "") + " 分钟";
+    li.textContent = text;
+    if (row.response_url) {
+      var a = document.createElement("a");
+      a.href = row.response_url;
+      a.textContent = " 接单/不接 ";
+      a.style.color = "var(--accent); margin-left:0.5rem;";
+      a.target = "_blank";
+      li.appendChild(a);
+    }
+    pushEventsList.insertBefore(li, pushEventsList.firstChild);
+    while (pushEventsList.children.length > 10) pushEventsList.removeChild(pushEventsList.lastChild);
+    if (pushEventsStatus) pushEventsStatus.textContent = "已连接 Realtime，新推送会出现在上方。";
+  }
+  window.addEventListener("smartdiaodu_push", function(e) { if (e.detail) addPushEvent(e.detail); });
+
+  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) apiInput.value = localStorage.getItem(STORAGE_API);
+  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL)) setSupabaseUrl(localStorage.getItem(STORAGE_SUPABASE_URL));
+  else if (supabaseUrlInput) supabaseUrlInput.value = "https://zqcctbcwibnqmumtqweu.supabase.co";
+  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON)) setSupabaseAnon(localStorage.getItem(STORAGE_SUPABASE_ANON));
+  else if (supabaseAnonInput) supabaseAnonInput.value = "sb_publishable_StKwGU9ceIC_7CNXzB3muQ_JNJhfqp0";
+  apiInput.addEventListener("change", function(){ setApiBase(apiInput.value.trim()); });
+  if (supabaseUrlInput) supabaseUrlInput.addEventListener("change", function(){ setSupabaseUrl(supabaseUrlInput.value.trim()); });
+  if (supabaseAnonInput) supabaseAnonInput.addEventListener("change", function(){ setSupabaseAnon(supabaseAnonInput.value.trim()); });
+  refreshMode();
+})();
+  </script>
+  <script type="module">
+(function () {
+  var STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
+  var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
+  var url = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL)) || "";
+  var anon = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON)) || "";
+  if (!url || !anon) return;
+  try {
+    var createClient = (await import("https://esm.sh/@supabase/supabase-js@2")).createClient;
+    var supabase = createClient(url, anon);
+    supabase.channel("push_events_channel").on("postgres_changes", { event: "INSERT", schema: "public", table: "push_events" }, function(payload) {
+      if (payload && payload.new) window.dispatchEvent(new CustomEvent("smartdiaodu_push", { detail: payload.new }));
+    }).subscribe(function(s) {
+      var el = document.getElementById("pushEventsStatus");
+      if (el) el.textContent = s === "SUBSCRIBED" ? "已连接 Realtime，等待推送…" : "Realtime 状态: " + s;
+    });
+  } catch (e) {
+    var el = document.getElementById("pushEventsStatus");
+    if (el) el.textContent = "Realtime 连接失败: " + (e.message || e);
+  }
+})();
+  </script>
+</body>
+</html>
