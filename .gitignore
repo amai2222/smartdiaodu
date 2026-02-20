@@ -2,6 +2,7 @@
 .env
 .env.local
 *.env
+web/config.js
 
 # Python
 __pycache__/

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>顺风车智能调度 · 控制台</title>
+  <script src="config.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root { --bg: #0f1419; --card: #1a2332; --border: #2d3a4d; --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149; }
@@ -105,9 +106,9 @@
       <div class="card">
         <h2>网页内推送（与 Bark 同时）</h2>
         <label>Supabase 项目 URL</label>
-        <input type="url" id="supabaseUrl" placeholder="https://zqcctbcwibnqmumtqweu.supabase.co" />
+        <input type="url" id="supabaseUrl" placeholder="从 config 或登录后读取" />
         <label>Supabase Anon Key（用于 Realtime 订阅）</label>
-        <input type="text" id="supabaseAnonKey" placeholder="sb_publishable_..." autocomplete="off" />
+        <input type="text" id="supabaseAnonKey" placeholder="从 config 或登录后读取" autocomplete="off" />
         <p class="hint">可选。填写后顺路单推送会同时出现在本页「行程与地图」的实时推送区。需先执行 migration 002 并配置后端 SUPABASE_URL + SERVICE_ROLE_KEY。</p>
       </div>
       <div class="card">
@@ -133,6 +134,7 @@
     </section>
   </div>
 
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
 (function () {
@@ -141,10 +143,8 @@
   var STORAGE_USERNAME = "smartdiaodu_username";
   var STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
   var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
-  if (typeof localStorage !== "undefined" && !localStorage.getItem(STORAGE_TOKEN)) {
-    window.location.replace("login.html");
-    return;
-  }
+
+  function runApp() {
   var apiInput = document.getElementById("apiBase");
   var supabaseUrlInput = document.getElementById("supabaseUrl");
   var supabaseAnonInput = document.getElementById("supabaseAnonKey");
@@ -163,6 +163,11 @@
     if (userNameEl) userNameEl.textContent = "（" + localStorage.getItem(STORAGE_USERNAME) + "）";
   }
   if (btnLogout) btnLogout.onclick = function () {
+    var url = typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL);
+    var anon = typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON);
+    if (url && anon && window.supabase) {
+      try { window.supabase.createClient(url, anon).auth.signOut(); } catch (e) {}
+    }
     if (typeof localStorage !== "undefined") {
       localStorage.removeItem(STORAGE_TOKEN);
       localStorage.removeItem(STORAGE_USERNAME);
@@ -369,15 +374,32 @@
   }
   window.addEventListener("smartdiaodu_push", function(e) { if (e.detail) addPushEvent(e.detail); });
 
+  var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
   if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) apiInput.value = localStorage.getItem(STORAGE_API);
+  else if (cfg.apiBase && apiInput) apiInput.value = cfg.apiBase;
   if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL)) setSupabaseUrl(localStorage.getItem(STORAGE_SUPABASE_URL));
-  else if (supabaseUrlInput) supabaseUrlInput.value = "https://zqcctbcwibnqmumtqweu.supabase.co";
+  else if (cfg.supabaseUrl) setSupabaseUrl(cfg.supabaseUrl);
   if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON)) setSupabaseAnon(localStorage.getItem(STORAGE_SUPABASE_ANON));
-  else if (supabaseAnonInput) supabaseAnonInput.value = "sb_publishable_StKwGU9ceIC_7CNXzB3muQ_JNJhfqp0";
+  else if (cfg.supabaseAnonKey) setSupabaseAnon(cfg.supabaseAnonKey);
   apiInput.addEventListener("change", function(){ setApiBase(apiInput.value.trim()); });
   if (supabaseUrlInput) supabaseUrlInput.addEventListener("change", function(){ setSupabaseUrl(supabaseUrlInput.value.trim()); });
   if (supabaseAnonInput) supabaseAnonInput.addEventListener("change", function(){ setSupabaseAnon(supabaseAnonInput.value.trim()); });
   refreshMode();
+  }
+
+  function checkAuthAndRun() {
+    if (typeof localStorage === "undefined") { window.location.replace("login.html"); return; }
+    if (localStorage.getItem(STORAGE_TOKEN)) { runApp(); return; }
+    var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
+    var url = localStorage.getItem(STORAGE_SUPABASE_URL) || cfg.supabaseUrl || "";
+    var anon = localStorage.getItem(STORAGE_SUPABASE_ANON) || cfg.supabaseAnonKey || "";
+    if (!url || !anon || !window.supabase) { window.location.replace("login.html"); return; }
+    window.supabase.createClient(url, anon).auth.getSession().then(function(r) {
+      if (r.data && r.data.session) runApp();
+      else window.location.replace("login.html");
+    }).catch(function() { window.location.replace("login.html"); });
+  }
+  checkAuthAndRun();
 })();
   </script>
   <script type="module">

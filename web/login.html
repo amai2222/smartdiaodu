@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>登录 · 顺风车智能调度</title>
+  <script src="config.js"></script>
   <style>
     :root { --bg: #0f1419; --card: #1a2332; --border: #2d3a4d; --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --red: #f85149; }
     * { box-sizing: border-box; }
@@ -12,7 +13,7 @@
     h1 { font-size: 1.25rem; margin: 0 0 0.5rem 0; }
     .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
     label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; }
-    input[type="text"], input[type="password"], input[type="url"] { width: 100%; padding: 0.6rem 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 1rem; margin-bottom: 1rem; }
+    input[type="text"], input[type="password"], input[type="url"], input[type="email"] { width: 100%; padding: 0.6rem 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 1rem; margin-bottom: 1rem; }
     input:focus { outline: none; border-color: var(--accent); }
     .btn { width: 100%; padding: 0.75rem; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; background: var(--accent); color: #fff; margin-top: 0.5rem; }
     .btn:hover { filter: brightness(1.1); }
@@ -24,40 +25,48 @@
 <body>
   <div class="card">
     <h1>顺风车智能调度</h1>
-    <p class="subtitle">请登录后使用控制台</p>
+    <p class="subtitle">网页直连 Supabase 登录（HTTPS，无需自建后端）</p>
     <form id="loginForm">
-      <label>API 地址</label>
-      <input type="url" id="apiBase" placeholder="https://api.yourdomain.com 或留空用当前域名" />
-      <label>用户名</label>
-      <input type="text" id="username" placeholder="admin" autocomplete="username" />
+      <label>Supabase 项目 URL</label>
+      <input type="url" id="supabaseUrl" placeholder="https://xxx.supabase.co" />
+      <label>Supabase Anon Key（公开密钥）</label>
+      <input type="text" id="supabaseAnon" placeholder="eyJhbG..." />
+      <label>邮箱</label>
+      <input type="email" id="email" placeholder="admin@你的域名.com" autocomplete="username" />
       <label>密码</label>
       <input type="password" id="password" placeholder="密码" autocomplete="current-password" />
+      <label>API 地址（可选，控制台调接口用）</label>
+      <input type="url" id="apiBase" placeholder="http(s)://你的后端地址:端口 可留空" />
       <button type="submit" class="btn" id="btnSubmit">登录</button>
       <p id="err" class="err"></p>
     </form>
-    <p class="hint">默认账号：admin / 123456（需后端已配置 Supabase 并执行 migration 003）</p>
+    <p class="hint">在 Supabase 控制台 → Authentication → Users 里添加用户（邮箱+密码）；API 设置里复制 URL 与 anon public key。</p>
   </div>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script>
 (function () {
   var STORAGE_API = "smartdiaodu_api_base";
-  var STORAGE_TOKEN = "smartdiaodu_token";
   var STORAGE_USERNAME = "smartdiaodu_username";
+  var STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
+  var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
   var form = document.getElementById("loginForm");
-  var apiInput = document.getElementById("apiBase");
-  var usernameInput = document.getElementById("username");
+  var supabaseUrlInput = document.getElementById("supabaseUrl");
+  var supabaseAnonInput = document.getElementById("supabaseAnon");
+  var emailInput = document.getElementById("email");
   var passwordInput = document.getElementById("password");
+  var apiInput = document.getElementById("apiBase");
   var btnSubmit = document.getElementById("btnSubmit");
   var errEl = document.getElementById("err");
 
-  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) {
-    apiInput.value = localStorage.getItem(STORAGE_API);
-  }
-
-  function getApiBase() {
-    var v = (apiInput.value || "").trim();
-    if (!v && typeof localStorage !== "undefined") v = localStorage.getItem(STORAGE_API) || "";
-    if (!v) v = window.location.origin;
-    return v.replace(/\/$/, "");
+  var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
+  if (typeof localStorage !== "undefined") {
+    supabaseUrlInput.value = localStorage.getItem(STORAGE_SUPABASE_URL) || cfg.supabaseUrl || "";
+    supabaseAnonInput.value = localStorage.getItem(STORAGE_SUPABASE_ANON) || cfg.supabaseAnonKey || "";
+    apiInput.value = localStorage.getItem(STORAGE_API) || cfg.apiBase || "";
+  } else {
+    supabaseUrlInput.value = cfg.supabaseUrl || "";
+    supabaseAnonInput.value = cfg.supabaseAnonKey || "";
+    apiInput.value = cfg.apiBase || "";
   }
 
   function showErr(msg) {
@@ -67,35 +76,33 @@
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
-    var base = getApiBase();
-    var username = (usernameInput.value || "").trim();
+    var url = (supabaseUrlInput.value || "").trim();
+    var anon = (supabaseAnonInput.value || "").trim();
+    var email = (emailInput.value || "").trim();
     var password = passwordInput.value || "";
+    var apiBase = (apiInput.value || "").trim().replace(/\/$/, "");
     showErr("");
-    if (!username) { showErr("请输入用户名"); return; }
+    if (!url) { showErr("请填写 Supabase 项目 URL"); return; }
+    if (!anon) { showErr("请填写 Supabase Anon Key"); return; }
+    if (!email) { showErr("请填写邮箱"); return; }
+    if (!password) { showErr("请填写密码"); return; }
     btnSubmit.disabled = true;
-    fetch(base + "/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: username, password: password })
-    }).then(function (r) {
-      if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || "登录失败"); });
-      return r.json();
-    }).then(function (d) {
-      if (d.token) {
+    var supabase = window.supabase.createClient(url, anon);
+    supabase.auth.signInWithPassword({ email: email, password: password })
+      .then(function (r) {
+        if (r.error) throw new Error(r.error.message || "登录失败");
         if (typeof localStorage !== "undefined") {
-          localStorage.setItem(STORAGE_TOKEN, d.token);
-          if (d.username) localStorage.setItem(STORAGE_USERNAME, d.username);
-          localStorage.setItem(STORAGE_API, base);
+          localStorage.setItem(STORAGE_SUPABASE_URL, url);
+          localStorage.setItem(STORAGE_SUPABASE_ANON, anon);
+          if (r.data.user && r.data.user.email) localStorage.setItem(STORAGE_USERNAME, r.data.user.email);
+          if (apiBase) localStorage.setItem(STORAGE_API, apiBase);
         }
         window.location.href = "index.html";
-      } else {
-        showErr("未返回 token");
+      })
+      .catch(function (e) {
+        showErr(e.message || "网络错误");
         btnSubmit.disabled = false;
-      }
-    }).catch(function (e) {
-      showErr(e.message || "网络错误");
-      btnSubmit.disabled = false;
-    });
+      });
   });
 })();
   </script>

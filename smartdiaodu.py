@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 顺风车智能调度系统 (Smart Dispatch Brain)
 核心：带多点接送约束的车辆路径规划 (PDP - Pickup and Delivery Problem)
@@ -8,7 +9,7 @@ import math
 import os
 import time
 import traceback
-from typing import List, Tuple, Optional, Any
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # 优先从项目根目录 .env 加载环境变量（含 SUPABASE_SERVICE_ROLE_KEY 等）
 try:
@@ -53,7 +54,7 @@ BARK_KEY = "bGPZAHqjNjdiQZTg5GeWWG"
 MAX_DETOUR_SECONDS = 900  # 绕路容忍阈值（秒），例如 15 分钟
 REQUEST_TIMEOUT = 5       # 所有外部 API 统一超时（秒）
 # 防骚扰：订单指纹 -> 上次处理时间戳
-pushed_orders_cache: dict[str, float] = {}
+pushed_orders_cache: Dict[str, float] = {}
 # 业务模式：mode1=出发前找单 | mode2=路上接满 | mode3=送人后周边接单 | pause=停止
 DRIVER_MODE = "mode2"
 # 模式2：耽误时间范围(分钟)；高收益(元)以上可放宽到 detour_max
@@ -64,12 +65,12 @@ MODE2_HIGH_PROFIT_THRESHOLD = 100
 MODE3_MAX_MINUTES_TO_PICKUP = 30   # 预估送客点 → 新单起点 驾车不超过此分钟
 MODE3_MAX_DETOUR_MINUTES = 25      # 剩余路线最多允许多绕的分钟数（耽误多久），每次接单都按此卡
 # 模式1：出发前规划任务（内存，可后续迁到 Supabase）
-planned_trip: dict[str, Any] = {}  # origin, destination, departure_time, min_orders, max_orders
+planned_trip: Dict[str, Any] = {}  # origin, destination, departure_time, min_orders, max_orders
 # 推送后用户反馈：超时未操作则指纹该单不再推送；接单/停推由网页或链接回传
 RESPONSE_TIMEOUT_SECONDS = 300   # 推送后若此秒数内未操作，视为放弃，指纹该单
 RESPONSE_PAGE_BASE = ""          # 网页端「接单/是否继续接单」页面基础 URL，如 https://ui.xxx.com/response
-abandoned_fingerprints: set[str] = set()   # 已放弃的订单指纹，不再推送
-pending_response: dict[str, float] = {}   # fingerprint -> 推送时间戳，超时未响应则移入 abandoned
+abandoned_fingerprints: Set[str] = set()   # 已放弃的订单指纹，不再推送
+pending_response: Dict[str, float] = {}   # fingerprint -> 推送时间戳，超时未响应则移入 abandoned
 # 接单后通知探针取消已发布行程（探针轮询 probe_publish_trip 时会拿到 cancel_current_trip）
 probe_cancel_trip_requested: bool = False
 # 网页内推送：与 Bark 同时，写入 Supabase push_events 表，前端通过 Realtime 订阅展示
