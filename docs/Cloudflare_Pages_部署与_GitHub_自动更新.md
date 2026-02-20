@@ -4,6 +4,18 @@
 
 ---
 
+## 部署清单（按顺序打勾）
+
+- [ ] 代码已推送到 GitHub 仓库
+- [ ] Cloudflare Dashboard → Workers & Pages → Create → Connect to Git → 选该仓库
+- [ ] **Build command** 填：`node web/build-config.js`
+- [ ] **Build output directory** 填：`web`
+- [ ] **Settings → Environment variables** 添加：`SUPABASE_URL`、`SUPABASE_ANON_KEY`、`API_BASE`（可选）
+- [ ] 保存后 **Save and Deploy** 或 **Retry deployment**，等构建完成
+- [ ] 访问 `https://<项目名>.pages.dev/login.html`，用 Supabase 用户（如 admin@test.com / 123456）登录
+
+---
+
 ## 一、前置条件
 
 - 代码已在 **GitHub** 仓库中（可先只提交 `web/` 或整个项目）。
@@ -25,18 +37,30 @@
 2. 选择**存放本项目的仓库**（例如 `smartdiaodu`）
 3. 点击 **Begin setup**
 
-### 3. 配置构建设置（静态站，无需构建）
+### 3. 配置构建设置（必须跑构建以注入环境变量）
 
 | 配置项 | 建议值 | 说明 |
 |--------|--------|------|
 | **Production branch** | `main` | 推送到该分支会触发生产发布 |
-| **Build command** | 留空，或填 `echo "static"` | 无构建步骤即可 |
-| **Build output directory** | `web` | 项目里网页所在目录 |
+| **Build command** | `node web/build-config.js` | 用环境变量生成 config.js，登录页才能读到 Supabase URL/密钥 |
+| **Build output directory** | `web` | 部署的是 web 目录内容 |
 
-- 若仓库根目录就是网页（没有 `web` 子目录），则 **Build output directory** 填 `./`。
-- 填好后点 **Save and Deploy**，等第一次部署完成。
+- **Root directory** 保持默认（不填），即仓库根目录。
+- 填好后先不要点 Deploy，先去下一步配环境变量，再回来点 **Save and Deploy**。
 
-### 4. 得到访问地址
+### 4. 配置环境变量（Variables and Secrets）
+
+在 **Settings** → **Environment variables** 里为 **Production**（以及需要的 **Preview**）添加：
+
+| 变量名 | 类型 | 说明 |
+|--------|------|------|
+| `SUPABASE_URL` | 纯文本 | Supabase 项目 URL，如 `https://xxx.supabase.co` |
+| `SUPABASE_ANON_KEY` | 密钥 | Supabase 的 anon public key（Publishable key） |
+| `API_BASE` | 纯文本（可选） | 后端 API 地址，如 `https://api.你的域名.com` 或 `http://129.226.191.86:88` |
+
+- 配好后保存，然后到 **Deployments** 里对当前部署点 **Retry deployment**，或推送一次代码触发新部署，构建时才会把变量写进 config.js。
+
+### 5. 得到访问地址
 
 部署完成后会得到一个地址，形如：
 
@@ -69,7 +93,7 @@
 
 ## 五、注意事项
 
-- **API 地址**：部署后打开控制台，在「设置」里填写你的**后端 API 地址**（例如 `https://api.yourdomain.com` 或你运行 `smartdiaodu.py` 的地址），否则接口请求会失败。
-- **登录页**：若访问的是根路径，需在 Pages 里把**根目录设为 `web`**，这样访问 `/login.html`、`/index.html` 才会正确。若希望用根路径即打开登录页，可在 Pages 的 **Settings → Builds & deployments** 里配置 **Redirects**：`/` → `/login.html`（按需设置）。
-- **CORS**：后端 `smartdiaodu.py` 已允许任意来源（`allow_origins=["*"]`），Cloudflare 上的页面跨域请求无问题。
-- **仅前端**：Cloudflare Pages 只托管静态文件，不运行 Python；后端需单独部署（如 VPS、Railway、Render 等）。
+- **API 地址**：由环境变量 `API_BASE` 在构建时写入 config，无需在页面里再填。
+- **登录页**：访问 `/login.html` 登录；若希望根路径 `/` 直接打开登录页，在 **Settings → Builds & deployments** 里配置 **Redirects**：`/` → `/login.html`。
+- **CORS**：后端 `smartdiaodu.py` 已允许任意来源，跨域请求无问题。
+- **仅前端**：Cloudflare Pages 只托管静态文件；后端需单独部署（如 VPS 上跑 `smartdiaodu.py`）。
