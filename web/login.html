@@ -35,8 +35,6 @@
       <input type="email" id="email" placeholder="admin@你的域名.com" autocomplete="username" />
       <label>密码</label>
       <input type="password" id="password" placeholder="密码" autocomplete="current-password" />
-      <label>API 地址（可选，控制台调接口用）</label>
-      <input type="url" id="apiBase" placeholder="http(s)://你的后端地址:端口 可留空" />
       <button type="submit" class="btn" id="btnSubmit">登录</button>
       <p id="err" class="err"></p>
     </form>
@@ -54,7 +52,6 @@
   var supabaseAnonInput = document.getElementById("supabaseAnon");
   var emailInput = document.getElementById("email");
   var passwordInput = document.getElementById("password");
-  var apiInput = document.getElementById("apiBase");
   var btnSubmit = document.getElementById("btnSubmit");
   var errEl = document.getElementById("err");
 
@@ -62,11 +59,9 @@
   if (typeof localStorage !== "undefined") {
     supabaseUrlInput.value = localStorage.getItem(STORAGE_SUPABASE_URL) || cfg.supabaseUrl || "";
     supabaseAnonInput.value = localStorage.getItem(STORAGE_SUPABASE_ANON) || cfg.supabaseAnonKey || "";
-    apiInput.value = localStorage.getItem(STORAGE_API) || cfg.apiBase || "";
   } else {
     supabaseUrlInput.value = cfg.supabaseUrl || "";
     supabaseAnonInput.value = cfg.supabaseAnonKey || "";
-    apiInput.value = cfg.apiBase || "";
   }
 
   function showErr(msg) {
@@ -80,7 +75,6 @@
     var anon = (supabaseAnonInput.value || "").trim();
     var email = (emailInput.value || "").trim();
     var password = passwordInput.value || "";
-    var apiBase = (apiInput.value || "").trim().replace(/\/$/, "");
     showErr("");
     if (!url) { showErr("请填写 Supabase 项目 URL"); return; }
     if (!anon) { showErr("请填写 Supabase Anon Key"); return; }
@@ -95,7 +89,7 @@
           localStorage.setItem(STORAGE_SUPABASE_URL, url);
           localStorage.setItem(STORAGE_SUPABASE_ANON, anon);
           if (r.data.user && r.data.user.email) localStorage.setItem(STORAGE_USERNAME, r.data.user.email);
-          if (apiBase) localStorage.setItem(STORAGE_API, apiBase);
+          if (cfg.apiBase) localStorage.setItem(STORAGE_API, cfg.apiBase);
         }
         window.location.href = "index.html";
       })

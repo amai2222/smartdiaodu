@@ -99,11 +99,6 @@
     <!-- 设置 -->
     <section id="panel-settings" class="panel">
       <div class="card">
-        <h2>API 地址</h2>
-        <input type="url" id="apiBase" placeholder="https://api.yourdomain.com 或 http://localhost:8000" />
-        <p class="hint">可存到本地，刷新后仍生效。</p>
-      </div>
-      <div class="card">
         <h2>网页内推送（与 Bark 同时）</h2>
         <label>Supabase 项目 URL</label>
         <input type="url" id="supabaseUrl" placeholder="从 config 或登录后读取" />
@@ -113,7 +108,7 @@
       </div>
       <div class="card">
         <h2>当前模式</h2>
-        <p id="modeStatus" style="font-size:0.9rem;margin-bottom:0.5rem;">当前：请先填 API 并加载</p>
+        <p id="modeStatus" style="font-size:0.9rem;margin-bottom:0.5rem;">当前：从 config 读取 API 后加载</p>
         <button type="button" class="btn" data-mode="mode1">出发前找单</button>
         <button type="button" class="btn" data-mode="mode2">路上接满</button>
         <button type="button" class="btn" data-mode="mode3">送人后周边</button>
@@ -145,7 +140,6 @@
   var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
 
   function runApp() {
-  var apiInput = document.getElementById("apiBase");
   var supabaseUrlInput = document.getElementById("supabaseUrl");
   var supabaseAnonInput = document.getElementById("supabaseAnonKey");
   var pushEventsStatus = document.getElementById("pushEventsStatus");
@@ -180,14 +174,10 @@
   var markers = [];
   var routeLine = null;
 
+  var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
   function getApiBase() {
-    var v = (apiInput.value || "").trim();
-    if (!v && typeof localStorage !== "undefined") v = localStorage.getItem(STORAGE_API) || "";
-    return v ? v.replace(/\/$/, "") : "";
-  }
-  function setApiBase(v) {
-    apiInput.value = v;
-    if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_API, v);
+    var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) || cfg.apiBase || "";
+    return (v || "").trim().replace(/\/$/, "");
   }
   function getSupabaseUrl() { return (supabaseUrlInput && supabaseUrlInput.value || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_URL) || "" : ""); }
   function getSupabaseAnon() { return (supabaseAnonInput && supabaseAnonInput.value || "").trim() || (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_ANON) || "" : ""); }
@@ -226,7 +216,7 @@
   // ---------- 模式 ----------
   function refreshMode() {
     var base = getApiBase();
-    if (!base) { modeStatus.textContent = "当前：请先填写 API 地址"; return; }
+    if (!base) { modeStatus.textContent = "当前：请配置 API 地址（config / 环境变量 API_BASE）"; return; }
     fetch(base + "/driver_mode").then(function(r){ return r.json(); }).then(function(d){
       modeStatus.textContent = "当前：" + (modeLabels[d.mode] || d.mode);
       [].forEach.call(document.querySelectorAll("[data-mode]"), function(btn){
@@ -247,7 +237,7 @@
   var planStatus = document.getElementById("planStatus");
   document.getElementById("btnSavePlan").onclick = function(){
     var base = getApiBase();
-    if (!base) { planStatus.textContent = "请先填 API 地址（设置页）"; return; }
+    if (!base) { planStatus.textContent = "请配置 API 地址（config / 环境变量 API_BASE）"; return; }
     var body = {
       origin: document.getElementById("planOrigin").value.trim() || "如东荣生花苑",
       destination: document.getElementById("planDest").value.trim() || "上海",
@@ -336,7 +326,7 @@
   }
   btnUpdateMap.onclick = function(){
     var base = getApiBase();
-    if (!base) { routeInfo.textContent = "请先在设置页填写 API 地址"; return; }
+    if (!base) { routeInfo.textContent = "请配置 API 地址（config / 环境变量 API_BASE）"; return; }
     initMap();
     var state = getCurrentState();
     routeInfo.textContent = "加载中…";
@@ -374,14 +364,10 @@
   }
   window.addEventListener("smartdiaodu_push", function(e) { if (e.detail) addPushEvent(e.detail); });
 
-  var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
-  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) apiInput.value = localStorage.getItem(STORAGE_API);
-  else if (cfg.apiBase && apiInput) apiInput.value = cfg.apiBase;
   if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL)) setSupabaseUrl(localStorage.getItem(STORAGE_SUPABASE_URL));
   else if (cfg.supabaseUrl) setSupabaseUrl(cfg.supabaseUrl);
   if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON)) setSupabaseAnon(localStorage.getItem(STORAGE_SUPABASE_ANON));
   else if (cfg.supabaseAnonKey) setSupabaseAnon(cfg.supabaseAnonKey);
-  apiInput.addEventListener("change", function(){ setApiBase(apiInput.value.trim()); });
   if (supabaseUrlInput) supabaseUrlInput.addEventListener("change", function(){ setSupabaseUrl(supabaseUrlInput.value.trim()); });
   if (supabaseAnonInput) supabaseAnonInput.addEventListener("change", function(){ setSupabaseAnon(supabaseAnonInput.value.trim()); });
   refreshMode();
