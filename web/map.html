@@ -273,28 +273,15 @@
       return;
     }
     destroyMap();
-    if (window.BMapGL && typeof window.BMapGL.Map === "function") {
-      useBMapGL = true;
-      initBaiduMap();
-      if (lastRouteData) drawRouteFromIndex(currentStopIndex);
-      return;
-    }
+    useBMapGL = false;
     if (window.BMap && typeof window.BMap.Map === "function") {
-      useBMapGL = false;
       initBaiduMap();
       if (lastRouteData) drawRouteFromIndex(currentStopIndex);
       return;
     }
     window.baiduMapReady = function () {
       window.baiduMapReady = null;
-      if (window.BMapGL && typeof window.BMapGL.Map === "function") {
-        useBMapGL = true;
-        initBaiduMap();
-        if (lastRouteData) drawRouteFromIndex(currentStopIndex);
-        return;
-      }
       if (window.BMap && typeof window.BMap.Map === "function") {
-        useBMapGL = false;
         initBaiduMap();
         if (lastRouteData) drawRouteFromIndex(currentStopIndex);
         return;
@@ -302,14 +289,9 @@
       document.getElementById("routeInfo").textContent = "百度地图 API 未就绪。请检查 F12 → Network 中 api.map.baidu.com 请求与 AK 白名单。";
     };
     var script = document.createElement("script");
-    script.src = "https://api.map.baidu.com/api?v=1.0&type=webgl&ak=" + encodeURIComponent(ak) + "&callback=baiduMapReady";
+    script.src = "https://api.map.baidu.com/api?v=3.0&ak=" + encodeURIComponent(ak) + "&s=1&callback=baiduMapReady";
     script.onerror = function () {
-      var fallback = document.createElement("script");
-      fallback.src = "https://api.map.baidu.com/api?v=3.0&ak=" + encodeURIComponent(ak) + "&s=1&callback=baiduMapReady";
-      fallback.onerror = function () {
-        document.getElementById("routeInfo").textContent = "百度地图脚本加载失败。请检查网络与 AK。";
-      };
-      document.head.appendChild(fallback);
+      document.getElementById("routeInfo").textContent = "百度地图脚本加载失败。请检查网络与 AK。";
     };
     document.head.appendChild(script);
   }
@@ -357,25 +339,42 @@
     return "data:image/svg+xml," + encodeURIComponent(s);
   }
 
-  /** 添加起/终/途经点标注（NS = BMapGL 或 BMap） */
+  /** 途经点小圆标（仅数字）：乘客起点=蓝，乘客终点=黄 */
+  function getViaPointIconDataURL(num, isDelivery) {
+    var bg = isDelivery ? "#eab308" : "#3b82f6";
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="' + bg + '" stroke="#fff" stroke-width="2"/><text x="14" y="18" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">' + num + '</text></svg>';
+    return "data:image/svg+xml," + encodeURIComponent(s);
+  }
+
+  /** 添加起/终/途经点标注：途经点默认只显示序号，点击显示详情；乘客起点蓝、乘客终点黄 */
   function addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS) {
-    var orderNums = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
+    var orderNums = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
     for (var i = 0; i < bdPoints.length; i++) {
       var pt = bdPoints[i];
       var num = fromIndex + i + 1;
-      var orderStr = orderNums[num - 1] || num + ".";
+      var numStr = orderNums[num - 1] || String(num);
       var typeLabel = (labels && labels[i]) || (types && types[i]) || "途经";
-      var addrShort = (addresses && addresses[i]) ? " " + addresses[i].slice(0, 10) + (addresses[i].length > 10 ? "…" : "") : "";
+      var fullAddr = (addresses && addresses[i]) ? String(addresses[i]) : "";
       var mk;
       if (i === 0) {
         mk = new NS.Marker(pt, { icon: new NS.Icon(getStartEndIconDataURL("起", "#22c55e"), new NS.Size(36, 36)) });
-        if (mk.setLabel) mk.setLabel(new NS.Label("起点 " + (addrShort || "司机"), { offset: new NS.Size(0, -22) }));
+        if (mk.setLabel) mk.setLabel(new NS.Label("起点", { offset: new NS.Size(0, -22) }));
       } else if (i === bdPoints.length - 1) {
         mk = new NS.Marker(pt, { icon: new NS.Icon(getStartEndIconDataURL("终", "#ef4444"), new NS.Size(36, 36)) });
-        if (mk.setLabel) mk.setLabel(new NS.Label("终点" + addrShort, { offset: new NS.Size(0, -22) }));
+        if (mk.setLabel) mk.setLabel(new NS.Label("终点", { offset: new NS.Size(0, -22) }));
       } else {
-        mk = new NS.Marker(pt);
-        if (mk.setLabel) mk.setLabel(new NS.Label(orderStr + " " + typeLabel + addrShort, { offset: new NS.Size(10, -10) }));
+        var isDelivery = (types && types[i] === "delivery");
+        mk = new NS.Marker(pt, { icon: new NS.Icon(getViaPointIconDataURL(numStr, isDelivery), new NS.Size(28, 28)) });
+        if (mk.setLabel) mk.setLabel(new NS.Label(numStr, { offset: new NS.Size(0, -18) }));
+        if (typeof NS.InfoWindow !== "undefined" && bmap) {
+          var detail = typeLabel + (fullAddr ? "<br/>" + fullAddr.replace(/</g, "&lt;") : "");
+          (function (marker, content) {
+            marker.addEventListener("click", function () {
+              var info = new NS.InfoWindow(content, { width: 260, enableMessage: false });
+              bmap.openInfoWindow(info, marker.getPosition());
+            });
+          })(mk, detail);
+        }
       }
       bmap.addOverlay(mk);
     }
@@ -446,21 +445,6 @@
       return;
     }
     addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
-    if (route_path && route_path.length > 1) {
-      var pathBd = [];
-      for (var j = 0; j < route_path.length; j++) {
-        var p = route_path[j];
-        if (!p || p[0] == null || p[1] == null) continue;
-        var bd = wgs84ToBd09(p[0], p[1]);
-        if (bd && bd[0] != null && bd[1] != null) pathBd.push(new window.BMap.Point(bd[0], bd[1]));
-      }
-      if (pathBd.length > 1) {
-        addDirectionalPolyline(pathBd, "#18a45b");
-        if (bmap.setViewport) bmap.setViewport(bdPoints);
-        document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站";
-        return;
-      }
-    }
     if (typeof window.BMap.DrivingRoute === "undefined") {
       addDirectionalPolyline(bdPoints, "#18a45b");
       if (bmap.setViewport) bmap.setViewport(bdPoints);
