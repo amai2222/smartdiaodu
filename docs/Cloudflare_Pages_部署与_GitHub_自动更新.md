@@ -99,3 +99,29 @@
 - **登录页**：访问 `/login.html` 登录；若希望根路径 `/` 直接打开登录页，在 **Settings → Builds & deployments** 里配置 **Redirects**：`/` → `/login.html`。
 - **CORS**：后端 `smartdiaodu.py` 已允许任意来源，跨域请求无问题。
 - **仅前端**：Cloudflare Pages 只托管静态文件；后端需单独部署（如 VPS 上跑 `smartdiaodu.py`）。
+
+---
+
+## 六、部署失败：Failed to publish your Function
+
+若构建和资源上传都成功，最后出现：
+
+```text
+Error: Failed to publish your Function. Got error: Unknown internal error occurred.
+```
+
+说明是 **Cloudflare 侧在发布「Function」时出错**。本项目是纯静态（Build output = `web`），并未使用 Functions，该错误多为平台偶发或兼容性问题。
+
+**建议按顺序尝试：**
+
+1. **直接重试**  
+   在 **Deployments** 里对该次部署点 **Retry deployment**，很多情况下再次部署会通过。
+
+2. **关闭 Pages Functions（若可配）**  
+   在 Pages 项目 **Settings** 中查看是否有与 **Functions**、**Workers** 或 **Compatibility** 相关的选项，若有「Enable Functions」之类，可尝试关闭，再重新部署。
+
+3. **确认构建配置**  
+   确保 **Build output directory** 为 `web`，且构建命令只生成静态文件（例如 `node web/build-config.js`），不要产出 `_worker.js` 或 `functions` 目录，避免被当成 Function 发布。
+
+4. **仍失败时**  
+   到 [Cloudflare Community](https://community.cloudflare.com/) 或 [workers-sdk Issues](https://github.com/cloudflare/workers-sdk/issues) 搜索 `Failed to publish your Function`，按最新讨论尝试；或联系 Cloudflare 支持（若为付费账户）。

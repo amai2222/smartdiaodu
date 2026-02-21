@@ -307,7 +307,7 @@
     if (bmap) bmap.clearOverlays();
   }
 
-  /** 按实际驾车道路绘制路线：逐段调用百度驾车路线规划，再画折线；失败则退回直线 */
+  /** 按实际驾车道路绘制路线：使用 BMap.DrivingRoute 一次 search(start, end, { waypoints }) 传入途经点 */
   function drawRouteFromIndex(fromIndex) {
     if (!lastRouteData) return;
     var coords = route_coords.slice(fromIndex);
@@ -341,64 +341,30 @@
       bmap.setZoom(14);
       return;
     }
-    var allPathPoints = [];
-    var segmentIndex = 0;
-    function drawStraightLine() {
+    if (typeof window.BMap.DrivingRoute === "undefined") {
       bmap.addOverlay(new window.BMap.Polyline(bdPoints, { strokeColor: "#3b82f6", strokeWeight: 4 }));
       bmap.setViewport(bdPoints);
+      return;
     }
-    function onSegmentDone() {
-      segmentIndex++;
-      if (segmentIndex >= bdPoints.length - 1) {
-        if (allPathPoints.length > 0) {
-          bmap.addOverlay(new window.BMap.Polyline(allPathPoints, { strokeColor: "#3b82f6", strokeWeight: 4 }));
-          bmap.setViewport(allPathPoints);
-        } else {
-          drawStraightLine();
-        }
-        document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站";
-        return;
-      }
-      requestDrivingSegment(segmentIndex);
-    }
-    function requestDrivingSegment(idx) {
-      if (typeof window.BMap.DrivingRoute === "undefined") {
-        drawStraightLine();
-        return;
-      }
-      var start = bdPoints[idx];
-      var end = bdPoints[idx + 1];
-      var opts = { renderOptions: { map: null, autoViewport: false } };
-      if (window.BMap.DrivingPolicy && window.BMap.DrivingPolicy.LEAST_TIME) opts.policy = window.BMap.DrivingPolicy.LEAST_TIME;
-      var driving = new window.BMap.DrivingRoute(bmap, opts);
-      driving.setSearchCompleteCallback(function () {
-        try {
-          var res = driving.getResults();
-          if (res && res.getPlan && res.getPlan(0)) {
-            var route = res.getPlan(0).getRoute(0);
-            if (route && route.getPath) {
-              var path = route.getPath();
-              if (path && path.length > 0) {
-                for (var k = 0; k < path.length; k++) allPathPoints.push(path[k]);
-                onSegmentDone();
-                return;
-              }
-            }
-          }
-        } catch (e) {}
-        allPathPoints.push(start);
-        allPathPoints.push(end);
-        onSegmentDone();
-      });
-      driving.setErrorCallback(function () {
-        allPathPoints.push(start);
-        allPathPoints.push(end);
-        onSegmentDone();
-      });
-      driving.search(start, end);
-    }
+    var startPoint = bdPoints[0];
+    var endPoint = bdPoints[bdPoints.length - 1];
+    var waypointsArr = bdPoints.slice(1, -1);
+    if (waypointsArr.length > 10) waypointsArr = waypointsArr.slice(0, 10);
+    var opts = {
+      renderOptions: { map: bmap, autoViewport: true },
+      policy: (window.BMap.DrivingPolicy && window.BMap.DrivingPolicy.LEAST_TIME) || undefined
+    };
+    var driving = new window.BMap.DrivingRoute(bmap, opts);
+    driving.setSearchCompleteCallback(function () {
+      document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站";
+    });
+    driving.setErrorCallback(function () {
+      bmap.addOverlay(new window.BMap.Polyline(bdPoints, { strokeColor: "#3b82f6", strokeWeight: 4 }));
+      bmap.setViewport(bdPoints);
+      document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站（规划失败，已画直线）";
+    });
     document.getElementById("routeInfo").textContent = "正在规划驾车路线…";
-    requestDrivingSegment(0);
+    driving.search(startPoint, endPoint, { waypoints: waypointsArr });
   }
 
   function updateNavPanel() {
