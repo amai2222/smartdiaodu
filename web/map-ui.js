@@ -176,11 +176,23 @@
     if (btnOther) {
       btnOther.onclick = function () {
         document.getElementById("routeStrategyPanel").classList.remove("show");
+
         var n = (M.route_paths && M.route_paths.length) ? M.route_paths.length : 1;
+        if (n <= 1) {
+          document.getElementById("routeInfo").textContent = "当前策略下无其他备选线路";
+          return;
+        }
+
         M.routeAlternativeIndex = (M.routeAlternativeIndex + 1) % n;
+
         if (M.drawRouteFromIndex) M.drawRouteFromIndex(M.currentStopIndex, true);
         if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
-        document.getElementById("routeInfo").textContent = "已切换至方案" + (M.routeAlternativeIndex + 1);
+
+        var durStr = "";
+        if (M.route_durations && M.route_durations[M.routeAlternativeIndex]) {
+          durStr = " (约 " + Math.round(M.route_durations[M.routeAlternativeIndex] / 60) + " 分钟)";
+        }
+        document.getElementById("routeInfo").textContent = "已切换至方案 " + (M.routeAlternativeIndex + 1) + durStr;
       };
     }
   })();

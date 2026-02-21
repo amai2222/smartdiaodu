@@ -549,7 +549,7 @@ def fetch_driving_route_path(
         "coord_type": "bd09ll",
         "ret_coordtype": "bd09ll",
         "output": "json",
-        "alternatives": 2,
+        "alternatives": 1,
     }
     if waypoints:
         params["waypoints"] = waypoints
