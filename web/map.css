@@ -36,6 +36,21 @@ html, body { margin: 0; padding: 0; height: 100%; width: 100%; min-height: 100vh
 .toolbar button { cursor: pointer; }
 .toolbar a { display: inline-flex; align-items: center; }
 .toolbar .status { color: #8b9199; font-size: 0.8rem; padding: 10px 4px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.restriction-hint {
+  position: fixed;
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(80px, calc(80px + env(safe-area-inset-bottom)));
+  z-index: 999;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(234, 179, 8, 0.95);
+  color: #1a1a1a;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  pointer-events: auto;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
 .toolbar-route-wrap { position: relative; }
 .toolbar-route-dropdown { position: absolute; top: 100%; left: 0; margin-top: 4px; padding: 6px; border-radius: 10px; background: rgba(20, 21, 26, 0.98); border: 1px solid #2a2d35; display: none; flex-direction: column; gap: 4px; z-index: 1003; min-width: 120px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 .toolbar-route-dropdown.show { display: flex; }

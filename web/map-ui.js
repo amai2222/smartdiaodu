@@ -104,6 +104,8 @@
       })
       .catch(function (e) {
         document.getElementById("navPanel").style.display = "none";
+        var restrictionEl = document.getElementById("restrictionHint");
+        if (restrictionEl) restrictionEl.style.display = "none";
         M.initMap();
         var msg = e.message || String(e);
         var hint = "";

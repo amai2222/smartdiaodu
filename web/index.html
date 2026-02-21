@@ -99,6 +99,14 @@
       <p id="gpsStatus" class="text-sm text-muted mt-2"></p>
       <p class="text-sm text-muted mt-1">可手动输入或修改地址（如百度无法解析时），失焦后自动同步到数据库。</p>
 
+      <div class="mt-4">
+        <label for="driverPlate" class="block text-muted text-console font-medium mb-2">🚗 车牌（用于接单与路线规避限行）</label>
+        <input type="text" id="driverPlate" maxlength="16" placeholder="如 沪A12345"
+          class="w-full bg-[#0c0c0f] border border-border rounded-xl px-4 py-3 text-big text-gray-100 placeholder-gray-500" />
+        <p class="text-sm text-muted mt-1">绑定后搜寻订单与规划线路会按该车牌规避限行区域。</p>
+      </div>
+      <div id="restrictionHintIndex" class="hidden mt-3 p-3 rounded-xl bg-amber-900/40 border border-amber-600/50 text-amber-200 text-sm" role="alert"></div>
+
       <div class="flex items-center justify-between mt-5 mb-3 flex-wrap gap-2">
         <h3 class="text-muted text-console font-medium flex items-center gap-2">
           <span aria-hidden="true">👥</span> 当前车上乘客
@@ -253,6 +261,7 @@
   var deliveries = [];
   var passengerRows = [];  // { id, pickup, delivery } 用于下车时更新 DB
   var editingPassengerIdx = -1;  // 编辑乘客弹窗当前编辑的行下标
+  var driverPlateNumber = "";  // 当前司机车牌，用于 getCurrentState 与限行提示
 
   function getDriverId() { return cachedAppConfig.driver_id || DEFAULT_DRIVER_ID; }
   function getSupabaseClient() {
@@ -401,14 +410,29 @@
         applyPassengerRows();
         renderPassengerList();
         saveStateToStorage();
-        // 空座以「当前乘客数」为准：4 座车 - 乘客数 = 空座，避免 DB 里 empty_seats 不准导致显示有空位
         var emptySeats = Math.max(0, Math.min(4, 4 - passengerRows.length));
         var seatsEl = document.getElementById("emptySeats");
         if (seatsEl) seatsEl.value = String(emptySeats);
         var sup = getSupabaseClient();
         if (sup) sup.from("driver_state").update({ empty_seats: emptySeats }).eq("driver_id", getDriverId()).then(function () {});
-        updateEntryActions();
-        if (cb) cb();
+        return sup.from("drivers").select("name, plate_number").eq("id", getDriverId()).maybeSingle()
+          .then(function (r) {
+            if (r && r.data) {
+              var un = document.getElementById("userName");
+              if (un) un.textContent = (r.data.name || "").trim() || "—";
+              driverPlateNumber = (r.data.plate_number || "").trim();
+              var pe = document.getElementById("driverPlate");
+              if (pe) pe.value = driverPlateNumber;
+            }
+            updateRestrictionHint();
+            updateEntryActions();
+            if (cb) cb();
+          })
+          .catch(function () {
+            updateRestrictionHint();
+            updateEntryActions();
+            if (cb) cb();
+          });
       })
       .catch(function (e) {
         var msg = (e && e.message) ? e.message : String(e);
@@ -485,11 +509,34 @@
   }
 
   function getCurrentState() {
-    return {
+    var plateEl = document.getElementById("driverPlate");
+    var plate = (plateEl && plateEl.value.trim()) || driverPlateNumber || "";
+    var out = {
       driver_loc: document.getElementById("driverLoc").value.trim() || "如东县委党校",
       pickups: pickups.slice(),
       deliveries: deliveries.slice()
     };
+    if (plate) out.plate_number = plate;
+    return out;
+  }
+
+  /** 判断地址是否在限行城市（如上海、北京），用于在控制台提示 */
+  function isInRestrictionArea(addr) {
+    if (!addr || typeof addr !== "string") return false;
+    var a = addr.trim();
+    return a.indexOf("上海") !== -1 || a.indexOf("北京市") !== -1 || a.indexOf("北京 ") !== -1;
+  }
+
+  function updateRestrictionHint() {
+    var el = document.getElementById("restrictionHintIndex");
+    if (!el) return;
+    var addr = (document.getElementById("driverLoc") && document.getElementById("driverLoc").value) || "";
+    if (isInRestrictionArea(addr)) {
+      el.textContent = "当前位于限行区域，请留意当地限行规定与时段。";
+      el.classList.remove("hidden");
+    } else {
+      el.classList.add("hidden");
+    }
   }
 
   // ---------- 刷新 GPS ----------
@@ -819,14 +866,22 @@
 
   function run() {
     var locEl = document.getElementById("driverLoc");
-    if (locEl) locEl.addEventListener("change", saveStateToStorage);
-    if (locEl) locEl.addEventListener("input", saveStateToStorage);
+    if (locEl) locEl.addEventListener("change", function () { saveStateToStorage(); updateRestrictionHint(); });
+    if (locEl) locEl.addEventListener("input", function () { saveStateToStorage(); updateRestrictionHint(); });
     if (locEl) locEl.addEventListener("blur", function () {
       saveStateToStorage();
+      updateRestrictionHint();
       var sup = getSupabaseClient();
       if (sup && locEl.value.trim()) {
         sup.from("driver_state").update({ current_loc: locEl.value.trim() }).eq("driver_id", getDriverId()).then(function () {});
       }
+    });
+    var plateEl = document.getElementById("driverPlate");
+    if (plateEl) plateEl.addEventListener("blur", function () {
+      var val = (plateEl.value || "").trim();
+      driverPlateNumber = val;
+      var sup = getSupabaseClient();
+      if (sup) sup.from("drivers").update({ plate_number: val || null }).eq("id", getDriverId()).then(function () {});
     });
     document.getElementById("planPanel").classList.add("hidden");
     loadFromDb(function () {

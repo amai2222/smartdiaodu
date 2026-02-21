@@ -167,10 +167,12 @@ _load_app_config_from_db()
 # ---------------------------------------------------------------------------
 
 class CurrentState(BaseModel):
-    """当前状态：司机位置 + 已接订单的起终点列表"""
+    """当前状态：司机位置 + 已接订单的起终点列表 + 可选车牌（用于限行规避）"""
     driver_loc: str
     pickups: List[str]
     deliveries: List[str]
+    plate_number: Optional[str] = None  # 车牌，如 沪A12345，供路线规划/评估时规避限行
+    cartype: Optional[int] = None  # 0 燃油 1 纯电动，与 plate_number 配合
 
 
 class NewOrder(BaseModel):
@@ -489,11 +491,16 @@ def get_duration_between(origin_addr: str, dest_addr: str) -> int:
     return matrix[0][1]
 
 
-def fetch_driving_route_path(route_coords_wgs84: List[List[float]]) -> List[List[float]]:
+def fetch_driving_route_path(
+    route_coords_wgs84: List[List[float]],
+    plate_number: Optional[str] = None,
+    cartype: Optional[int] = None,
+) -> List[List[float]]:
     """
     调用百度驾车路线规划 Web API（direction/v2/driving），按起终点+途经点一次请求，
     返回沿道路的路径点序列，格式与 route_coords 一致：[lat, lng] WGS84。
     途经点最多 18 个，超出则只取前 18 个。
+    若传 plate_number，则百度会规避限行路段（如上海、北京等）。
     """
     if not route_coords_wgs84 or len(route_coords_wgs84) < 2:
         return []
@@ -514,6 +521,11 @@ def fetch_driving_route_path(route_coords_wgs84: List[List[float]]) -> List[List
     }
     if waypoints:
         params["waypoints"] = waypoints
+    plate = (plate_number or "").strip()
+    if plate:
+        params["plate_number"] = plate
+        if cartype is not None and cartype in (0, 1):
+            params["cartype"] = cartype
     try:
         resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
@@ -966,10 +978,14 @@ async def current_route_preview(req: dict) -> dict:
         wgs_lat, wgs_lng = _bd09_to_wgs84(lat_bd, lng_bd)
         route_coords.append([wgs_lat, wgs_lng])
 
-    # 调用百度驾车路线规划 Web API，获取沿道路的路径点，供地图画线
+    # 调用百度驾车路线规划 Web API，获取沿道路的路径点，供地图画线（传车牌则规避限行）
+    plate_number = (state.get("plate_number") or "").strip() or None
+    cartype = state.get("cartype")
+    if cartype is not None and cartype not in (0, 1):
+        cartype = None
     route_path: List[List[float]] = []
     try:
-        route_path = fetch_driving_route_path(route_coords)
+        route_path = fetch_driving_route_path(route_coords, plate_number=plate_number, cartype=cartype)
     except Exception as e:
         logger.warning("获取驾车路径失败（前端将用站点折线或分段规划）: %s", e)
 

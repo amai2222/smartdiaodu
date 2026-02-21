@@ -57,8 +57,12 @@
               localStorage.setItem(M.STORAGE_PICKUPS, JSON.stringify(state.pickups));
               localStorage.setItem(M.STORAGE_DELIVERIES, JSON.stringify(state.deliveries));
             }
-            if (cb) cb(state);
-            return state;
+            return sup.from("drivers").select("plate_number").eq("id", driverId).maybeSingle()
+              .then(function (rr) {
+                if (rr.data && rr.data.plate_number) state.plate_number = String(rr.data.plate_number).trim();
+                if (cb) cb(state);
+                return state;
+              });
           });
       })
       .catch(function () { if (cb) cb(M.getCurrentState()); });
@@ -101,6 +105,44 @@
       total_time_seconds: Math.max(0, parseInt(data.total_time_seconds, 10) || 0)
     };
     sup.from("driver_route_snapshot").upsert(payload, { onConflict: "driver_id" }).then(function () {});
+  };
+
+  /** 判断当前路线是否途经限行城市（如上海）。用于提示用户注意限行，当前前端算路未传车牌故未规避限行。 */
+  M.routeTouchesRestrictionCity = function () {
+    var addrs = M.route_addresses || [];
+    var coords = M.route_coords || [];
+    var restrictionKeywords = ["上海", "北京市", "北京 "];
+    for (var i = 0; i < addrs.length; i++) {
+      var a = (addrs[i] || "").toString();
+      for (var k = 0; k < restrictionKeywords.length; k++) {
+        if (a.indexOf(restrictionKeywords[k]) !== -1) return true;
+      }
+    }
+    var shanghaiLng = [120.85, 122.2], shanghaiLat = [30.4, 31.6];
+    for (var j = 0; j < coords.length; j++) {
+      var c = coords[j];
+      if (c && c[0] != null && c[1] != null) {
+        var lat = Number(c[0]), lng = Number(c[1]);
+        if (lng >= shanghaiLng[0] && lng <= shanghaiLng[1] && lat >= shanghaiLat[0] && lat <= shanghaiLat[1]) return true;
+      }
+    }
+    return false;
+  };
+
+  /** 若当前路线途经限行城市则显示提示，否则隐藏。规划未根据车牌规避限行时调用。 */
+  M.showRestrictionHintIfNeeded = function () {
+    var el = document.getElementById("restrictionHint");
+    if (!el) return;
+    if (!M.lastRouteData || !(M.route_addresses && M.route_addresses.length)) {
+      el.style.display = "none";
+      return;
+    }
+    if (M.routeTouchesRestrictionCity()) {
+      el.textContent = "路线可能经过限行区域（如上海市区），当前未根据车牌规避限行，请以当地限行规定为准。";
+      el.style.display = "block";
+    } else {
+      el.style.display = "none";
+    }
   };
 
   M.loadSavedRoute = function (cb) {
