@@ -192,6 +192,7 @@
 
   function getNavUrl(lat, lng, name) {
     var bd = wgs84ToBd09(lat, lng);
+    if (!bd || bd[0] == null || bd[1] == null) return "#";
     var dest = bd[1] + "," + bd[0];
     return "baidumap://map/direction?destination=name:" + encodeURIComponent(name || "") + "|latlng:" + dest + "&mode=driving";
   }
@@ -241,7 +242,9 @@
     if (!bmap) return;
     var points = [];
     coords.forEach(function (c, i) {
+      if (!c || c[0] == null || c[1] == null) return;
       var bd = wgs84ToBd09(c[0], c[1]);
+      if (!bd || bd[0] == null || bd[1] == null) return;
       points.push(new window.BMap.Point(bd[0], bd[1]));
       var mk = new window.BMap.Marker(new window.BMap.Point(bd[0], bd[1]));
       mk.setLabel(new window.BMap.Label((labels[i] || types[i] || "途经") + (addresses[i] ? " " + addresses[i].slice(0, 8) + "…" : ""), { offset: new window.BMap.Size(10, -10) }));
@@ -266,7 +269,7 @@
     var addr = route_addresses[nextIdx] || "";
     document.getElementById("nextStopText").textContent = "下一站: " + label + " " + (addr.length > 18 ? addr.slice(0, 18) + "…" : addr);
     var c = route_coords[nextIdx];
-    if (c) {
+    if (c && c[0] != null && c[1] != null) {
       var a = document.getElementById("btnOpenNav");
       a.href = getNavUrl(c[0], c[1], addr);
       a.textContent = "打开导航（百度地图）";

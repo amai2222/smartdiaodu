@@ -64,6 +64,7 @@
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
+    try {
     var url = getSupabaseUrl().trim();
     var anon = getSupabaseAnon().trim();
     var email = (emailInput.value || "").trim();
@@ -73,6 +74,9 @@
     if (!anon) { showErr("未配置 Supabase Anon Key，请在 Cloudflare 环境变量或 config.js 中设置 SUPABASE_ANON_KEY"); return; }
     if (!email) { showErr("请填写邮箱"); return; }
     if (!password) { showErr("请填写密码"); return; }
+    if (!window.supabase || typeof window.supabase.createClient !== "function") {
+      showErr("Supabase 脚本未加载成功，请检查网络或稍后重试"); return;
+    }
     btnSubmit.disabled = true;
     var supabase = window.supabase.createClient(url, anon);
     supabase.auth.signInWithPassword({ email: email, password: password })
@@ -91,6 +95,10 @@
         showErr(e.message || "网络错误");
         btnSubmit.disabled = false;
       });
+    } catch (err) {
+      showErr(err && err.message ? err.message : "登录出错，请重试");
+      btnSubmit.disabled = false;
+    }
   });
 })();
   </script>

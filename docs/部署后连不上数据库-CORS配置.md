@@ -40,6 +40,7 @@
 
 - 本机或网络是否拦截了 `*.supabase.co`（公司防火墙、代理、DNS）。
 - 关掉会改请求的浏览器扩展，或用无痕/换浏览器再试。
+- 控制台里 **webextension.js** 报错（如 `Cannot read properties of null (reading '1')`）多半是**浏览器扩展**注入的脚本出的错，不是本站代码。可禁用扩展或用无痕模式验证。
 
 ---
 
