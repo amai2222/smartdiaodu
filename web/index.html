@@ -1,129 +1,174 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>顺风车智能调度 · 控制台</title>
-  <script src="config.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c0c0f" />
+  <title>顺风车调度 · 控制台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            panel: '#14151a',
+            border: '#2a2d35',
+            muted: '#8b9199',
+            accent: '#3b82f6',
+            success: '#22c55e',
+            danger: '#ef4444',
+          },
+          fontSize: {
+            'console': ['1.125rem', { lineHeight: '1.5' }],
+            'big': ['1.35rem', { lineHeight: '1.4' }],
+            'hero': ['1.6rem', { lineHeight: '1.3' }],
+          },
+        },
+      },
+    };
+  </script>
   <style>
-    :root { --bg: #0f1419; --card: #1a2332; --border: #2d3a4d; --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149; }
-    * { box-sizing: border-box; }
-    body { font-family: "Segoe UI", "PingFang SC", sans-serif; background: var(--bg); color: var(--text); margin: 0; min-height: 100vh; }
-    .container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
-    h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
-    .subtitle { color: var(--muted); font-size: 0.8rem; margin-bottom: 1rem; }
-    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; padding: 0.25rem 0; border-bottom: 1px solid var(--border); }
-    .tabs a { padding: 0.6rem 1.25rem; border-radius: 8px; background: var(--card); border: 1px solid var(--border); color: var(--text); text-decoration: none; font-size: 0.95rem; cursor: pointer; min-width: 6em; text-align: center; }
-    .tabs a:hover { background: var(--border); color: var(--text); }
-    .tabs a.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .panel { display: none; }
-    .panel.active { display: block; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
-    .card h2 { font-size: 0.9rem; color: var(--muted); margin: 0 0 0.75rem 0; }
-    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; }
-    input[type="text"], input[type="url"], input[type="number"], textarea { width: 100%; padding: 0.5rem 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.9rem; margin-bottom: 0.75rem; }
-    textarea { min-height: 60px; resize: vertical; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    @media (max-width: 768px) { .row { grid-template-columns: 1fr; } }
-    .btn { display: inline-block; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.9rem; cursor: pointer; border: none; background: var(--accent); color: #fff; margin-right: 0.5rem; margin-bottom: 0.5rem; }
-    .btn:hover { filter: brightness(1.1); }
-    .btn.active { background: var(--green); }
-    .btn.pause { background: var(--muted); }
-    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.85rem; }
-    #map { height: 420px; border-radius: 8px; border: 1px solid var(--border); margin-top: 0.5rem; }
-    .map-wrap { margin-bottom: 1rem; }
-    .route-info { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
-    .hint { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
-    .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem; }
+    body { -webkit-tap-highlight-color: transparent; }
+    .btn-touch { min-height: 48px; min-width: 48px; }
+    input, select, button { font-size: inherit; }
   </style>
 </head>
-<body>
-  <div class="container">
-    <h1>顺风车智能调度 · 控制台 <span id="userName" style="font-size:0.75rem;color:var(--muted);"></span> <button type="button" class="btn btn-sm" id="btnLogout" style="margin-left:0.5rem;">退出</button></h1>
-    <p class="subtitle">点击下方标签切换：规划找单 / 行程与地图 / 设置</p>
+<body class="bg-[#0c0c0f] text-gray-100 min-h-screen font-sans antialiased pb-8">
+  <div class="max-w-lg mx-auto px-4 pt-4">
+    <!-- 顶部状态栏 -->
+    <header class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-success animate-pulse" aria-hidden="true"></span>
+        <span class="text-console text-muted">AI 大脑在线</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-console text-muted">剩余空座</span>
+        <select id="emptySeats" class="bg-panel border border-border rounded-lg px-3 py-2 text-big text-gray-100 focus:ring-2 focus:ring-accent">
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+        <span class="text-lg">💺</span>
+      </div>
+    </header>
 
-    <nav class="tabs" id="tabNav" role="tablist" aria-label="功能标签">
-      <a href="#plan" data-tab="plan" class="active" role="tab" aria-selected="true">模式1 规划找单</a>
-      <a href="#route" data-tab="route" role="tab" aria-selected="false">模式2/3 行程与地图</a>
-      <a href="#settings" data-tab="settings" role="tab" aria-selected="false">设置</a>
-    </nav>
+    <!-- 用户与退出（小字） -->
+    <div class="flex justify-end gap-2 mb-2">
+      <span id="userName" class="text-sm text-muted"></span>
+      <button type="button" id="btnLogout" class="text-sm text-muted hover:text-gray-100 underline">退出</button>
+    </div>
 
-    <!-- 模式1：出发前规划 -->
-    <section id="panel-plan" class="panel active">
-      <div class="card">
-        <h2>规划任务（出发地、目的地、时间、2～4 单）</h2>
-        <p class="hint">设定后探针/筛选可按此条件盯单，批量优化接口可后续扩展。</p>
-        <label>出发地</label>
-        <input type="text" id="planOrigin" placeholder="如东荣生花苑" />
-        <label>目的地</label>
-        <input type="text" id="planDest" placeholder="上海" />
-        <div class="row">
-          <div><label>计划出发时间</label><input type="text" id="planTime" placeholder="06:00" /></div>
-          <div><label>时间窗（±分钟）</label><input type="number" id="planWindow" placeholder="30" value="30" /></div>
+    <!-- ========== 区块一：实时雷达与我的车厢 ========== -->
+    <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">
+      <h2 class="text-muted text-console font-medium mb-3 flex items-center gap-2">
+        <span aria-hidden="true">📍</span> 我的位置
+      </h2>
+      <div class="flex gap-3 items-stretch">
+        <input type="text" id="driverLoc" readonly
+          class="flex-1 bg-[#0c0c0f] border border-border rounded-xl px-4 py-4 text-big text-gray-100 placeholder-gray-500"
+          placeholder="点击右侧获取定位" />
+        <button type="button" id="btnRefreshGps" class="btn-touch shrink-0 bg-accent hover:bg-blue-600 text-white font-medium rounded-xl px-4 flex items-center gap-2 shadow-lg">
+          <span aria-hidden="true">🎯</span>
+          <span class="hidden sm:inline">刷新 GPS</span>
+        </button>
+      </div>
+      <p id="gpsStatus" class="text-sm text-muted mt-2"></p>
+
+      <h3 class="text-muted text-console font-medium mt-5 mb-3 flex items-center gap-2">
+        <span aria-hidden="true">👥</span> 当前车上乘客
+      </h3>
+      <ul id="passengerList" class="space-y-3">
+        <!-- 动态插入：每行 [ 1号客 ] 起点 → 终点 (状态) [ ✖️ 下车 ] -->
+      </ul>
+      <p id="noPassengersHint" class="text-muted text-console py-2">暂无乘客，抢到单后点下方「添加至我的车厢」</p>
+    </section>
+
+    <!-- ========== 区块二：AI 调度模式控制台 ========== -->
+    <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">
+      <h2 class="text-muted text-console font-medium mb-4 flex items-center gap-2">
+        <span aria-hidden="true">🧠</span> 调度模式
+      </h2>
+      <div class="grid grid-cols-1 gap-3">
+        <button type="button" data-mode="mode1" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+          <span class="text-2xl">🌙</span>
+          <span class="text-big font-medium">明日计划</span>
+        </button>
+        <button type="button" data-mode="mode2" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+          <span class="text-2xl">🚗</span>
+          <span class="text-big font-medium">半路吸尘器</span>
+        </button>
+        <button type="button" data-mode="mode3" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+          <span class="text-2xl">🔄</span>
+          <span class="text-big font-medium">附近接力</span>
+        </button>
+        <button type="button" data-mode="pause" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+          <span class="text-2xl">⏸</span>
+          <span class="text-big font-medium">停止接单</span>
+        </button>
+      </div>
+
+      <!-- 明日计划展开：时间 + 目的地 -->
+      <div id="planPanel" class="mt-4 p-4 rounded-xl bg-[#0c0c0f] border border-border hidden">
+        <label class="block text-muted text-sm mb-1">计划出发时间</label>
+        <input type="text" id="planTime" placeholder="06:00" class="w-full bg-panel border border-border rounded-lg px-3 py-3 text-console mb-3" />
+        <label class="block text-muted text-sm mb-1">目的地</label>
+        <input type="text" id="planDest" placeholder="上海" class="w-full bg-panel border border-border rounded-lg px-3 py-3 text-console mb-3" />
+        <label class="block text-muted text-sm mb-1">出发地（可选）</label>
+        <input type="text" id="planOrigin" placeholder="如东荣生花苑" class="w-full bg-panel border border-border rounded-lg px-3 py-3 text-console mb-3" />
+        <button type="button" id="btnSavePlan" class="bg-accent text-white px-4 py-3 rounded-lg font-medium">保存规划</button>
+      </div>
+
+      <!-- 参数微调 -->
+      <div class="mt-5 pt-4 border-t border-border">
+        <p class="text-muted text-sm mb-3">绕路容忍度（分钟）</p>
+        <div class="flex items-center gap-4">
+          <button type="button" id="detourMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
+          <span id="detourVal" class="text-big font-semibold min-w-[3rem] text-center">15</span>
+          <button type="button" id="detourPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
         </div>
-        <div class="row">
-          <div><label>最少接单数</label><input type="number" id="planMin" placeholder="2" value="2" /></div>
-          <div><label>最多接单数</label><input type="number" id="planMax" placeholder="4" value="4" /></div>
+        <p class="text-muted text-sm mt-4 mb-3">高收益门槛（元）</p>
+        <div class="flex items-center gap-4">
+          <button type="button" id="profitMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
+          <span id="profitVal" class="text-big font-semibold min-w-[3rem] text-center">100</span>
+          <button type="button" id="profitPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
         </div>
-        <button type="button" class="btn" id="btnSavePlan">保存规划任务</button>
-        <button type="button" class="btn btn-sm" id="btnLoadPlan">读取当前</button>
-        <p id="planStatus" class="route-info"></p>
       </div>
     </section>
 
-    <!-- 模式2/3 共用：当前行程 + 地图 -->
-    <section id="panel-route" class="panel">
-      <div class="card">
-        <h2>当前状态（司机位置 + 已接订单起终点）</h2>
-        <label>司机当前位置</label>
-        <input type="text" id="driverLoc" placeholder="如东县委党校" />
-        <label>已接订单 · 接客地址（每行一个）</label>
-        <textarea id="pickups" placeholder="如东县掘港镇荣生豪景花苑2号楼"></textarea>
-        <label>已接订单 · 送客地址（每行一个）</label>
-        <textarea id="deliveries" placeholder="上海市外滩"></textarea>
-        <button type="button" class="btn" id="btnUpdateMap">更新地图</button>
-        <p id="routeInfo" class="route-info"></p>
-      </div>
-      <div class="card map-wrap">
-        <h2>地图 · 乘客起终点与路径规划</h2>
-        <p class="hint" style="margin-bottom:0.5rem;">地图类型：<select id="mapType"><option value="baidu" selected>百度地图</option><option value="osm">OpenStreetMap</option></select></p>
-        <div id="map"></div>
-      </div>
-      <div class="card">
-        <h2>实时推送（与 Bark 同时）</h2>
-        <p id="pushEventsStatus" class="hint">未配置 Supabase 时仅 Bark 推送；在设置中填 Supabase URL + Anon Key 即可页内收到推送。</p>
-        <ul id="pushEventsList" style="list-style:none;padding:0;margin:0.5rem 0 0 0;max-height:200px;overflow-y:auto;"></ul>
-      </div>
+    <!-- ========== 区块三：战利品展示区 ========== -->
+    <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">
+      <h2 class="text-muted text-console font-medium mb-3 flex items-center gap-2">
+        <span aria-hidden="true">💸</span> 顺路单（抢到后点添加）
+      </h2>
+      <p id="pushEventsStatus" class="text-sm text-muted mb-3">未连接推送时仅 Bark 提醒；配置 Supabase 后此处实时显示。</p>
+      <ul id="pushEventsList" class="space-y-4 max-h-[50vh] overflow-y-auto">
+        <!-- Realtime 推送的卡片动态插入 -->
+      </ul>
     </section>
 
-    <!-- 设置 -->
-    <section id="panel-settings" class="panel">
-      <div class="card">
-        <h2>当前模式</h2>
-        <p id="modeStatus" style="font-size:0.9rem;margin-bottom:0.5rem;">当前：—</p>
-        <button type="button" class="btn" data-mode="mode1">出发前找单</button>
-        <button type="button" class="btn" data-mode="mode2">路上接满</button>
-        <button type="button" class="btn" data-mode="mode3">送人后周边</button>
-        <button type="button" class="btn pause" data-mode="pause">停止接单</button>
-      </div>
-      <div class="card">
-        <h2>模式参数（可选）</h2>
-        <div class="config-grid">
-          <div><label>模式2 耽误下限(分)</label><input type="number" id="cfgDetourMin" placeholder="20" /></div>
-          <div><label>模式2 耽误上限(分)</label><input type="number" id="cfgDetourMax" placeholder="60" /></div>
-          <div><label>模式2 高收益门槛(元)</label><input type="number" id="cfgHighProfit" placeholder="100" /></div>
-          <div><label>模式3 接人时效(分)</label><input type="number" id="cfgPickupMin" placeholder="30" /></div>
-          <div><label>模式3 剩余耽误上限(分)</label><input type="number" id="cfgDetour3" placeholder="25" /></div>
+    <!-- 地图与设置折叠 -->
+    <details class="bg-panel border border-border rounded-2xl overflow-hidden mb-4">
+      <summary class="p-4 text-muted text-console cursor-pointer select-none">地图与更多设置</summary>
+      <div class="p-4 pt-0 border-t border-border space-y-4">
+        <div>
+          <label class="block text-muted text-sm mb-1">地图类型</label>
+          <select id="mapType" class="w-full bg-[#0c0c0f] border border-border rounded-lg px-3 py-2">
+            <option value="baidu">百度地图</option>
+            <option value="osm">OpenStreetMap</option>
+          </select>
         </div>
-        <button type="button" class="btn btn-sm" id="btnLoadCfg">读取</button>
-        <button type="button" class="btn btn-sm" id="btnSaveCfg">保存</button>
+        <div id="map" class="h-64 rounded-xl bg-[#0c0c0f] border border-border"></div>
+        <button type="button" id="btnUpdateMap" class="w-full py-3 rounded-xl border border-border hover:bg-border font-medium">更新路线地图</button>
+        <p id="routeInfo" class="text-sm text-muted"></p>
       </div>
-    </section>
+    </details>
   </div>
 
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script>
 (function () {
   var STORAGE_API = "smartdiaodu_api_base";
@@ -132,40 +177,214 @@
   var STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
   var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
 
-  function runApp() {
-  var pushEventsStatus = document.getElementById("pushEventsStatus");
-  var pushEventsList = document.getElementById("pushEventsList");
-  var modeStatus = document.getElementById("modeStatus");
-  var driverLoc = document.getElementById("driverLoc");
-  var pickupsEl = document.getElementById("pickups");
-  var deliveriesEl = document.getElementById("deliveries");
-  var btnUpdateMap = document.getElementById("btnUpdateMap");
-  var routeInfo = document.getElementById("routeInfo");
-  var mapEl = document.getElementById("map");
-  var userNameEl = document.getElementById("userName");
-  var btnLogout = document.getElementById("btnLogout");
-  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_USERNAME)) {
-    if (userNameEl) userNameEl.textContent = "（" + localStorage.getItem(STORAGE_USERNAME) + "）";
+  var pickups = [];
+  var deliveries = [];
+
+  function getApiBase() {
+    var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.apiBase) || "";
+    return (v || "").trim().replace(/\/$/, "");
   }
-  if (btnLogout) btnLogout.onclick = function () {
-    var url = typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL);
-    var anon = typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON);
-    if (url && anon && window.supabase) {
-      try { window.supabase.createClient(url, anon).auth.signOut(); } catch (e) {}
+  function getSupabaseUrl() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_URL) : "") || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseUrl) || ""; }
+  function getSupabaseAnon() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_ANON) : "") || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseAnonKey) || ""; }
+
+  function renderPassengerList() {
+    var list = document.getElementById("passengerList");
+    var hint = document.getElementById("noPassengersHint");
+    list.innerHTML = "";
+    if (pickups.length === 0) {
+      hint.classList.remove("hidden");
+      return;
     }
-    if (typeof localStorage !== "undefined") {
-      localStorage.removeItem(STORAGE_TOKEN);
-      localStorage.removeItem(STORAGE_USERNAME);
+    hint.classList.add("hidden");
+    for (var i = 0; i < pickups.length; i++) {
+      (function (idx) {
+        var li = document.createElement("li");
+        li.className = "flex items-center justify-between gap-3 p-3 rounded-xl bg-[#0c0c0f] border border-border";
+        var shortP = (pickups[idx] || "").length > 12 ? (pickups[idx].slice(0, 12) + "…") : (pickups[idx] || "");
+        var shortD = (deliveries[idx] || "").length > 12 ? (deliveries[idx].slice(0, 12) + "…") : (deliveries[idx] || "");
+        li.innerHTML = "<span class=\"text-console flex-1 min-w-0\"><strong>" + (idx + 1) + "号客</strong> " + shortP + " → " + shortD + "</span>" +
+          "<button type=\"button\" class=\"drop-passenger shrink-0 px-3 py-2 rounded-lg bg-danger/20 text-danger font-medium\" data-idx=\"" + idx + "\">✖️ 下车</button>";
+        li.querySelector(".drop-passenger").onclick = function () {
+          var i = parseInt(this.getAttribute("data-idx"), 10);
+          var dest = deliveries[i];
+          pickups.splice(i, 1);
+          deliveries.splice(i, 1);
+          if (dest) document.getElementById("driverLoc").value = dest;
+          renderPassengerList();
+        };
+        list.appendChild(li);
+      })(i);
     }
-    window.location.replace("login.html");
+  }
+
+  function getCurrentState() {
+    return {
+      driver_loc: document.getElementById("driverLoc").value.trim() || "如东县委党校",
+      pickups: pickups.slice(),
+      deliveries: deliveries.slice()
+    };
+  }
+
+  // ---------- 刷新 GPS ----------
+  document.getElementById("btnRefreshGps").onclick = function () {
+    var status = document.getElementById("gpsStatus");
+    var input = document.getElementById("driverLoc");
+    status.textContent = "定位中…";
+    if (!navigator.geolocation) {
+      status.textContent = "浏览器不支持定位";
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+        var base = getApiBase();
+        if (!base) {
+          input.value = lat.toFixed(5) + ", " + lng.toFixed(5);
+          status.textContent = "已填入经纬度（未配置 API 无法反查地址）";
+          return;
+        }
+        fetch(base + "/reverse_geocode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat: lat, lng: lng })
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          input.value = d.address || (lat.toFixed(5) + ", " + lng.toFixed(5));
+          status.textContent = "已更新位置";
+        }).catch(function (e) {
+          input.value = lat.toFixed(5) + ", " + lng.toFixed(5);
+          status.textContent = "反查地址失败，已填经纬度";
+        });
+      },
+      function () { status.textContent = "定位失败，请允许位置权限"; }
+    );
   };
 
-  var modeLabels = { mode1: "出发前找单", mode2: "路上接满", mode3: "送人后周边", pause: "停止接单" };
-  var map = null;
-  var bmap = null;
-  var markers = [];
-  var routeLine = null;
-  var lastRouteData = null;
+  // ---------- 模式切换 ----------
+  var modeLabels = { mode1: "明日计划", mode2: "半路吸尘器", mode3: "附近接力", pause: "停止接单" };
+  function refreshMode() {
+    var base = getApiBase();
+    if (!base) return;
+    fetch(base + "/driver_mode").then(function (r) { return r.json(); }).then(function (d) {
+      var mode = d.mode || "mode2";
+      document.querySelectorAll(".mode-btn").forEach(function (btn) {
+        btn.classList.remove("border-accent", "bg-accent/20");
+        if (btn.getAttribute("data-mode") === mode) {
+          btn.classList.add("border-accent", "bg-accent/20");
+        }
+      });
+      var planPanel = document.getElementById("planPanel");
+      if (planPanel) planPanel.classList.toggle("hidden", mode !== "mode1");
+      if (mode === "mode1") loadPlannedTrip();
+    });
+  }
+  function loadPlannedTrip() {
+    var base = getApiBase();
+    if (!base) return;
+    fetch(base + "/planned_trip").then(function (r) { return r.json(); }).then(function (d) {
+      if (d.origin) document.getElementById("planOrigin").value = d.origin;
+      if (d.destination) document.getElementById("planDest").value = d.destination;
+      if (d.departure_time) document.getElementById("planTime").value = d.departure_time;
+    });
+  }
+  document.querySelectorAll(".mode-btn").forEach(function (btn) {
+    btn.onclick = function () {
+      var mode = this.getAttribute("data-mode");
+      var base = getApiBase();
+      if (!base) return;
+      fetch(base + "/driver_mode", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: mode }) })
+        .then(function () { refreshMode(); });
+    };
+  });
+
+  // ---------- 明日计划 ----------
+  document.getElementById("btnSavePlan").onclick = function () {
+    var base = getApiBase();
+    if (!base) return;
+    var body = {
+      origin: document.getElementById("planOrigin").value.trim() || "如东荣生花苑",
+      destination: document.getElementById("planDest").value.trim() || "上海",
+      departure_time: document.getElementById("planTime").value.trim() || "06:00",
+      time_window_minutes: 30,
+      min_orders: 2,
+      max_orders: 4
+    };
+    fetch(base + "/planned_trip", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function () { document.getElementById("gpsStatus").textContent = "规划已保存"; });
+  };
+
+  // ---------- 参数微调（绕路容忍 = mode2_detour_max，高收益 = mode2_high_profit_threshold） ----------
+  function loadConfig() {
+    var base = getApiBase();
+    if (!base) return;
+    fetch(base + "/driver_mode_config").then(function (r) { return r.json(); }).then(function (c) {
+      document.getElementById("detourVal").textContent = c.mode2_detour_max != null ? c.mode2_detour_max : 15;
+      document.getElementById("profitVal").textContent = c.mode2_high_profit_threshold != null ? c.mode2_high_profit_threshold : 100;
+    });
+  }
+  function saveDetour(v) {
+    var base = getApiBase();
+    if (!base) return;
+    fetch(base + "/driver_mode_config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode2_detour_max: v }) });
+  }
+  function saveProfit(v) {
+    var base = getApiBase();
+    if (!base) return;
+    fetch(base + "/driver_mode_config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode2_high_profit_threshold: v }) });
+  }
+  document.getElementById("detourMinus").onclick = function () {
+    var el = document.getElementById("detourVal");
+    var v = Math.max(0, parseInt(el.textContent, 10) - 5);
+    el.textContent = v;
+    saveDetour(v);
+  };
+  document.getElementById("detourPlus").onclick = function () {
+    var el = document.getElementById("detourVal");
+    var v = parseInt(el.textContent, 10) + 5;
+    el.textContent = v;
+    saveDetour(v);
+  };
+  document.getElementById("profitMinus").onclick = function () {
+    var el = document.getElementById("profitVal");
+    var v = Math.max(0, parseInt(el.textContent, 10) - 10);
+    el.textContent = v;
+    saveProfit(v);
+  };
+  document.getElementById("profitPlus").onclick = function () {
+    var el = document.getElementById("profitVal");
+    var v = parseInt(el.textContent, 10) + 10;
+    el.textContent = v;
+    saveProfit(v);
+  };
+
+  // ---------- 战利品：添加至车厢 ----------
+  function addPushEvent(row) {
+    var list = document.getElementById("pushEventsList");
+    if (!list) return;
+    var li = document.createElement("li");
+    li.className = "p-4 rounded-xl bg-[#0c0c0f] border border-border";
+    li.setAttribute("data-fingerprint", row.fingerprint || "");
+    var extra = row.extra_mins != null ? row.extra_mins : "—";
+    li.innerHTML = "<div class=\"flex justify-between items-start gap-2 mb-2\">" +
+      "<span class=\"text-big font-semibold text-success\">￥" + (row.price || "0") + "</span>" +
+      "<span class=\"text-console text-muted\">仅绕 " + extra + " 分钟</span></div>" +
+      "<p class=\"text-console text-muted mb-1\">接：" + (row.pickup || "").slice(0, 28) + (row.pickup && row.pickup.length > 28 ? "…" : "") + "</p>" +
+      "<p class=\"text-console text-muted mb-3\">送：" + (row.delivery || "").slice(0, 28) + (row.delivery && row.delivery.length > 28 ? "…" : "") + "</p>" +
+      "<button type=\"button\" class=\"add-to-cabin w-full py-3 rounded-xl bg-accent hover:bg-blue-600 text-white font-medium\">➕ 添加至我的车厢</button>";
+    li.querySelector(".add-to-cabin").onclick = function () {
+      pickups.push(row.pickup || "");
+      deliveries.push(row.delivery || "");
+      renderPassengerList();
+    };
+    list.insertBefore(li, list.firstChild);
+    while (list.children.length > 20) list.removeChild(list.lastChild);
+    var status = document.getElementById("pushEventsStatus");
+    if (status) status.textContent = "新推送会出现在上方；抢到后点「添加至我的车厢」。";
+  }
+  window.addEventListener("smartdiaodu_push", function (e) { if (e.detail) addPushEvent(e.detail); });
+
+  // ---------- 地图（沿用原逻辑） ----------
+  var map = null, bmap = null, markers = [], routeLine = null, lastRouteData = null;
   var mapTypeEl = document.getElementById("mapType");
   function getBaiduMapAk() { return (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.baiduMapAk) || ""; }
   function wgs84ToBd09(lat, lng) {
@@ -187,134 +406,8 @@
     dlat = (dlat * 180) / ((a * (1 - ee)) / (magic * sqrtmagic) * Math.PI);
     dlng = (dlng * 180) / (a / sqrtmagic * Math.cos(radlat) * Math.PI);
     var mglat = lat + dlat, mglng = lng + dlng;
-    return [ mglng + 0.0065 * Math.cos(mglat * x_PI), mglat + 0.006 * Math.sin(mglng * x_PI) ];
+    return [mglng + 0.0065 * Math.cos(mglat * x_PI), mglat + 0.006 * Math.sin(mglng * x_PI)];
   }
-
-  var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
-  function getApiBase() {
-    var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) || cfg.apiBase || "";
-    return (v || "").trim().replace(/\/$/, "");
-  }
-  function getSupabaseUrl() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_URL) || "" : "") || (cfg.supabaseUrl || ""); }
-  function getSupabaseAnon() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_ANON) || "" : "") || (cfg.supabaseAnonKey || ""); }
-
-  function parseLines(ta) { return (ta.value || "").split(/\n/).map(function(s){ return s.trim(); }).filter(Boolean); }
-  function getCurrentState() {
-    return {
-      driver_loc: driverLoc.value.trim() || "如东县委党校",
-      pickups: parseLines(pickupsEl),
-      deliveries: parseLines(deliveriesEl)
-    };
-  }
-
-  // ---------- 标签切换 ----------
-  function switchTab(tabId) {
-    [].forEach.call(document.querySelectorAll(".panel"), function(p){ p.classList.remove("active"); });
-    [].forEach.call(document.querySelectorAll(".tabs a"), function(a){
-      a.classList.remove("active");
-      a.setAttribute("aria-selected", "false");
-    });
-    var panel = document.getElementById("panel-" + tabId);
-    var link = document.querySelector('.tabs a[data-tab="' + tabId + '"]');
-    if (panel) panel.classList.add("active");
-    if (link) {
-      link.classList.add("active");
-      link.setAttribute("aria-selected", "true");
-    }
-    try { window.history.replaceState(null, "", "#" + tabId); } catch (e) {}
-    if (tabId === "route" && mapEl && !map && !bmap) {
-      setTimeout(function(){ if (document.getElementById("map").offsetParent) initMap(); }, 100);
-    }
-  }
-  [].forEach.call(document.querySelectorAll(".tabs a"), function(a){
-    a.onclick = function(e){
-      e.preventDefault();
-      var t = a.getAttribute("data-tab");
-      if (t) switchTab(t);
-    };
-  });
-  if (location.hash) {
-    var t = location.hash.slice(1);
-    if (t === "plan" || t === "route" || t === "settings") switchTab(t);
-  }
-
-  // ---------- 模式 ----------
-  function refreshMode() {
-    var base = getApiBase();
-    if (!base) { modeStatus.textContent = "当前：—"; return; }
-    fetch(base + "/driver_mode").then(function(r){ return r.json(); }).then(function(d){
-      modeStatus.textContent = "当前：" + (modeLabels[d.mode] || d.mode);
-      [].forEach.call(document.querySelectorAll("[data-mode]"), function(btn){
-        btn.classList.remove("active");
-        if (btn.getAttribute("data-mode") === d.mode) btn.classList.add("active");
-      });
-    }).catch(function(){ modeStatus.textContent = "当前：—"; });
-  }
-  [].forEach.call(document.querySelectorAll("[data-mode]"), function(btn){
-    btn.onclick = function(){
-      var mode = this.getAttribute("data-mode");
-      fetch(getApiBase() + "/driver_mode", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: mode }) })
-        .then(function(){ refreshMode(); });
-    };
-  });
-
-  // ---------- 模式1 规划 ----------
-  var planStatus = document.getElementById("planStatus");
-  document.getElementById("btnSavePlan").onclick = function(){
-    var base = getApiBase();
-    if (!base) { planStatus.textContent = "未配置"; return; }
-    var body = {
-      origin: document.getElementById("planOrigin").value.trim() || "如东荣生花苑",
-      destination: document.getElementById("planDest").value.trim() || "上海",
-      departure_time: document.getElementById("planTime").value.trim() || "06:00",
-      time_window_minutes: parseInt(document.getElementById("planWindow").value, 10) || 30,
-      min_orders: parseInt(document.getElementById("planMin").value, 10) || 2,
-      max_orders: parseInt(document.getElementById("planMax").value, 10) || 4
-    };
-    fetch(base + "/planned_trip", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-      .then(function(r){ return r.json(); })
-      .then(function(){ planStatus.textContent = "已保存规划任务"; })
-      .catch(function(e){ planStatus.textContent = "失败：" + (e.message || e); });
-  };
-  document.getElementById("btnLoadPlan").onclick = function(){
-    var base = getApiBase();
-    if (!base) return;
-    fetch(base + "/planned_trip").then(function(r){ return r.json(); }).then(function(d){
-      if (d.origin) document.getElementById("planOrigin").value = d.origin;
-      if (d.destination) document.getElementById("planDest").value = d.destination;
-      if (d.departure_time) document.getElementById("planTime").value = d.departure_time;
-      if (d.time_window_minutes != null) document.getElementById("planWindow").value = d.time_window_minutes;
-      if (d.min_orders != null) document.getElementById("planMin").value = d.min_orders;
-      if (d.max_orders != null) document.getElementById("planMax").value = d.max_orders;
-      planStatus.textContent = d.set ? "已加载当前规划" : "当前无规划";
-    });
-  };
-
-  // ---------- 设置：读取/保存模式参数 ----------
-  document.getElementById("btnLoadCfg").onclick = function(){
-    var base = getApiBase();
-    if (!base) return;
-    fetch(base + "/driver_mode_config").then(function(r){ return r.json(); }).then(function(c){
-      if (c.mode2_detour_min != null) document.getElementById("cfgDetourMin").value = c.mode2_detour_min;
-      if (c.mode2_detour_max != null) document.getElementById("cfgDetourMax").value = c.mode2_detour_max;
-      if (c.mode2_high_profit_threshold != null) document.getElementById("cfgHighProfit").value = c.mode2_high_profit_threshold;
-      if (c.mode3_max_minutes_to_pickup != null) document.getElementById("cfgPickupMin").value = c.mode3_max_minutes_to_pickup;
-      if (c.mode3_max_detour_minutes != null) document.getElementById("cfgDetour3").value = c.mode3_max_detour_minutes;
-    });
-  };
-  document.getElementById("btnSaveCfg").onclick = function(){
-    var base = getApiBase();
-    if (!base) return;
-    var body = {};
-    var v = document.getElementById("cfgDetourMin").value; if (v) body.mode2_detour_min = parseInt(v, 10);
-    v = document.getElementById("cfgDetourMax").value; if (v) body.mode2_detour_max = parseInt(v, 10);
-    v = document.getElementById("cfgHighProfit").value; if (v) body.mode2_high_profit_threshold = parseFloat(v);
-    v = document.getElementById("cfgPickupMin").value; if (v) body.mode3_max_minutes_to_pickup = parseInt(v, 10);
-    v = document.getElementById("cfgDetour3").value; if (v) body.mode3_max_detour_minutes = parseInt(v, 10);
-    fetch(base + "/driver_mode_config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(function(){ refreshMode(); });
-  };
-
-  // ---------- 地图 ----------
   function getMapType() { return (mapTypeEl && mapTypeEl.value) || "osm"; }
   function destroyMap() {
     if (map) { map.remove(); map = null; }
@@ -325,7 +418,7 @@
     var useBaidu = getMapType() === "baidu";
     var ak = getBaiduMapAk();
     if (useBaidu && !ak) {
-      routeInfo.textContent = "未配置百度地图 AK（环境变量 BAIDU_MAP_AK），或暂选 OpenStreetMap";
+      document.getElementById("routeInfo").textContent = "未配置百度地图 AK，或选 OpenStreetMap";
       return;
     }
     destroyMap();
@@ -333,7 +426,7 @@
       if (!window.BMap) {
         var script = document.createElement("script");
         script.src = "https://api.map.baidu.com/api?v=3.0&ak=" + ak + "&s=1";
-        script.onload = function() { initBaiduMap(); if (lastRouteData) drawRoute(lastRouteData); };
+        script.onload = function () { initBaiduMap(); if (lastRouteData) drawRoute(lastRouteData); };
         document.head.appendChild(script);
         return;
       }
@@ -347,125 +440,86 @@
   }
   function initBaiduMap() {
     if (bmap) return;
-    var c = new window.BMap.Point(121.0, 32.0);
     bmap = new window.BMap.Map("map");
-    bmap.centerAndZoom(c, 10);
+    bmap.centerAndZoom(new window.BMap.Point(121.0, 32.0), 10);
     bmap.enableScrollWheelZoom(true);
   }
   function clearMapOverlays() {
-    if (map) {
-      markers.forEach(function(m){ map.removeLayer(m); });
-      markers = [];
-      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
-    }
-    if (bmap) {
-      bmap.clearOverlays();
-    }
+    if (map) { markers.forEach(function (m) { map.removeLayer(m); }); markers = []; if (routeLine) { map.removeLayer(routeLine); routeLine = null; } }
+    if (bmap) bmap.clearOverlays();
   }
   var typeColor = { driver: "#3b82f6", pickup: "#22c55e", delivery: "#ef4444" };
-  var typeLabel = { driver: "司机", pickup: "接", delivery: "送" };
-  function getPointLabel(i, types, labels, addresses) {
-    if (labels && labels[i]) return labels[i] + (addresses[i] ? " " + (addresses[i].length > 12 ? addresses[i].slice(0,12)+"…" : addresses[i]) : "");
-    var t = types[i] || "driver";
-    return (typeLabel[t] || "途经") + (i > 0 ? i : "") + (addresses[i] ? " " + (addresses[i].length > 12 ? addresses[i].slice(0,12)+"…" : addresses[i]) : "");
-  }
   function drawRoute(data) {
     lastRouteData = data;
-    var coords = data.route_coords || [];
-    var addresses = data.route_addresses || [];
-    var types = data.point_types || [];
-    var labels = data.point_labels || [];
+    var coords = data.route_coords || [], addresses = data.route_addresses || [], types = data.point_types || [];
     if (coords.length === 0) return;
     clearMapOverlays();
     var useBaidu = getMapType() === "baidu" && bmap;
     if (useBaidu) {
       var points = [];
-      coords.forEach(function(c, i){
-        var lat = c[0], lng = c[1];
-        var bd = wgs84ToBd09(lat, lng);
+      coords.forEach(function (c, i) {
+        var bd = wgs84ToBd09(c[0], c[1]);
         points.push(new window.BMap.Point(bd[0], bd[1]));
-        var label = getPointLabel(i, types, labels, addresses);
         var mk = new window.BMap.Marker(new window.BMap.Point(bd[0], bd[1]));
-        mk.setLabel(new window.BMap.Label(label, { offset: new window.BMap.Size(10, -10) }));
+        mk.setLabel(new window.BMap.Label((types[i] || "途经") + (addresses[i] ? " " + addresses[i].slice(0, 10) + "…" : ""), { offset: new window.BMap.Size(10, -10) }));
         bmap.addOverlay(mk);
       });
-      var poly = new window.BMap.Polyline(points, { strokeColor: "#58a6ff", strokeWeight: 4 });
-      bmap.addOverlay(poly);
+      bmap.addOverlay(new window.BMap.Polyline(points.map(function (p) { return p; }), { strokeColor: "#3b82f6", strokeWeight: 4 }));
       bmap.setViewport(points);
     } else if (map) {
-      var latlngs = coords.map(function(c){ return [c[0], c[1]]; });
-      routeLine = L.polyline(latlngs, { color: "#58a6ff", weight: 4 }).addTo(map);
+      var latlngs = coords.map(function (c) { return [c[0], c[1]]; });
+      routeLine = L.polyline(latlngs, { color: "#3b82f6", weight: 4 }).addTo(map);
       map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
-      coords.forEach(function(c, i){
-        var t = types[i] || "driver";
-        var color = typeColor[t] || "#888";
-        var label = getPointLabel(i, types, labels, addresses);
-        var marker = L.circleMarker([c[0], c[1]], { radius: 8, fillColor: color, color: "#fff", weight: 2, fillOpacity: 1 }).addTo(map);
-        marker.bindPopup(label);
-        markers.push(marker);
+      coords.forEach(function (c, i) {
+        var color = typeColor[types[i]] || "#888";
+        var m = L.circleMarker([c[0], c[1]], { radius: 8, fillColor: color, color: "#fff", weight: 2, fillOpacity: 1 }).addTo(map);
+        m.bindPopup(addresses[i] || "");
+        markers.push(m);
       });
     }
-    var totalMin = Math.round((data.total_time_seconds || 0) / 60);
-    routeInfo.textContent = "途经 " + addresses.length + " 点（司机→乘客1起点/终点→…），预估总行驶约 " + totalMin + " 分钟";
+    document.getElementById("routeInfo").textContent = "途经 " + addresses.length + " 点，预估约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟";
   }
-  if (mapTypeEl) mapTypeEl.addEventListener("change", function(){
-    destroyMap();
-    initMap();
-  });
-  btnUpdateMap.onclick = function(){
+  document.getElementById("btnUpdateMap").onclick = function () {
     var base = getApiBase();
-    if (!base) { routeInfo.textContent = "未配置"; return; }
+    if (!base) return;
     initMap();
-    var state = getCurrentState();
-    routeInfo.textContent = "加载中…";
-    fetch(base + "/current_route_preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ current_state: state })
-    }).then(function(r){
-      if (!r.ok) return r.json().then(function(d){ throw new Error(d.detail || r.statusText); });
-      return r.json();
-    }).then(drawRoute).catch(function(e){
-      routeInfo.textContent = "失败：" + (e.message || e);
-      clearMapOverlays();
-    });
+    document.getElementById("routeInfo").textContent = "加载中…";
+    fetch(base + "/current_route_preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ current_state: getCurrentState() }) })
+      .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); }); return r.json(); })
+      .then(drawRoute)
+      .catch(function (e) { document.getElementById("routeInfo").textContent = "失败：" + (e.message || e); clearMapOverlays(); });
   };
 
-  // ---------- 实时推送（Realtime 推送由下方 module 脚本派发事件） ----------
-  function addPushEvent(row) {
-    if (!pushEventsList) return;
-    var li = document.createElement("li");
-    li.style.cssText = "margin-bottom:0.75rem;padding:0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:0.85rem;";
-    var text = "接 " + (row.pickup || "").slice(0, 20) + " → 送 " + (row.delivery || "").slice(0, 20) + " · " + (row.price || "") + " 元 · 绕路 " + (row.extra_mins != null ? row.extra_mins : "") + " 分钟";
-    li.textContent = text;
-    if (row.response_url) {
-      var a = document.createElement("a");
-      a.href = row.response_url;
-      a.textContent = " 接单/不接 ";
-      a.style.color = "var(--accent); margin-left:0.5rem;";
-      a.target = "_blank";
-      li.appendChild(a);
-    }
-    pushEventsList.insertBefore(li, pushEventsList.firstChild);
-    while (pushEventsList.children.length > 10) pushEventsList.removeChild(pushEventsList.lastChild);
-    if (pushEventsStatus) pushEventsStatus.textContent = "已连接 Realtime，新推送会出现在上方。";
+  // ---------- 登录与退出 ----------
+  if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_USERNAME)) {
+    var un = document.getElementById("userName");
+    if (un) un.textContent = "（" + localStorage.getItem(STORAGE_USERNAME) + "）";
   }
-  window.addEventListener("smartdiaodu_push", function(e) { if (e.detail) addPushEvent(e.detail); });
+  document.getElementById("btnLogout").onclick = function () {
+    var url = typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL);
+    var anon = typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON);
+    if (url && anon && window.supabase) { try { window.supabase.createClient(url, anon).auth.signOut(); } catch (e) {} }
+    if (typeof localStorage !== "undefined") { localStorage.removeItem(STORAGE_TOKEN); localStorage.removeItem(STORAGE_USERNAME); }
+    window.location.replace("login.html");
+  };
 
-  refreshMode();
+  function run() {
+    renderPassengerList();
+    refreshMode();
+    loadConfig();
+    document.getElementById("planPanel").classList.add("hidden");
+    refreshMode();
   }
 
   function checkAuthAndRun() {
     if (typeof localStorage === "undefined") { window.location.replace("login.html"); return; }
-    if (localStorage.getItem(STORAGE_TOKEN)) { runApp(); return; }
-    var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
-    var url = localStorage.getItem(STORAGE_SUPABASE_URL) || cfg.supabaseUrl || "";
-    var anon = localStorage.getItem(STORAGE_SUPABASE_ANON) || cfg.supabaseAnonKey || "";
+    if (localStorage.getItem(STORAGE_TOKEN)) { run(); return; }
+    var url = getSupabaseUrl(), anon = getSupabaseAnon();
     if (!url || !anon || !window.supabase) { window.location.replace("login.html"); return; }
-    window.supabase.createClient(url, anon).auth.getSession().then(function(r) {
-      if (r.data && r.data.session) runApp();
+    window.supabase.createClient(url, anon).auth.getSession().then(function (r) {
+      if (r.data && r.data.session) run();
       else window.location.replace("login.html");
-    }).catch(function() { window.location.replace("login.html"); });
+    }).catch(function () { window.location.replace("login.html"); });
   }
   checkAuthAndRun();
 })();
@@ -480,11 +534,11 @@
   try {
     var createClient = (await import("https://esm.sh/@supabase/supabase-js@2")).createClient;
     var supabase = createClient(url, anon);
-    supabase.channel("push_events_channel").on("postgres_changes", { event: "INSERT", schema: "public", table: "push_events" }, function(payload) {
+    supabase.channel("push_events_channel").on("postgres_changes", { event: "INSERT", schema: "public", table: "push_events" }, function (payload) {
       if (payload && payload.new) window.dispatchEvent(new CustomEvent("smartdiaodu_push", { detail: payload.new }));
-    }).subscribe(function(s) {
+    }).subscribe(function (s) {
       var el = document.getElementById("pushEventsStatus");
-      if (el) el.textContent = s === "SUBSCRIBED" ? "已连接 Realtime，等待推送…" : "Realtime 状态: " + s;
+      if (el) el.textContent = s === "SUBSCRIBED" ? "已连接 Realtime，等待顺路单…" : "Realtime: " + s;
     });
   } catch (e) {
     var el = document.getElementById("pushEventsStatus");

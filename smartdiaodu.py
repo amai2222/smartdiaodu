@@ -138,6 +138,12 @@ class GeocodeBatchRequest(BaseModel):
     addresses: List[str]
 
 
+class ReverseGeocodeRequest(BaseModel):
+    """逆地理编码请求（经纬度 → 地址）"""
+    lat: float
+    lng: float
+
+
 class LoginRequest(BaseModel):
     """登录请求"""
     username: str
@@ -257,6 +263,52 @@ def geocode_address(address: str) -> str:
 
     loc = data["result"]["location"]
     return f"{loc['lat']},{loc['lng']}"
+
+
+def reverse_geocode(lat: float, lng: float) -> str:
+    """
+    逆地理编码：WGS84 经纬度 → 地址字符串。
+    依赖：百度地图逆地理编码 API。
+    """
+    url = "https://api.map.baidu.com/reverse_geocoding/v3/"
+    params = {
+        "ak": BAIDU_AK,
+        "output": "json",
+        "coordtype": "wgs84ll",
+        "location": f"{lat},{lng}",
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as e:
+        logger.error("百度逆地理编码请求异常: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"逆地理编码服务不可用: {e!s}",
+        ) from e
+
+    if data.get("status") != 0:
+        msg = data.get("message", "未知错误")
+        logger.warning("逆地理编码失败 [%s,%s]: %s", lat, lng, msg)
+        raise HTTPException(
+            status_code=400,
+            detail=f"逆地理编码失败: {msg}",
+        )
+
+    result = data.get("result") or {}
+    formatted = result.get("formatted_address") or result.get("sematic_description") or ""
+    if not formatted and result.get("addressComponent"):
+        ac = result["addressComponent"]
+        parts = [
+            ac.get("province"),
+            ac.get("city"),
+            ac.get("district"),
+            ac.get("street"),
+            ac.get("street_number"),
+        ]
+        formatted = "".join(p for p in parts if p)
+    return formatted or f"{lat:.5f},{lng:.5f}"
 
 
 def geocode_addresses(addresses: List[str]) -> List[str]:
@@ -622,6 +674,13 @@ async def geocode_batch(body: GeocodeBatchRequest) -> list:
         except Exception as e:
             logger.warning("地理编码跳过 [%s]: %s", addr, e)
     return out
+
+
+@app.post("/reverse_geocode")
+async def reverse_geocode_endpoint(body: ReverseGeocodeRequest) -> dict:
+    """逆地理编码：WGS84 经纬度 → 地址，供网页「刷新 GPS」后填入当前位置。"""
+    address = reverse_geocode(body.lat, body.lng)
+    return {"address": address, "lat": body.lat, "lng": body.lng}
 
 
 @app.post("/current_route_preview")
