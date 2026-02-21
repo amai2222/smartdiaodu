@@ -460,7 +460,7 @@ def get_duration_matrix(coords: List[str]) -> List[List[int]]:
 
 
 def _bd09_to_wgs84(lat_bd: float, lng_bd: float) -> Tuple[float, float]:
-    """百度 BD09 转 WGS84，供网页 Leaflet 显示。先 BD09->GCJ02 再 GCJ02->WGS84 近似。"""
+    """百度 BD09 转 WGS84。路线数据已统一用 BD09，此函数仅保留供需要 WGS84 输出的场景（如导出）使用。"""
     x_pi = math.pi * 3000.0 / 180.0
     x = lng_bd - 0.0065
     y = lat_bd - 0.006
@@ -499,23 +499,23 @@ BAIDU_TACTICS_AVOID_CONGESTION = 5
 
 
 def fetch_driving_route_path(
-    route_coords_wgs84: List[List[float]],
+    route_coords_bd09: List[List[float]],
     plate_number: Optional[str] = None,
     cartype: Optional[int] = None,
     tactics: Optional[int] = None,
 ) -> List[List[float]]:
     """
     调用百度驾车路线规划 Web API（direction/v2/driving），按起终点+途经点一次请求，
-    返回沿道路的路径点序列，格式与 route_coords 一致：[lat, lng] WGS84。
+    返回沿道路的路径点序列，格式与 route_coords 一致：[lat, lng] BD09（百度坐标系）。
     途经点最多 18 个，超出则只取前 18 个。
     若传 plate_number，则百度会规避限行路段（如上海、北京等）。
     tactics：百度策略，如 13 时间优先、12 距离优先、6 少收费、5 躲避拥堵等。
     """
-    if not route_coords_wgs84 or len(route_coords_wgs84) < 2:
+    if not route_coords_bd09 or len(route_coords_bd09) < 2:
         return []
-    origin = f"{route_coords_wgs84[0][0]},{route_coords_wgs84[0][1]}"
-    destination = f"{route_coords_wgs84[-1][0]},{route_coords_wgs84[-1][1]}"
-    middle = route_coords_wgs84[1:-1]
+    origin = f"{route_coords_bd09[0][0]},{route_coords_bd09[0][1]}"
+    destination = f"{route_coords_bd09[-1][0]},{route_coords_bd09[-1][1]}"
+    middle = route_coords_bd09[1:-1]
     if len(middle) > 18:
         middle = middle[:18]
     waypoints = "|".join(f"{c[0]},{c[1]}" for c in middle) if middle else None
@@ -524,7 +524,7 @@ def fetch_driving_route_path(
         "ak": BAIDU_AK,
         "origin": origin,
         "destination": destination,
-        "coord_type": "wgs84",
+        "coord_type": "bd09ll",
         "ret_coordtype": "bd09ll",
         "output": "json",
     }
@@ -554,12 +554,12 @@ def fetch_driving_route_path(
     if not routes:
         return []
 
-    path_wgs84: List[List[float]] = []
+    path_bd09: List[List[float]] = []
     for step in routes[0].get("steps") or []:
         path_str = step.get("path")
         if not path_str:
             continue
-        # 返回 path 为 "lng,lat;lng,lat;..." 或 "lat,lng;..."，百度文档多为经度,纬度
+        # 返回 path 为 "lng,lat;lng,lat;..."（ret_coordtype=bd09ll），统一为 [lat, lng] 输出
         for part in path_str.split(";"):
             part = part.strip()
             if not part:
@@ -568,16 +568,14 @@ def fetch_driving_route_path(
             if len(seg) >= 2:
                 try:
                     a, b = float(seg[0].strip()), float(seg[1].strip())
-                    # 百度 API 返回一般为 经度,纬度；国内经度约 73–135，纬度约 3–54
                     if 70 < a < 140 and 0 < b < 60:
                         lng_bd, lat_bd = a, b
                     else:
                         lat_bd, lng_bd = a, b
-                    wgs_lat, wgs_lng = _bd09_to_wgs84(lat_bd, lng_bd)
-                    path_wgs84.append([wgs_lat, wgs_lng])
+                    path_bd09.append([lat_bd, lng_bd])
                 except (ValueError, TypeError):
                     continue
-    return path_wgs84
+    return path_bd09
 
 
 # ---------------------------------------------------------------------------
@@ -898,7 +896,7 @@ async def complete_planned_trip(index: int) -> dict:
 # ---------------------------------------------------------------------------
 @app.post("/geocode_batch")
 async def geocode_batch(body: GeocodeBatchRequest) -> list:
-    """批量地理编码，返回 [{ address, lat, lng }, ...]（WGS84，供 Leaflet 等地图），失败项省略。"""
+    """批量地理编码，返回 [{ address, lat, lng }, ...]（BD09 百度坐标系），失败项省略。"""
     out: List[dict] = []
     for addr in body.addresses:
         addr = (addr or "").strip()
@@ -908,8 +906,7 @@ async def geocode_batch(body: GeocodeBatchRequest) -> list:
             coord_str = geocode_address(addr)
             lat_s, lng_s = coord_str.split(",", 1)
             lat_bd, lng_bd = float(lat_s), float(lng_s)
-            wgs_lat, wgs_lng = _bd09_to_wgs84(lat_bd, lng_bd)
-            out.append({"address": addr, "lat": wgs_lat, "lng": wgs_lng})
+            out.append({"address": addr, "lat": lat_bd, "lng": lng_bd})
         except Exception as e:
             logger.warning("地理编码跳过 [%s]: %s", addr, e)
     return out
@@ -926,7 +923,7 @@ async def reverse_geocode_endpoint(body: ReverseGeocodeRequest) -> dict:
 async def current_route_preview(req: dict) -> dict:
     """
     根据当前状态计算最优路线，返回途经点地址顺序及经纬度，供网页地图绘制。
-    请求体：{ "current_state": { "driver_loc", "pickups", "deliveries" } }。
+    请求体：{ "current_state": { "driver_loc", "pickups", "deliveries" } }, "tactics": 策略数字。
     """
     try:
         state = req.get("current_state") or {}
@@ -940,6 +937,8 @@ async def current_route_preview(req: dict) -> dict:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"请求体格式错误: {e}") from e
 
+    tactics = int(req.get("tactics", 0))
+
     if not driver_loc:
         raise HTTPException(status_code=400, detail="driver_loc 不能为空")
     if len(pickups) != len(deliveries):
@@ -950,10 +949,9 @@ async def current_route_preview(req: dict) -> dict:
             coord_str = geocode_address(driver_loc)
             lat_s, lng_s = coord_str.split(",", 1)
             lat_bd, lng_bd = float(lat_s), float(lng_s)
-            wgs_lat, wgs_lng = _bd09_to_wgs84(lat_bd, lng_bd)
             return {
                 "route_addresses": [driver_loc],
-                "route_coords": [[wgs_lat, wgs_lng]],
+                "route_coords": [[lat_bd, lng_bd]],
                 "point_types": ["driver"],
                 "point_labels": ["司机"],
                 "total_time_seconds": 0,
@@ -986,17 +984,15 @@ async def current_route_preview(req: dict) -> dict:
     for i in route_indices:
         parts = coords[i].split(",", 1)
         lat_bd, lng_bd = float(parts[0]), float(parts[1])
-        wgs_lat, wgs_lng = _bd09_to_wgs84(lat_bd, lng_bd)
-        route_coords.append([wgs_lat, wgs_lng])
+        route_coords.append([lat_bd, lng_bd])
 
     # 调用百度驾车路线规划 Web API，获取沿道路的路径点，供地图画线（传车牌则规避限行，tactics 为策略）
     plate_number = (state.get("plate_number") or "").strip() or None
     cartype = state.get("cartype")
     if cartype is not None and cartype not in (0, 1):
         cartype = None
-    tactics = state.get("route_tactics") or state.get("tactics")
-    if tactics is not None and tactics not in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
-        tactics = None
+    if tactics not in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
+        tactics = 0
     route_path: List[List[float]] = []
     try:
         route_path = fetch_driving_route_path(

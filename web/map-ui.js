@@ -97,12 +97,13 @@
         M.initMap();
         return;
       }
-      if (state) state.route_tactics = M.getBaiduTacticsForPolicy(M.routePolicyKey);
+      var tacticsMap = { "LEAST_TIME": 0, "LEAST_DISTANCE": 2, "AVOID_CONGESTION": 5, "LEAST_FEE": 6 };
+      var currentTactics = tacticsMap[M.routePolicyKey || "LEAST_TIME"] || 0;
       statusEl.textContent = "规划路线中…";
       fetch(base + "/current_route_preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ current_state: state })
+        body: JSON.stringify({ current_state: state, tactics: currentTactics })
       })
       .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); }); return r.json(); })
       .then(function (data) {

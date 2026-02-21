@@ -52,28 +52,26 @@
     return [mglng + 0.0065 * Math.cos(mglat * x_PI), mglat + 0.006 * Math.sin(mglng * x_PI)];
   };
 
+  /** 入参为 BD09（与 route_coords 一致）时直接拼 URL；若为 WGS84 请先转 BD09 再传入。 */
   M.getNavUrl = function (lat, lng, name) {
-    var bd = M.wgs84ToBd09(lat, lng);
-    if (!bd || bd[0] == null || bd[1] == null) return "#";
-    var dest = bd[1] + "," + bd[0];
+    if (lat == null || lng == null) return "#";
+    var dest = lat + "," + lng;
     return "baidumap://map/direction?destination=name:" + encodeURIComponent(name || "") + "|latlng:" + dest + "&mode=driving";
   };
 
+  /** 后端返回的 route_coords / route_path 均为 BD09 [lat, lng]，可直接用于百度地图。 */
   M.getNavUrlWithWaypoints = function () {
     if (!M.route_coords.length || M.route_addresses.length !== M.route_coords.length) return "#";
-    var bd0 = M.wgs84ToBd09(M.route_coords[0][0], M.route_coords[0][1]);
-    var bdLast = M.wgs84ToBd09(M.route_coords[M.route_coords.length - 1][0], M.route_coords[M.route_coords.length - 1][1]);
-    if (!bd0 || bd0[0] == null || bd0[1] == null || !bdLast || bdLast[0] == null || bdLast[1] == null) return "#";
-    var lat0 = bd0[1], lng0 = bd0[0], latLast = bdLast[1], lngLast = bdLast[0];
+    var c0 = M.route_coords[0], cLast = M.route_coords[M.route_coords.length - 1];
+    if (!c0 || c0[0] == null || c0[1] == null || !cLast || cLast[0] == null || cLast[1] == null) return "#";
+    var lat0 = c0[0], lng0 = c0[1], latLast = cLast[0], lngLast = cLast[1];
     var origin = "latlng:" + lat0 + "," + lng0 + "|name:" + (M.point_labels[0] || "起点");
     var destination = "latlng:" + latLast + "," + lngLast + "|name:" + (M.point_labels[M.point_labels.length - 1] || "终点");
     var viaPointsList = [];
     for (var i = 1; i < M.route_coords.length - 1; i++) {
       var c = M.route_coords[i];
       if (!c || c[0] == null || c[1] == null) continue;
-      var bd = M.wgs84ToBd09(c[0], c[1]);
-      if (!bd || bd[0] == null || bd[1] == null) continue;
-      viaPointsList.push({ name: (M.point_labels[i] || ("第" + (i + 1) + "站")) + "", lat: bd[1], lng: bd[0] });
+      viaPointsList.push({ name: (M.point_labels[i] || ("第" + (i + 1) + "站")) + "", lat: c[0], lng: c[1] });
     }
     var viaData = { viaPoints: viaPointsList };
     var viaPointsStr = encodeURIComponent(JSON.stringify(viaData));
@@ -217,25 +215,19 @@
     for (var i = 0; i < coords.length; i++) {
       var c = coords[i];
       if (!c || c[0] == null || c[1] == null) continue;
-      var bd = M.wgs84ToBd09(c[0], c[1]);
-      if (!bd || bd[0] == null || bd[1] == null) continue;
-      bdPoints.push(new NS.Point(bd[0], bd[1]));
+      bdPoints.push(new NS.Point(c[1], c[0]));
     }
     if (bdPoints.length === 0) return;
 
-    /* 优先使用后端返回的 route_path（已按车牌规避限行），避免前端重新算路丢失限行。
-       💡 只有在默认策略（用时最短）下才使用后端的线。如果用户选了其他策略，直接跳过，让前端 JS API 重新算路！ */
-    if (fromIndex === 0 && M.route_path && M.route_path.length >= 2 && !M.useBMapGL &&
-        (!M.routePolicyKey || M.routePolicyKey === "LEAST_TIME") &&
-        (!M.routeAlternativeIndex || M.routeAlternativeIndex === 0)) {
+    /* 优先使用后端返回的 route_path（BD09，已按车牌+策略算路），只要后端有传线就无条件画出来。 */
+    if (fromIndex === 0 && M.route_path && M.route_path.length >= 2 && !M.useBMapGL) {
       var BPoint = window.BMap && window.BMap.Point;
       if (BPoint) {
         var bdPath = [];
         for (var i = 0; i < M.route_path.length; i++) {
           var p = M.route_path[i];
           if (!p || p[0] == null || p[1] == null) continue;
-          var bd = M.wgs84ToBd09(p[0], p[1]);
-          if (bd && bd[0] != null && bd[1] != null) bdPath.push(new BPoint(bd[0], bd[1]));
+          bdPath.push(new BPoint(p[1], p[0]));
         }
         if (bdPath.length >= 2) {
           M.addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
@@ -351,9 +343,7 @@
     for (var i = 0; i < coords.length; i++) {
       var c = coords[i];
       if (!c || c[0] == null || c[1] == null) continue;
-      var bd = M.wgs84ToBd09(c[0], c[1]);
-      if (!bd || bd[0] == null || bd[1] == null) continue;
-      bdPoints.push(new NS.Point(bd[0], bd[1]));
+      bdPoints.push(new NS.Point(c[1], c[0]));
     }
     if (bdPoints.length < 2) return;
     M.clearMapOverlays();
