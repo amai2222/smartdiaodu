@@ -115,10 +115,28 @@
     }
   };
 
-  function pathSegmentForArrows(pathBd, startFrac, endFrac) {
-    if (!pathBd || pathBd.length < 2 || startFrac >= endFrac) return pathBd;
+  function pathLengthMeters(pathBd) {
+    if (!pathBd || pathBd.length < 2) return 0;
+    function dist(p1, p2) {
+      var dx = (p2.lng - p1.lng) * 111320 * Math.cos((p1.lat || 0) * Math.PI / 180);
+      var dy = (p2.lat - p1.lat) * 110540;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    var total = 0;
+    for (var i = 0; i < pathBd.length - 1; i++) total += dist(pathBd[i], pathBd[i + 1]);
+    return total;
+  }
+  function getMetersPerPixel() {
+    if (!M.bmap || typeof M.bmap.getZoom !== "function") return 10;
+    var z = M.bmap.getZoom();
+    var center = M.bmap.getCenter && M.bmap.getCenter();
+    var lat = center && center.lat != null ? center.lat : 31;
+    return (156543.03392 * Math.cos(lat * Math.PI / 180)) / Math.pow(2, z);
+  }
+  function pathSegmentForArrows(pathBd, startFrac, endFrac, excludeRanges) {
+    if (!pathBd || pathBd.length < 2 || startFrac >= endFrac) return [];
     var BPoint = window.BMap && window.BMap.Point;
-    if (!BPoint) return pathBd;
+    if (!BPoint) return [pathBd];
     function dist(p1, p2) {
       var dx = (p2.lng - p1.lng) * 111320 * Math.cos((p1.lat || 0) * Math.PI / 180);
       var dy = (p2.lat - p1.lat) * 110540;
@@ -133,19 +151,35 @@
       segs.push({ start: pathBd[i], end: pathBd[i + 1], len: d });
       total += d;
     }
-    if (total <= 0) return pathBd;
-    var startLen = startFrac * total, endLen = endFrac * total, acc = 0, out = [];
-    for (var j = 0; j < segs.length; j++) {
-      var seg = segs[j], segStart = acc, segEnd = acc + seg.len;
-      acc = segEnd;
-      if (segEnd <= startLen || segStart >= endLen) continue;
-      var t0 = segStart < startLen ? (startLen - segStart) / seg.len : 0;
-      var t1 = segEnd > endLen ? (endLen - segStart) / seg.len : 1;
-      if (t0 > 0) out.push(interp(seg.start, seg.end, t0));
-      if (t1 > t0 && t1 < 1) out.push(interp(seg.start, seg.end, t1));
-      else if (t1 >= 1) out.push(seg.end);
+    if (total <= 0) return [pathBd];
+    var exclude = excludeRanges || [];
+    var ranges = [{ start: startFrac, end: endFrac }];
+    for (var e = 0; e < exclude.length; e++) {
+      var newRanges = [];
+      for (var r = 0; r < ranges.length; r++) {
+        var ra = ranges[r], ex = exclude[e];
+        if (ex.end <= ra.start || ex.start >= ra.end) { newRanges.push(ra); continue; }
+        if (ex.start > ra.start) newRanges.push({ start: ra.start, end: ex.start });
+        if (ex.end < ra.end) newRanges.push({ start: ex.end, end: ra.end });
+      }
+      ranges = newRanges;
     }
-    return out.length >= 2 ? out : pathBd;
+    var outSegments = [];
+    for (var ri = 0; ri < ranges.length; ri++) {
+      var startLen = ranges[ri].start * total, endLen = ranges[ri].end * total, acc = 0, out = [];
+      for (var j = 0; j < segs.length; j++) {
+        var seg = segs[j], segStart = acc, segEnd = acc + seg.len;
+        acc = segEnd;
+        if (segEnd <= startLen || segStart >= endLen) continue;
+        var t0 = segStart < startLen ? (startLen - segStart) / seg.len : 0;
+        var t1 = segEnd > endLen ? (endLen - segStart) / seg.len : 1;
+        if (t0 > 0) out.push(interp(seg.start, seg.end, t0));
+        if (t1 > t0 && t1 < 1) out.push(interp(seg.start, seg.end, t1));
+        else if (t1 >= 1) out.push(seg.end);
+      }
+      if (out.length >= 2) outSegments.push(out);
+    }
+    return outSegments.length ? outSegments : [pathBd];
   }
   function getArrowRepeatPixels() {
     if (!M.bmap || typeof M.bmap.getZoom !== "function") return 45;
@@ -156,7 +190,7 @@
     return 28;
   }
 
-  M.addDirectionalPolyline = function (pathBd, strokeColor) {
+  M.addDirectionalPolyline = function (pathBd, strokeColor, excludeRanges) {
     if (M.useBMapGL) return;
     strokeColor = strokeColor || ROUTE_GREEN;
     try {
@@ -164,20 +198,48 @@
         || (window.BMap.Symbol && (window.BMap.Symbol.SHAPE_FORWARD_CLOSED_ARROW || window.BMap.SymbolShapeType && window.BMap.SymbolShapeType.BMAP_SHAPE_FORWARD_CLOSED_ARROW));
       if (SymbolShape == null && window.BMap.Symbol) SymbolShape = 2;
       if (window.BMap.Symbol && window.BMap.IconSequence && SymbolShape != null) {
-        var sy = new window.BMap.Symbol(SymbolShape, { scale: 1.0, strokeColor: "#ffffff", fillColor: "#ffffff", strokeWeight: 0, fillOpacity: 1 });
-        var repeatPercent = (getArrowRepeatPixels() < 40 ? "2%" : "3%");
-        var icons = new window.BMap.IconSequence(sy, "100%", repeatPercent);
         var lineFull = new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0.95 });
         M.bmap.addOverlay(lineFull);
-        var midPath = pathSegmentForArrows(pathBd, 0.03, 0.97);
-        if (midPath.length >= 2) {
-          var lineArrows = new window.BMap.Polyline(midPath, { strokeColor: "transparent", strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0, icons: [icons] });
-          M.bmap.addOverlay(lineArrows);
+        var totalM = pathLengthMeters(pathBd);
+        var metersPerPixel = getMetersPerPixel();
+        var arrowPx = getArrowRepeatPixels();
+        var repeatMeters = arrowPx * metersPerPixel;
+        var repeatFrac = totalM > 0 ? repeatMeters / totalM : 0.03;
+        if (repeatFrac < 0.01) repeatFrac = 0.01;
+        if (repeatFrac > 0.05) repeatFrac = 0.05;
+        var repeatPercent = (repeatFrac * 100).toFixed(1) + "%";
+        var sy = new window.BMap.Symbol(SymbolShape, { scale: 1.0, strokeColor: "#ffffff", fillColor: "#ffffff", strokeWeight: 0, fillOpacity: 1 });
+        var icons = new window.BMap.IconSequence(sy, "100%", repeatPercent);
+        var arrowSegments = pathSegmentForArrows(pathBd, 0.08, 0.92, excludeRanges || []);
+        for (var si = 0; si < arrowSegments.length; si++) {
+          if (arrowSegments[si].length >= 2) {
+            var lineArrows = new window.BMap.Polyline(arrowSegments[si], { strokeColor: "transparent", strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0, icons: [icons] });
+            M.bmap.addOverlay(lineArrows);
+          }
         }
         return;
       }
     } catch (e) {}
     M.bmap.addOverlay(new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0.95 }));
+  };
+
+  M.addRoadNameLabelsFromSteps = function (route_steps, BPoint) {
+    if (!M.bmap || !route_steps || !route_steps.length || !BPoint || typeof window.BMap.Label === "undefined") return;
+    var roadNameRe = /高速|国道|省道|大道|快速路|环路$/;
+    for (var i = 0; i < route_steps.length; i++) {
+      var step = route_steps[i];
+      var name = (step.road_name || "").trim();
+      if (!name || name === "无名路" || name.length > 20 || !roadNameRe.test(name)) continue;
+      var path = step.path;
+      if (!path || path.length < 2) continue;
+      var midIdx = Math.floor(path.length / 2);
+      var p = path[midIdx];
+      if (!p || p[0] == null || p[1] == null) continue;
+      var pt = new BPoint(p[1], p[0]);
+      var label = new window.BMap.Label(name, { offset: new window.BMap.Size(0, 0), position: pt, enableMassClear: true });
+      label.setStyle({ color: "#1a1a1a", fontSize: "14px", fontWeight: "bold", border: "none", backgroundColor: "rgba(255,255,255,0.9)", padding: "2px 6px" });
+      M.bmap.addOverlay(label);
+    }
   };
 
   M.addRoadNameLabels = function (route) {
@@ -246,7 +308,33 @@
           for (var k = 0; k < mainPathArr.length; k++) {
             mainBdPath.push(new BPoint(mainPathArr[k][1], mainPathArr[k][0]));
           }
-          M.addDirectionalPolyline(mainBdPath, ROUTE_GREEN);
+          var excludeRanges = [];
+          if (M.routeAlternativeIndex === 0 && M.route_steps && M.route_steps.length > 0) {
+            var totalLen = pathLengthMeters(mainBdPath);
+            if (totalLen > 0) {
+              var roadNameRe = /高速|国道|省道|大道|快速路|环路$/;
+              var acc = 0;
+              for (var si = 0; si < M.route_steps.length; si++) {
+                var step = M.route_steps[si];
+                var segBd = [];
+                if (step.path) for (var sj = 0; sj < step.path.length; sj++) segBd.push(new BPoint(step.path[sj][1], step.path[sj][0]));
+                var segLen = segBd.length >= 2 ? pathLengthMeters(segBd) : 0;
+                var name = (step.road_name || "").trim();
+                if (name && name !== "无名路" && roadNameRe.test(name)) {
+                  var s = Math.max(0, Math.min(1, acc / totalLen));
+                  var e = Math.max(0, Math.min(1, (acc + segLen) / totalLen));
+                  if (e > s) {
+                    var midFrac = (s + e) * 0.5;
+                    var labelSpan = 0.025;
+                    excludeRanges.push({ start: Math.max(0, midFrac - labelSpan), end: Math.min(1, midFrac + labelSpan) });
+                  }
+                }
+                acc += segLen;
+              }
+            }
+            M.addRoadNameLabelsFromSteps(M.route_steps, BPoint);
+          }
+          M.addDirectionalPolyline(mainBdPath, ROUTE_GREEN, excludeRanges);
         }
 
         if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);

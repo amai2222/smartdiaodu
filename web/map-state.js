@@ -18,6 +18,7 @@
   M.route_alternatives = [];
   M.route_durations = [];
   M.route_paths = [];
+  M.route_steps = [];
   M.currentStopIndex = 0;
   M.routePolicyKey = "LEAST_TIME";
   M.lastSegmentResults = [];
@@ -92,6 +93,7 @@
     M.route_paths = Array.isArray(data.route_paths) ? data.route_paths : [];
     M.route_path = (M.route_paths.length > 0 && M.route_paths[0]) ? M.route_paths[0] : [];
     M.route_durations = Array.isArray(data.route_durations) ? data.route_durations : [];
+    M.route_steps = Array.isArray(data.route_steps) ? data.route_steps : [];
     M.lastRouteData = data;
     var hash = M.route_addresses.join("|");
     var savedHash = typeof localStorage !== "undefined" ? localStorage.getItem(M.STORAGE_MAP_ROUTE_HASH) : "";

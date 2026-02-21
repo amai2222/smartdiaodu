@@ -523,18 +523,50 @@ def _parse_one_route_path(route_obj: dict) -> List[List[float]]:
     return path_bd09
 
 
+def _parse_one_route_steps(route_obj: dict) -> List[Dict[str, Any]]:
+    """从单条 route 的 steps 解析出带道路名称的段落，供前端在路线上显示路名。返回 [{road_name, path}, ...]。"""
+    out: List[Dict[str, Any]] = []
+    for step in route_obj.get("steps") or []:
+        path_str = step.get("path")
+        if not path_str:
+            continue
+        path_bd09: List[List[float]] = []
+        for part in path_str.split(";"):
+            part = part.strip()
+            if not part:
+                continue
+            seg = part.split(",")
+            if len(seg) >= 2:
+                try:
+                    a, b = float(seg[0].strip()), float(seg[1].strip())
+                    if 70 < a < 140 and 0 < b < 60:
+                        lng_bd, lat_bd = a, b
+                    else:
+                        lat_bd, lng_bd = a, b
+                    path_bd09.append([lat_bd, lng_bd])
+                except (ValueError, TypeError):
+                    continue
+        if len(path_bd09) < 2:
+            continue
+        name = (step.get("road_name") or step.get("instruction") or "").strip()
+        if not name or name == "无名路" or len(name) > 20:
+            name = ""
+        out.append({"road_name": name, "path": path_bd09})
+    return out
+
+
 def fetch_driving_route_path(
     route_coords_bd09: List[List[float]],
     plate_number: Optional[str] = None,
     cartype: Optional[int] = None,
     tactics: Optional[int] = None,
-) -> Tuple[List[List[List[float]]], List[int]]:
+) -> Tuple[List[List[List[float]]], List[int], List[Dict[str, Any]]]:
     """
     调用百度驾车路线规划 Web API（direction/v2/driving），一次请求返回多条可选路线。
-    返回 (所有路线的 path 列表, 每条路线的耗时秒数列表)。path 格式 [lat, lng] BD09。
+    返回 (所有路线的 path 列表, 每条路线的耗时秒数列表, 首条路线的 steps 含路名)。path 格式 [lat, lng] BD09。
     """
     if not route_coords_bd09 or len(route_coords_bd09) < 2:
-        return [], []
+        return [], [], []
     origin = f"{route_coords_bd09[0][0]},{route_coords_bd09[0][1]}"
     destination = f"{route_coords_bd09[-1][0]},{route_coords_bd09[-1][1]}"
     middle = route_coords_bd09[1:-1]
@@ -566,20 +598,21 @@ def fetch_driving_route_path(
         data = resp.json()
     except requests.RequestException as e:
         logger.warning("百度驾车路线规划请求异常: %s", e)
-        return [], []
+        return [], [], []
 
     if data.get("status") != 0:
         logger.warning("百度驾车路线规划失败: %s", data.get("message", "未知"))
-        return [], []
+        return [], [], []
 
     result = data.get("result") or {}
     routes = result.get("routes") or []
     if not routes:
-        return [], []
+        return [], [], []
 
     all_paths: List[List[List[float]]] = []
     all_durations: List[int] = []
-    for r in routes:
+    route_steps_first: List[Dict[str, Any]] = []
+    for idx, r in enumerate(routes):
         path_bd09 = _parse_one_route_path(r)
         if len(path_bd09) >= 2:
             all_paths.append(path_bd09)
@@ -587,7 +620,9 @@ def fetch_driving_route_path(
             if isinstance(dur, dict) and "value" in dur:
                 dur = dur["value"]
             all_durations.append(int(dur) if isinstance(dur, (int, float)) else 0)
-    return all_paths, all_durations
+            if idx == 0:
+                route_steps_first = _parse_one_route_steps(r)
+    return all_paths, all_durations, route_steps_first
 
 
 # ---------------------------------------------------------------------------
@@ -667,7 +702,7 @@ def push_to_bark(
     通过 Bark API 推送到 iPhone，level=timeSensitive 突破 iOS 专注模式。
     若传 fingerprint 且配置了 RESPONSE_PAGE_BASE，正文会带「接单/是否继续」操作链接。
     """
-    if not BARK_KEY or BARK_KEY == "在这里填入你的Bark_Key":
+    if not BARK_KEY or BARK_KEY == "bGPZAHqjNjdiQZTg5GeWWG":
         logger.info("未配置 BARK_KEY，跳过推送")
         return
 
@@ -1007,8 +1042,9 @@ async def current_route_preview(req: dict) -> dict:
         tactics = 0
     all_paths: List[List[List[float]]] = []
     route_durations: List[int] = []
+    route_steps: List[Dict[str, Any]] = []
     try:
-        all_paths, route_durations = fetch_driving_route_path(
+        all_paths, route_durations, route_steps = fetch_driving_route_path(
             route_coords, plate_number=plate_number, cartype=cartype, tactics=tactics
         )
     except Exception as e:
@@ -1019,6 +1055,7 @@ async def current_route_preview(req: dict) -> dict:
         "route_coords": route_coords,
         "route_paths": all_paths,
         "route_durations": route_durations,
+        "route_steps": route_steps,
         "point_types": point_types,
         "point_labels": point_labels,
         "total_time_seconds": total_time,
