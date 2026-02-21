@@ -128,6 +128,7 @@
     <button type="button" data-policy="LEAST_DISTANCE">距离最短</button>
     <button type="button" data-policy="LEAST_FEE">费用最省</button>
     <button type="button" data-policy="AVOID_CONGESTION">躲避拥堵</button>
+    <button type="button" id="btnOtherRoute">其他线路</button>
   </div>
   <button type="button" id="btnToggleUI" title="显示菜单">≡ 菜单</button>
   <div id="navPanel" class="nav-panel" style="display: none;">
@@ -235,6 +236,18 @@
   var route_path = [];
   var currentStopIndex = 0;
   var routePolicyKey = "LEAST_TIME";
+  /** 分段算路时每段的结果（用于「其他线路」轮换）；切换策略或重新规划时清空 */
+  var lastSegmentResults = [];
+  /** 当前显示的备选线路索引（0=第一条，1=第二条…）；点「其他线路」时递增并重绘 */
+  var routeAlternativeIndex = 0;
+
+  /** 获取该段算路结果中的方案数量（getPlan(0), getPlan(1)...） */
+  function getNumPlans(results) {
+    if (!results || typeof results.getPlan !== "function") return 0;
+    var n = 0;
+    try { while (results.getPlan(n)) n++; } catch (e) {}
+    return n;
+  }
 
   /** 根据策略 key 返回 BMap.DrivingPolicy 常量（无则回退 LEAST_TIME） */
   function getDrivingPolicyValue(key) {
@@ -405,14 +418,11 @@
       var mk;
       if (i === 0) {
         mk = new NS.Marker(pt, { icon: new NS.Icon(getStartEndIconDataURL("起", "#22c55e"), new NS.Size(36, 36)) });
-        if (mk.setLabel) mk.setLabel(new NS.Label("起点", { offset: new NS.Size(0, -22) }));
       } else if (i === bdPoints.length - 1) {
         mk = new NS.Marker(pt, { icon: new NS.Icon(getStartEndIconDataURL("终", "#ef4444"), new NS.Size(36, 36)) });
-        if (mk.setLabel) mk.setLabel(new NS.Label("终点", { offset: new NS.Size(0, -22) }));
       } else {
         var isDelivery = (types && types[i] === "delivery");
         mk = new NS.Marker(pt, { icon: new NS.Icon(getViaPointIconDataURL(numStr, isDelivery), new NS.Size(28, 28)) });
-        if (mk.setLabel) mk.setLabel(new NS.Label(numStr, { offset: new NS.Size(0, -18) }));
         if (typeof NS.InfoWindow !== "undefined" && bmap) {
           var detail = typeLabel + (fullAddr ? "<br/>" + fullAddr.replace(/</g, "&lt;") : "");
           (function (marker, content) {
@@ -427,21 +437,98 @@
     }
   }
 
-  /** 在 path 上绘制带方向箭头的折线（BMap 时用；BMapGL 由 DrivingRoute 直接画） */
+  var ROUTE_STROKE_WEIGHT = 12;
+  var ROUTE_GREEN = "#18a45b";
+  /** 备选线路颜色（浅灰绿，与主线路绿色区分） */
+  var ROUTE_ALTERNATIVE_COLOR = "#7cb89a";
+
+  /** 按比例截取路径中段（起点/终点/途经点附近不画箭头，只在中段显示） */
+  function pathSegmentForArrows(pathBd, startFrac, endFrac) {
+    if (!pathBd || pathBd.length < 2 || startFrac >= endFrac) return pathBd;
+    var BPoint = window.BMap && window.BMap.Point;
+    if (!BPoint) return pathBd;
+    function dist(p1, p2) {
+      var dx = (p2.lng - p1.lng) * 111320 * Math.cos((p1.lat || 0) * Math.PI / 180);
+      var dy = (p2.lat - p1.lat) * 110540;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    function interp(p1, p2, t) {
+      return new BPoint(p1.lng + t * (p2.lng - p1.lng), p1.lat + t * (p2.lat - p1.lat));
+    }
+    var total = 0, segs = [];
+    for (var i = 0; i < pathBd.length - 1; i++) {
+      var d = dist(pathBd[i], pathBd[i + 1]);
+      segs.push({ start: pathBd[i], end: pathBd[i + 1], len: d });
+      total += d;
+    }
+    if (total <= 0) return pathBd;
+    var startLen = startFrac * total, endLen = endFrac * total, acc = 0, out = [];
+    for (var j = 0; j < segs.length; j++) {
+      var seg = segs[j], segStart = acc, segEnd = acc + seg.len;
+      acc = segEnd;
+      if (segEnd <= startLen || segStart >= endLen) continue;
+      var t0 = segStart < startLen ? (startLen - segStart) / seg.len : 0;
+      var t1 = segEnd > endLen ? (endLen - segStart) / seg.len : 1;
+      if (t0 > 0) out.push(interp(seg.start, seg.end, t0));
+      if (t1 > t0 && t1 < 1) out.push(interp(seg.start, seg.end, t1));
+      else if (t1 >= 1) out.push(seg.end);
+    }
+    return out.length >= 2 ? out : pathBd;
+  }
+
+  /** 在 path 上绘制带方向箭头的折线；箭头只画在路线中段（约 3%～97%），不覆盖起点/终点/途经点 */
   function addDirectionalPolyline(pathBd, strokeColor) {
     if (useBMapGL) return;
-    strokeColor = strokeColor || "#18a45b";
+    strokeColor = strokeColor || ROUTE_GREEN;
     try {
       var SymbolShape = window.BMap_Symbol_SHAPE_FORWARD_CLOSED_ARROW || window.BMap_Symbol_SHAPE_BACKWARD_OPEN_ARROW;
       if (window.BMap.Symbol && window.BMap.IconSequence && SymbolShape != null) {
-        var sy = new window.BMap.Symbol(SymbolShape, { scale: 0.6, strokeColor: "#fff", fillColor: "#fff", strokeWeight: 1 });
-        var icons = new window.BMap.IconSequence(sy, "100%", "8%");
-        var line = new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: 6, strokeOpacity: 0.95, icons: [icons] });
-        bmap.addOverlay(line);
+        var sy = new window.BMap.Symbol(SymbolShape, { scale: 1.0, strokeColor: "#ffffff", fillColor: "#ffffff", strokeWeight: 0 });
+        var icons = new window.BMap.IconSequence(sy, "100%", "0.15%");
+        var lineFull = new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0.95 });
+        bmap.addOverlay(lineFull);
+        var midPath = pathSegmentForArrows(pathBd, 0.03, 0.97);
+        if (midPath.length >= 2) {
+          var lineArrows = new window.BMap.Polyline(midPath, { strokeColor: "transparent", strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0, icons: [icons] });
+          bmap.addOverlay(lineArrows);
+        }
         return;
       }
     } catch (e) {}
-    bmap.addOverlay(new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: 6, strokeOpacity: 0.95 }));
+    bmap.addOverlay(new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0.95 }));
+  }
+
+  /** 在路线段上标注道路名称（很大的路：高速、国道、大道等），大号黑字贴路线 */
+  function addRoadNameLabels(route) {
+    if (!bmap || !route || typeof route.getNumSteps !== "function") return;
+    try {
+      var n = route.getNumSteps();
+      for (var i = 0; i < n; i++) {
+        var step = route.getStep && route.getStep(i);
+        if (!step) continue;
+        var name = (step.getRoadName && step.getRoadName()) || (step.roadName) || "";
+        if (!name || name === "无名路" || name.length > 20) continue;
+        if (!/高速|国道|省道|大道|快速路|环路|线|路$/.test(name)) continue;
+        var path = step.getPath && step.getPath();
+        if (!path || path.length === 0) continue;
+        var mid = path[Math.floor(path.length / 2)];
+        if (!mid) continue;
+        var label = new window.BMap.Label(name, {
+          offset: new window.BMap.Size(0, 0),
+          position: mid,
+          enableMassClear: true
+        });
+        label.setStyle({
+          color: "#1a1a1a",
+          fontSize: "18px",
+          fontWeight: "bold",
+          border: "none",
+          backgroundColor: "transparent",
+          padding: "0"
+        });
+        bmap.addOverlay(label);
+      }
+    } catch (e) {}
   }
 
   /** 按实际驾车道路绘制路线：BMapGL 用 DrivingRoute 一次规划贴合道路，BMap 用 route_path 或分段规划 */
@@ -493,7 +580,7 @@
     }
     addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
     if (typeof window.BMap.DrivingRoute === "undefined") {
-      addDirectionalPolyline(bdPoints, "#18a45b");
+      addDirectionalPolyline(bdPoints, ROUTE_GREEN);
       if (bmap.setViewport) bmap.setViewport(bdPoints);
       return;
     }
@@ -501,6 +588,8 @@
       renderOptions: { map: null },
       policy: getDrivingPolicyValue(routePolicyKey)
     };
+    lastSegmentResults = [];
+    routeAlternativeIndex = 0;
     var driving = new window.BMap.DrivingRoute(bmap, opts);
     var segIndex = 0;
     function updateStatus() {
@@ -516,24 +605,32 @@
       driving.search(bdPoints[segIndex], bdPoints[segIndex + 1]);
     }
     var onSegmentFail = function () {
-      bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#18a45b", strokeWeight: 6 }));
+      bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: ROUTE_GREEN, strokeWeight: ROUTE_STROKE_WEIGHT }));
       segIndex++;
       searchNextSegment();
     };
     if (typeof driving.setSearchCompleteCallback === "function") {
       driving.setSearchCompleteCallback(function () {
         var results = driving.getResults && driving.getResults();
-        if (results && results.getPlan && results.getPlan(0)) {
-          try {
-            var route = results.getPlan(0).getRoute && results.getPlan(0).getRoute(0);
-            var path = route && route.getPath && route.getPath();
-            if (path && path.length > 0) {
-              addDirectionalPolyline(path, "#18a45b");
-              segIndex++;
-              searchNextSegment();
-              return;
-            }
-          } catch (e) {}
+        if (results) {
+          lastSegmentResults[segIndex] = results;
+          var nPlans = getNumPlans(results);
+          var planIdx = nPlans ? (routeAlternativeIndex % nPlans) : 0;
+          var plan = results.getPlan && results.getPlan(planIdx);
+          if (!plan) plan = results.getPlan && results.getPlan(0);
+          if (plan) {
+            try {
+              var route = plan.getRoute && plan.getRoute(0);
+              var path = route && route.getPath && route.getPath();
+              if (path && path.length > 0) {
+                addDirectionalPolyline(path, ROUTE_GREEN);
+                addRoadNameLabels(route);
+                segIndex++;
+                searchNextSegment();
+                return;
+              }
+            } catch (e) {}
+          }
         }
         onSegmentFail();
       });
@@ -543,6 +640,53 @@
     }
     document.getElementById("routeInfo").textContent = "正在规划驾车路线…";
     searchNextSegment();
+  }
+
+  /** 用已保存的分段结果重绘路线，显示第 routeAlternativeIndex 条备选方案（由「其他线路」调用） */
+  function redrawFromStoredSegments() {
+    if (!bmap || !lastRouteData || !lastSegmentResults || lastSegmentResults.length === 0) return;
+    var fromIndex = currentStopIndex;
+    var coords = route_coords.slice(fromIndex);
+    var addresses = route_addresses.slice(fromIndex);
+    var types = point_types.slice(fromIndex);
+    var labels = point_labels.slice(fromIndex);
+    var NS = useBMapGL ? window.BMapGL : window.BMap;
+    if (!NS || !NS.Point) return;
+    var bdPoints = [];
+    for (var i = 0; i < coords.length; i++) {
+      var c = coords[i];
+      if (!c || c[0] == null || c[1] == null) continue;
+      var bd = wgs84ToBd09(c[0], c[1]);
+      if (!bd || bd[0] == null || bd[1] == null) continue;
+      bdPoints.push(new NS.Point(bd[0], bd[1]));
+    }
+    if (bdPoints.length < 2) return;
+    clearMapOverlays();
+    addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
+    for (var i = 0; i < lastSegmentResults.length; i++) {
+      var res = lastSegmentResults[i];
+      if (!res) continue;
+      var nPlans = getNumPlans(res);
+      var planIdx = nPlans ? (routeAlternativeIndex % nPlans) : 0;
+      var plan = res.getPlan && res.getPlan(planIdx);
+      if (!plan) plan = res.getPlan && res.getPlan(0);
+      if (!plan) continue;
+      try {
+        var route = plan.getRoute && plan.getRoute(0);
+        var path = route && route.getPath && route.getPath();
+        if (path && path.length > 0) {
+          addDirectionalPolyline(path, ROUTE_ALTERNATIVE_COLOR);
+          addRoadNameLabels(route);
+        }
+      } catch (e) {}
+    }
+    if (bmap.setViewport) bmap.setViewport(bdPoints);
+    updateNavPanel();
+    var totalPlans = getNumPlans(lastSegmentResults[0] || {});
+    var tip = totalPlans > 1
+      ? "已切换为第 " + (routeAlternativeIndex % totalPlans + 1) + " 条备选线路（共 " + totalPlans + " 条）"
+      : "当前仅有一条线路";
+    document.getElementById("routeInfo").textContent = tip;
   }
 
   function updateNavPanel() {
@@ -707,6 +851,18 @@
           }
         };
       })(strategyBtns[i]);
+    }
+    var btnOther = document.getElementById("btnOtherRoute");
+    if (btnOther) {
+      btnOther.onclick = function () {
+        if (!lastSegmentResults || lastSegmentResults.length === 0) {
+          document.getElementById("routeInfo").textContent = "请先规划路线后再切换其他线路";
+          return;
+        }
+        routeAlternativeIndex++;
+        redrawFromStoredSegments();
+        document.getElementById("routeStrategyPanel").classList.remove("show");
+      };
     }
   })();
 

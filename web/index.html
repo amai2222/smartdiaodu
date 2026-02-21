@@ -95,7 +95,7 @@
           <span aria-hidden="true">🎯</span>
           <span class="hidden sm:inline">刷新 GPS</span>
         </button>
-      </div>
+        </div>
       <p id="gpsStatus" class="text-sm text-muted mt-2"></p>
       <p class="text-sm text-muted mt-1">可手动输入或修改地址（如百度无法解析时），失焦后自动同步到数据库。</p>
 
@@ -104,7 +104,7 @@
           <span aria-hidden="true">👥</span> 当前车上乘客
         </h3>
         <button type="button" id="btnShowPlan" class="btn-touch px-4 py-2 rounded-xl border border-accent text-accent text-sm font-medium hover:bg-accent/20">查看当前计划</button>
-      </div>
+        </div>
       <ul id="passengerList" class="space-y-3">
         <!-- 动态插入：每行 [ 1号客 ] 起点 → 终点 (状态) [ ✖️ 下车 ] -->
       </ul>
@@ -851,14 +851,14 @@
 
   function checkAuthAndRun() {
     try {
-      if (typeof localStorage === "undefined") { window.location.replace("login.html"); return; }
+    if (typeof localStorage === "undefined") { window.location.replace("login.html"); return; }
       if (localStorage.getItem(STORAGE_TOKEN)) { loadAppConfig(run); return; }
       var url = getSupabaseUrl(), anon = getSupabaseAnon();
-      if (!url || !anon || !window.supabase) { window.location.replace("login.html"); return; }
+    if (!url || !anon || !window.supabase) { window.location.replace("login.html"); return; }
       window.supabase.createClient(url, anon).auth.getSession()
         .then(function (r) {
           if (r.data && r.data.session) loadAppConfig(run);
-          else window.location.replace("login.html");
+      else window.location.replace("login.html");
         })
         .catch(function () {
           loadAppConfig(function () { run(); showSupabaseBlockedNotice(); });
