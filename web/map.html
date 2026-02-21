@@ -104,8 +104,15 @@
   var DEFAULT_DRIVER_ID = "a0000001-0000-4000-8000-000000000001";
 
   function getApiBase() {
-    var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.apiBase) || "";
-    return (v || "").trim().replace(/\/$/, "");
+    var fromStorage = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_API) : null;
+    var fromConfig = (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.apiBase) || "";
+    var v = (fromStorage || "").trim() || (fromConfig || "").trim();
+    // HTTPS 页面若仍用 HTTP 的 apiBase 会被浏览器拦截，优先用 config 里的 HTTPS
+    if (window.location.protocol === "https:" && v && v.indexOf("http://") === 0) {
+      var cfgHttps = (fromConfig || "").trim();
+      if (cfgHttps && cfgHttps.indexOf("https://") === 0) v = cfgHttps;
+    }
+    return (v || "").replace(/\/$/, "");
   }
   function getSupabaseUrl() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_URL) : "") || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseUrl) || ""; }
   function getSupabaseAnon() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_ANON) : "") || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseAnonKey) || ""; }
