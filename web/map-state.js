@@ -129,10 +129,15 @@
     return false;
   };
 
-  /** 若当前路线途经限行城市则显示提示，否则隐藏。规划未根据车牌规避限行时调用。 */
+  /** 若当前路线途经限行城市则显示提示，否则隐藏。规划未根据车牌规避限行时调用。显示后 5 秒自动清除。 */
+  M._restrictionHintTimer = null;
   M.showRestrictionHintIfNeeded = function () {
     var el = document.getElementById("restrictionHint");
     if (!el) return;
+    if (M._restrictionHintTimer) {
+      clearTimeout(M._restrictionHintTimer);
+      M._restrictionHintTimer = null;
+    }
     if (!M.lastRouteData || !(M.route_addresses && M.route_addresses.length)) {
       el.style.display = "none";
       return;
@@ -140,6 +145,10 @@
     if (M.routeTouchesRestrictionCity()) {
       el.textContent = "路线可能经过限行区域（如上海市区），当前未根据车牌规避限行，请以当地限行规定为准。";
       el.style.display = "block";
+      M._restrictionHintTimer = setTimeout(function () {
+        M._restrictionHintTimer = null;
+        if (el) el.style.display = "none";
+      }, 5000);
     } else {
       el.style.display = "none";
     }
