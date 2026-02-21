@@ -129,7 +129,7 @@
     return false;
   };
 
-  /** 若当前路线途经限行城市则显示提示，否则隐藏。规划未根据车牌规避限行时调用。显示后 5 秒自动清除。 */
+  /** 若当前路线途经限行城市则显示提示，否则隐藏。规划未根据车牌规避限行时调用。显示后 5 秒自动清除。后端返回了 route_path 时说明已按车牌规避限行，不显示警告。 */
   M._restrictionHintTimer = null;
   M.showRestrictionHintIfNeeded = function () {
     var el = document.getElementById("restrictionHint");
@@ -139,6 +139,10 @@
       M._restrictionHintTimer = null;
     }
     if (!M.lastRouteData || !(M.route_addresses && M.route_addresses.length)) {
+      el.style.display = "none";
+      return;
+    }
+    if (M.route_path && M.route_path.length >= 2) {
       el.style.display = "none";
       return;
     }

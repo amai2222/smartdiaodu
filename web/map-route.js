@@ -222,6 +222,32 @@
       bdPoints.push(new NS.Point(bd[0], bd[1]));
     }
     if (bdPoints.length === 0) return;
+
+    /* 优先使用后端返回的 route_path（已按车牌规避限行），避免前端重新算路丢失限行 */
+    if (fromIndex === 0 && M.route_path && M.route_path.length >= 2 && !M.useBMapGL) {
+      var BPoint = window.BMap && window.BMap.Point;
+      if (BPoint) {
+        var bdPath = [];
+        for (var i = 0; i < M.route_path.length; i++) {
+          var p = M.route_path[i];
+          if (!p || p[0] == null || p[1] == null) continue;
+          var bd = M.wgs84ToBd09(p[0], p[1]);
+          if (bd && bd[0] != null && bd[1] != null) bdPath.push(new BPoint(bd[0], bd[1]));
+        }
+        if (bdPath.length >= 2) {
+          M.addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
+          M.addDirectionalPolyline(bdPath, ROUTE_GREEN);
+          if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
+          if (M.updateNavPanel) M.updateNavPanel();
+          if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
+          if (M.bmap && typeof M.bmap.getZoom === "function") M.lastRedrawZoom = M.bmap.getZoom();
+          var hintEl = document.getElementById("restrictionHint");
+          if (hintEl) hintEl.style.display = "none";
+          return;
+        }
+      }
+    }
+
     if (bdPoints.length === 1) {
       if (!preserveViewport) {
         M.bmap.setCenter && M.bmap.setCenter(bdPoints[0]);
