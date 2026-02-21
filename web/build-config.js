@@ -5,14 +5,16 @@ var fs = require("fs");
 var path = require("path");
 var supabaseUrl = process.env.SUPABASE_URL || "";
 var supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "";
-var apiBase = process.env.API_BASE || "";
+var apiBase = process.env.API_BASE || "http://129.226.191.86:88";
 var baiduMapAk = process.env.BAIDU_MAP_AK || "";
+var driverId = process.env.DRIVER_ID || "";
 var out = path.join(__dirname, "config.js");
-var js = "// Generated at build time from env\nwindow.SMARTDIAODU_CONFIG=" + JSON.stringify({
+var js = "// Generated at build time from env. Do not edit in repo.\nwindow.SMARTDIAODU_CONFIG=" + JSON.stringify({
   supabaseUrl: supabaseUrl,
   supabaseAnonKey: supabaseAnonKey,
   apiBase: apiBase,
-  baiduMapAk: baiduMapAk
+  baiduMapAk: baiduMapAk,
+  driverId: driverId
 }, null, 2) + ";\n";
 fs.writeFileSync(out, js, "utf8");
 console.log("Wrote " + out);

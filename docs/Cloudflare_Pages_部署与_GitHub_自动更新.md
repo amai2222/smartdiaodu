@@ -10,7 +10,7 @@
 - [ ] Cloudflare Dashboard → Workers & Pages → Create → Connect to Git → 选该仓库
 - [ ] **Build command** 填：`node web/build-config.js`
 - [ ] **Build output directory** 填：`web`
-- [ ] **Settings → Environment variables** 添加：`SUPABASE_URL`、`SUPABASE_ANON_KEY`、`API_BASE`（可选）
+- [ ] **Settings → Environment variables** 添加：`SUPABASE_URL`、`SUPABASE_ANON_KEY`、`API_BASE`（可选）、`BAIDU_MAP_AK`（可选）、`DRIVER_ID`（可选）
 - [ ] 保存后 **Save and Deploy** 或 **Retry deployment**，等构建完成
 - [ ] 访问 `https://<项目名>.pages.dev/login.html`，用 Supabase 用户（如 admin@test.com / 123456）登录
 
@@ -57,6 +57,8 @@
 | `SUPABASE_URL` | 纯文本 | Supabase 项目 URL，如 `https://xxx.supabase.co` |
 | `SUPABASE_ANON_KEY` | 密钥 | Supabase 的 anon public key（Publishable key） |
 | `API_BASE` | 纯文本（可选） | 后端 API 地址，如 `https://api.你的域名.com` 或 `http://129.226.191.86:88` |
+| `BAIDU_MAP_AK` | 纯文本（可选） | 百度地图 AK，地图页用 |
+| `DRIVER_ID` | 纯文本（可选） | 当前控制台默认司机 ID，与 seed 一致时可写死 |
 
 - 配好后保存，然后到 **Deployments** 里对当前部署点 **Retry deployment**，或推送一次代码触发新部署，构建时才会把变量写进 config.js。
 

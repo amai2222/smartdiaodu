@@ -360,15 +360,33 @@
         if (cb) cb();
       })
       .catch(function (e) {
-        console.error("[loadFromDb] 拉取乘客/司机状态失败:", e && e.message ? e.message : e);
+        var msg = (e && e.message) ? e.message : String(e);
+        console.error("[loadFromDb] 拉取乘客/司机状态失败:", msg, e);
         passengerRows = [];
         applyPassengerRows();
         renderPassengerList();
         updateEntryActions();
         var statusEl = document.getElementById("gpsStatus");
-        if (statusEl) statusEl.textContent = "加载失败，请检查 Supabase 配置与网络（F12 控制台有详情）";
+        if (statusEl) statusEl.textContent = "加载失败: " + msg.slice(0, 80);
+        showDbErrorBanner(msg);
         if (cb) cb();
       });
+  }
+
+  function showDbErrorBanner(errMsg) {
+    if (document.getElementById("dbErrorBanner")) return;
+    var banner = document.createElement("div");
+    banner.id = "dbErrorBanner";
+    banner.className = "mx-4 mt-2 p-4 rounded-xl bg-red-900/50 border border-red-500/60 text-red-100 text-sm";
+    var origin = window.location.origin || "";
+    banner.innerHTML =
+      "<strong>数据库请求失败，乘客/空座未加载</strong><br>" +
+      "可能原因：CORS 未放行、网络被拦截、或 Anon Key 错误。<br>" +
+      "请到 <b>Supabase Dashboard → Project Settings → API</b>，在 CORS 允许列表中添加：<br><code class=\"bg-black/30 px-1 rounded\">" + (origin || "你的网站完整地址") + "</code><br>" +
+      "保存后 <button type=\"button\" id=\"dbErrorRetry\" class=\"mt-2 px-3 py-1 rounded bg-red-700 text-white\">重试加载</button>";
+    document.querySelector("header") && document.querySelector("header").insertAdjacentElement("afterend", banner);
+    var retryBtn = document.getElementById("dbErrorRetry");
+    if (retryBtn) retryBtn.onclick = function () { banner.remove(); document.getElementById("gpsStatus").textContent = "加载中…"; loadFromDb(function () {}); };
   }
 
   function updateEntryActions() {
