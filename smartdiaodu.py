@@ -101,7 +101,9 @@ def _load_app_config_from_db() -> None:
         if not isinstance(data, list):
             return
         cfg = {row["key"]: (row.get("value") or "").strip() for row in data if isinstance(row, dict) and "key" in row}
-        if cfg.get("baidu_map_ak"):
+        if cfg.get("baidu_ak_server"):
+            BAIDU_AK = cfg["baidu_ak_server"]
+        elif cfg.get("baidu_map_ak"):
             BAIDU_AK = cfg["baidu_map_ak"]
         if cfg.get("baidu_service_id"):
             BAIDU_SERVICE_ID = cfg["baidu_service_id"]

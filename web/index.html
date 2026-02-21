@@ -43,6 +43,17 @@
     #planModalContent .plan-item .label { font-size: 0.9rem; color: #8b9199; margin-bottom: 0.25rem; }
     #planModalContent .plan-item .addr { font-size: 1rem; color: #e6edf3; }
     #planModalClose { margin: 0 1.25rem 1rem; padding: 0.75rem; border-radius: 0.75rem; background: #2a2d35; color: #e6edf3; border: none; font-size: 1rem; cursor: pointer; }
+    #editPassengerModalOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 1rem; }
+    #editPassengerModalOverlay.show { display: flex; }
+    #editPassengerModal { background: #14151a; border: 1px solid #2a2d35; border-radius: 1rem; max-width: 28rem; width: 100%; }
+    #editPassengerModal h3 { margin: 0; padding: 1rem 1.25rem; font-size: 1.125rem; color: #8b9199; border-bottom: 1px solid #2a2d35; }
+    #editPassengerModal .edit-body { padding: 1rem 1.25rem; }
+    #editPassengerModal .edit-body label { display: block; font-size: 0.9rem; color: #8b9199; margin-bottom: 0.25rem; }
+    #editPassengerModal .edit-body input { width: 100%; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #2a2d35; background: #0c0c0f; color: #e6edf3; margin-bottom: 1rem; }
+    #editPassengerModal .edit-actions { display: flex; gap: 0.75rem; padding: 0 1.25rem 1rem; }
+    #editPassengerModal .edit-actions button { flex: 1; padding: 0.75rem; border-radius: 0.75rem; font-size: 1rem; cursor: pointer; border: none; }
+    #editPassengerModalCancel { background: #2a2d35; color: #e6edf3; }
+    #editPassengerModalSave { background: #3b82f6; color: #fff; font-weight: 600; }
   </style>
 </head>
 <body class="bg-[#0c0c0f] text-gray-100 min-h-screen font-sans antialiased pb-8">
@@ -77,15 +88,16 @@
         <span aria-hidden="true">📍</span> 我的位置
       </h2>
       <div class="flex gap-3 items-stretch">
-        <input type="text" id="driverLoc" readonly
+        <input type="text" id="driverLoc"
           class="flex-1 bg-[#0c0c0f] border border-border rounded-xl px-4 py-4 text-big text-gray-100 placeholder-gray-500"
-          placeholder="点击右侧获取定位" />
+          placeholder="点击右侧获取定位或直接输入地址" />
         <button type="button" id="btnRefreshGps" class="btn-touch shrink-0 bg-accent hover:bg-blue-600 text-white font-medium rounded-xl px-4 flex items-center gap-2 shadow-lg">
           <span aria-hidden="true">🎯</span>
           <span class="hidden sm:inline">刷新 GPS</span>
         </button>
       </div>
       <p id="gpsStatus" class="text-sm text-muted mt-2"></p>
+      <p class="text-sm text-muted mt-1">可手动输入或修改地址（如百度无法解析时），失焦后自动同步到数据库。</p>
 
       <div class="flex items-center justify-between mt-5 mb-3 flex-wrap gap-2">
         <h3 class="text-muted text-console font-medium flex items-center gap-2">
@@ -117,6 +129,23 @@
         <h3 id="planModalTitle">当前计划 · 各乘客起点与终点</h3>
         <div id="planModalContent"></div>
         <button type="button" id="planModalClose">关闭</button>
+      </div>
+    </div>
+
+    <!-- 编辑乘客起终点弹窗：默认原地址，可修改后写回 order_pool -->
+    <div id="editPassengerModalOverlay" aria-hidden="true">
+      <div id="editPassengerModal" role="dialog" aria-labelledby="editPassengerModalTitle">
+        <h3 id="editPassengerModalTitle">编辑乘客起终点</h3>
+        <div class="edit-body">
+          <label for="editPickup">接 / 起点</label>
+          <input type="text" id="editPickup" placeholder="接客地址" />
+          <label for="editDelivery">送 / 终点</label>
+          <input type="text" id="editDelivery" placeholder="送达地址" />
+        </div>
+        <div class="edit-actions">
+          <button type="button" id="editPassengerModalCancel">取消</button>
+          <button type="button" id="editPassengerModalSave">保存并写库</button>
+        </div>
       </div>
     </div>
 
@@ -223,6 +252,7 @@
   var pickups = [];
   var deliveries = [];
   var passengerRows = [];  // { id, pickup, delivery } 用于下车时更新 DB
+  var editingPassengerIdx = -1;  // 编辑乘客弹窗当前编辑的行下标
 
   function getDriverId() { return cachedAppConfig.driver_id || DEFAULT_DRIVER_ID; }
   function getSupabaseClient() {
@@ -292,7 +322,17 @@
         var li = document.createElement("li");
         li.className = "flex items-center justify-between gap-3 p-3 rounded-xl bg-[#0c0c0f] border border-border";
         li.innerHTML = "<span class=\"text-console flex-1 min-w-0\"><strong>" + (i + 1) + "号客</strong> " + shortP + " → " + shortD + "</span>" +
+          "<button type=\"button\" class=\"edit-passenger shrink-0 px-3 py-2 rounded-lg border border-border text-muted hover:text-gray-100 font-medium\" data-idx=\"" + i + "\">编辑</button>" +
           "<button type=\"button\" class=\"drop-passenger shrink-0 px-3 py-2 rounded-lg bg-danger/20 text-danger font-medium\" data-idx=\"" + i + "\" data-order-id=\"" + (orderId || "") + "\" data-delivery=\"" + (d || "").replace(/"/g, "&quot;") + "\">✖️ 下车</button>";
+        li.querySelector(".edit-passenger").onclick = function () {
+          var idx = parseInt(this.getAttribute("data-idx"), 10);
+          var row = passengerRows[idx];
+          if (!row) return;
+          editingPassengerIdx = idx;
+          document.getElementById("editPickup").value = row.pickup || "";
+          document.getElementById("editDelivery").value = row.delivery || "";
+          document.getElementById("editPassengerModalOverlay").classList.add("show");
+        };
         li.querySelector(".drop-passenger").onclick = function () {
           var idx = parseInt(this.getAttribute("data-idx"), 10);
           var oid = this.getAttribute("data-order-id");
@@ -527,6 +567,42 @@
     if (e.target === document.getElementById("planModalOverlay")) closePlanModal();
   });
 
+  // ---------- 编辑乘客起终点弹窗：默认原地址，保存写回 order_pool ----------
+  function closeEditPassengerModal() {
+    editingPassengerIdx = -1;
+    document.getElementById("editPassengerModalOverlay").classList.remove("show");
+  }
+  document.getElementById("editPassengerModalCancel").addEventListener("click", closeEditPassengerModal);
+  document.getElementById("editPassengerModalOverlay").addEventListener("click", function (e) {
+    if (e.target === document.getElementById("editPassengerModalOverlay")) closeEditPassengerModal();
+  });
+  document.getElementById("editPassengerModalSave").addEventListener("click", function () {
+    var idx = editingPassengerIdx;
+    if (idx < 0 || idx >= passengerRows.length) { closeEditPassengerModal(); return; }
+    var newPickup = (document.getElementById("editPickup").value || "").trim();
+    var newDelivery = (document.getElementById("editDelivery").value || "").trim();
+    var row = passengerRows[idx];
+    row.pickup = newPickup;
+    row.delivery = newDelivery;
+    applyPassengerRows();
+    saveStateToStorage();
+    var sup = getSupabaseClient();
+    if (sup && row.id) {
+      sup.from("order_pool").update({ pickup: newPickup, delivery: newDelivery }).eq("id", row.id).then(function () {
+        var status = document.getElementById("gpsStatus");
+        if (status) status.textContent = "已写库，起终点已更新";
+        renderPassengerList();
+      }).catch(function (e) {
+        var status = document.getElementById("gpsStatus");
+        if (status) status.textContent = "写库失败: " + (e.message || String(e)).slice(0, 60);
+        renderPassengerList();
+      });
+    } else {
+      renderPassengerList();
+    }
+    closeEditPassengerModal();
+  });
+
   // ---------- 模式切换 ----------
   var modeLabels = { mode1: "下次计划", mode2: "半路吸尘器", mode3: "附近接力", pause: "停止接单" };
   function refreshMode() {
@@ -745,6 +821,13 @@
     var locEl = document.getElementById("driverLoc");
     if (locEl) locEl.addEventListener("change", saveStateToStorage);
     if (locEl) locEl.addEventListener("input", saveStateToStorage);
+    if (locEl) locEl.addEventListener("blur", function () {
+      saveStateToStorage();
+      var sup = getSupabaseClient();
+      if (sup && locEl.value.trim()) {
+        sup.from("driver_state").update({ current_loc: locEl.value.trim() }).eq("driver_id", getDriverId()).then(function () {});
+      }
+    });
     document.getElementById("planPanel").classList.add("hidden");
     loadFromDb(function () {
       renderPassengerList();

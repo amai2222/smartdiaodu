@@ -129,6 +129,7 @@
     if (!url || !anon || !window.supabase) return null;
     return window.supabase.createClient(url, anon);
   }
+  /** 地图底图仅从数据库 app_config 的 baidu_map_ak 读取 */
   function getBaiduMapAk() { return cachedAppConfig.baidu_map_ak || ""; }
   function getCurrentState() {
     var driver_loc = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_DRIVER_LOC)) || "";
@@ -215,7 +216,7 @@
   function initMap() {
     var ak = (getBaiduMapAk() || "").trim();
     if (!ak) {
-      document.getElementById("routeInfo").textContent = "请在 config.js 中配置 baiduMapAk";
+      document.getElementById("routeInfo").textContent = "请在 app_config 中配置 baidu_map_ak（网页端 AK）";
       return;
     }
     destroyMap();
@@ -418,6 +419,8 @@
         var hint = "";
         if (/failed to fetch|networkerror|load failed/i.test(msg) && window.location.protocol === "https:") {
           hint = "（HTTPS 页面请求 HTTP 后端可能被浏览器拦截，请将后端改为 HTTPS 或在本机用 HTTP 打开页面）";
+        } else if (/地址无法解析|地理编码|地址.*解析/i.test(msg)) {
+          hint = "。请到控制台修改「我的位置」或乘客起终点为更详细地址（如带区县、街道）后重试「更新路线」";
         }
         document.getElementById("routeInfo").textContent = "路线加载失败：" + msg + hint + "，仅显示地图";
       });

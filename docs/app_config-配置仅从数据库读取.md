@@ -17,8 +17,8 @@ CREATE TABLE app_config (
 );
 ```
 
-前端用：`api_base`、`baidu_map_ak`、`driver_id`（见 012）。  
-后端用：同上，另加 `baidu_service_id`、`bark_key`、`max_detour_seconds`、`request_timeout`、`driver_mode`、`mode2_detour_min`、`mode2_detour_max`、`mode2_high_profit_threshold`、`mode3_max_minutes_to_pickup`、`mode3_max_detour_minutes`、`response_timeout_seconds`、`response_page_base`（见 013）。  
+前端用：`api_base`、`baidu_map_ak`、`driver_id`（见 012）；可选 `baidu_map_ak_browser`（网页端地图底图专用，见 014）。若未配 `baidu_map_ak_browser` 则用 `baidu_map_ak`。  
+后端用：**`baidu_ak_server`**（服务器端百度 AK，地理编码/路线，见 015）；未配置时回退到 `baidu_map_ak`。另加 `baidu_service_id`、`bark_key`、`driver_mode` 等（见 013）。前端地图底图只用 **`baidu_map_ak`**（网页端 AK）。  
 RLS 允许 `public` 只读（SELECT）；后端用 SERVICE_ROLE 读。
 
 ---
