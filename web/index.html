@@ -87,11 +87,11 @@
       </div>
       <p id="gpsStatus" class="text-sm text-muted mt-2"></p>
 
-      <div class="flex items-center justify-between mt-5 mb-3">
+      <div class="flex items-center justify-between mt-5 mb-3 flex-wrap gap-2">
         <h3 class="text-muted text-console font-medium flex items-center gap-2">
           <span aria-hidden="true">👥</span> 当前车上乘客
         </h3>
-        <button type="button" id="btnShowPlan" class="text-sm text-accent hover:underline">显示当前计划</button>
+        <button type="button" id="btnShowPlan" class="btn-touch px-4 py-2 rounded-xl border border-accent text-accent text-sm font-medium hover:bg-accent/20">查看当前计划</button>
       </div>
       <ul id="passengerList" class="space-y-3">
         <!-- 动态插入：每行 [ 1号客 ] 起点 → 终点 (状态) [ ✖️ 下车 ] -->
@@ -699,7 +699,7 @@
 })();
   </script>
   <script type="module">
-(function () {
+(async function () {
   var STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
   var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
   var url = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL)) || "";
