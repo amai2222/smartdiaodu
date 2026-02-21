@@ -207,6 +207,18 @@ def _decode_token(token: str) -> Optional[str]:
 security = HTTPBearer(auto_error=False)
 
 
+@app.get("/")
+async def root() -> dict:
+    """根路径，便于浏览器访问 88 或 /api 时看到服务正常。"""
+    return {"service": "私人顺风车智能调度大脑", "status": "ok", "docs": "/docs"}
+
+
+@app.get("/health")
+async def health() -> dict:
+    """健康检查，Nginx/监控可用。"""
+    return {"status": "ok"}
+
+
 @app.post("/login")
 async def login(body: LoginRequest) -> dict:
     """

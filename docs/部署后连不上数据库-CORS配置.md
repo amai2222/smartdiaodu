@@ -61,6 +61,16 @@
 
 ---
 
+## 7. 地图页「路线加载失败: Failed to fetch」、地图空白
+
+- **原因**：地图页会请求后端 `apiBase` 的 `/current_route_preview` 做路线规划。若站点是 **HTTPS**（如 `https://diaodu.325218.xyz`）而 `apiBase` 是 **HTTP**（如 `http://129.226.191.86:88`），浏览器会按**混合内容**拦截该请求，出现 `Failed to fetch`，路线拿不到；若百度地图脚本未加载或 AK 无效，底图也会空白。
+- **处理**：  
+  1. **优先**：给后端上 HTTPS（如 Nginx 配 SSL），在 config 里把 `apiBase` 改为 `https://...`，再部署/刷新。  
+  2. **临时**：在本机用 `http://` 打开地图页（或从控制台点进地图），避免 HTTPS→HTTP 被拦截。  
+  3. 确认 `config.js` 里 `baiduMapAk` 已配置且有效，否则底图无法显示。
+
+---
+
 ## 小结
 
 | 现象 | 先做 |
@@ -68,4 +78,5 @@
 | 找不到 CORS 配置 | 正常，很多项目不用改；先确认 Publishable key 和 config.js 一致、config.js 线上可访问。 |
 | 密钥 | 用 **Publishable key**，和 config 里 `supabaseAnonKey` 一致。 |
 | **登录后** 仍无数据 | 检查 RLS：策略若只允许 `anon`，执行 `011_fix_rls_authenticated.sql` 改为 `public`。 |
+| **地图页**「路线加载失败: Failed to fetch」、地图空白 | 多为 **HTTPS 页面请求 HTTP 后端** 被浏览器拦截。解决：后端改为 HTTPS，或本机用 `http://` 打开地图页。 |
 | 仍连不上 | 查 F12 报错、确认 config.js 能加载、换网络/浏览器试。 |

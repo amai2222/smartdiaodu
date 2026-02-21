@@ -212,6 +212,9 @@
       var script = document.createElement("script");
       script.src = "https://api.map.baidu.com/api?v=3.0&ak=" + encodeURIComponent(ak) + "&s=1";
       script.onload = function () { initBaiduMap(); if (lastRouteData) drawRouteFromIndex(currentStopIndex); };
+      script.onerror = function () {
+        document.getElementById("routeInfo").textContent = "百度地图脚本加载失败，请检查网络或 baiduMapAk 是否有效";
+      };
       document.head.appendChild(script);
       return;
     }
@@ -398,9 +401,14 @@
         document.getElementById("routeInfo").textContent = "共 " + route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟（已入库）";
       })
       .catch(function (e) {
-        document.getElementById("routeInfo").textContent = "路线加载失败：" + (e.message || e) + "，仅显示地图";
         document.getElementById("navPanel").style.display = "none";
         initMap();
+        var msg = e.message || String(e);
+        var hint = "";
+        if (/failed to fetch|networkerror|load failed/i.test(msg) && window.location.protocol === "https:") {
+          hint = "（HTTPS 页面请求 HTTP 后端可能被浏览器拦截，请将后端改为 HTTPS 或在本机用 HTTP 打开页面）";
+        }
+        document.getElementById("routeInfo").textContent = "路线加载失败：" + msg + hint + "，仅显示地图";
       });
     });
   }
