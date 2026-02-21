@@ -66,8 +66,8 @@ MODE2_HIGH_PROFIT_THRESHOLD = 100
 # 模式3：基于「预估下一送客点」提前匹配，可串行重复（送完 A 接一单 B，送 B 时又可接 C，只要耽误在阈值内）
 MODE3_MAX_MINUTES_TO_PICKUP = 30   # 预估送客点 → 新单起点 驾车不超过此分钟
 MODE3_MAX_DETOUR_MINUTES = 25      # 剩余路线最多允许多绕的分钟数（耽误多久），每次接单都按此卡
-# 模式1：出发前规划任务（内存，可后续迁到 Supabase）
-planned_trip: Dict[str, Any] = {}  # origin, destination, departure_time, min_orders, max_orders
+# 模式1：多批次下次计划（一台车可有多条：晚回程、次日出发、次日回程等；探子/调度按每条找单）
+planned_trips: List[Dict[str, Any]] = []  # 每项: origin, destination, departure_time, time_window_minutes, min_orders, max_orders
 # 推送后用户反馈：超时未操作则指纹该单不再推送；接单/停推由网页或链接回传
 RESPONSE_TIMEOUT_SECONDS = 300   # 推送后若此秒数内未操作，视为放弃，指纹该单
 RESPONSE_PAGE_BASE = ""          # 网页端「接单/是否继续接单」页面基础 URL，如 https://ui.xxx.com/response
@@ -124,13 +124,18 @@ class ModeConfigUpdate(BaseModel):
 
 
 class PlannedTripUpdate(BaseModel):
-    """模式1 规划任务"""
+    """单条下次计划（新增或更新）"""
     origin: str
     destination: str
-    departure_time: str   # 如 "06:00" 或 "2025-02-21 06:00"
+    departure_time: str   # 如 "06:00" 或 "2025-02-22 06:00"
     time_window_minutes: Optional[int] = 30   # 出发时间窗 ± 分钟
     min_orders: Optional[int] = 2
     max_orders: Optional[int] = 4
+
+
+class PlannedTripUpdateWithIndex(PlannedTripUpdate):
+    """更新指定索引的计划"""
+    index: int
 
 
 class GeocodeBatchRequest(BaseModel):
@@ -621,37 +626,91 @@ async def set_driver_mode_config(body: ModeConfigUpdate) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 模式1：出发前规划任务（盯单条件，供探针/筛选使用；批量优化接口可后续扩展）
+# 模式1：多批次下次计划（探子/调度遍历 plans 按每条时间、地点找单）
 # ---------------------------------------------------------------------------
+def _plan_to_dict(p: Dict[str, Any]) -> dict:
+    return {
+        "origin": p.get("origin", ""),
+        "destination": p.get("destination", ""),
+        "departure_time": p.get("departure_time", ""),
+        "time_window_minutes": p.get("time_window_minutes", 30),
+        "min_orders": p.get("min_orders", 2),
+        "max_orders": p.get("max_orders", 4),
+        "completed": bool(p.get("completed")),
+    }
+
+
+def _sort_planned_trips() -> None:
+    """未完成的按出发时间从早到晚排前，已结束找单的排后；计划不删，只结束找单任务。"""
+    global planned_trips
+    planned_trips.sort(
+        key=lambda p: (
+            bool(p.get("completed")),  # False 在前 = 未完成优先
+            p.get("departure_time") or "",
+            p.get("origin") or "",
+            p.get("destination") or "",
+        )
+    )
+
+
 @app.get("/planned_trip")
 async def get_planned_trip() -> dict:
-    """获取当前设定的规划任务（模式1 找单条件）。无则返回空。"""
-    return planned_trip if planned_trip else {"set": False}
+    """获取全部下次计划（多批次）。未结束找单的按出发时间从早到晚排前，已结束的排后。探子/调度用第一条 completed=false 的；计划不删只结束找单。"""
+    _sort_planned_trips()
+    return {"plans": [_plan_to_dict(p) for p in planned_trips]}
 
 
-@app.put("/planned_trip")
-async def set_planned_trip(body: PlannedTripUpdate) -> dict:
-    """设定规划任务：出发地、目的地、计划出发时间、2～4 单。探针/筛选可按此条件盯单。"""
-    global planned_trip
-    planned_trip = {
-        "set": True,
+@app.post("/planned_trip")
+async def add_planned_trip(body: PlannedTripUpdate) -> dict:
+    """新增一条下次计划（找单任务未结束）。"""
+    global planned_trips
+    plan = {
         "origin": body.origin,
         "destination": body.destination,
         "departure_time": body.departure_time,
         "time_window_minutes": body.time_window_minutes or 30,
         "min_orders": body.min_orders or 2,
         "max_orders": body.max_orders or 4,
+        "completed": False,
     }
-    logger.info("规划任务已更新: %s -> %s, 出发 %s, %s～%s 单", body.origin, body.destination, body.departure_time, planned_trip["min_orders"], planned_trip["max_orders"])
-    return planned_trip
+    planned_trips.append(plan)
+    _sort_planned_trips()
+    logger.info("下次计划+1: %s -> %s, 出发 %s（共 %s 批）", body.origin, body.destination, body.departure_time, len(planned_trips))
+    return {"plans": [_plan_to_dict(p) for p in planned_trips]}
 
 
-@app.delete("/planned_trip")
-async def clear_planned_trip() -> dict:
-    """清除规划任务。"""
-    global planned_trip
-    planned_trip = {}
-    return {"set": False}
+@app.put("/planned_trip")
+async def update_planned_trip(body: PlannedTripUpdateWithIndex) -> dict:
+    """更新指定索引的一条下次计划（索引为排序后顺序，0=当前优先找单的一批）。"""
+    global planned_trips
+    _sort_planned_trips()
+    i = body.index
+    if i < 0 or i >= len(planned_trips):
+        raise HTTPException(status_code=400, detail="index 越界")
+    planned_trips[i] = {
+        "origin": body.origin,
+        "destination": body.destination,
+        "departure_time": body.departure_time,
+        "time_window_minutes": body.time_window_minutes or 30,
+        "min_orders": body.min_orders or 2,
+        "max_orders": body.max_orders or 4,
+        "completed": planned_trips[i].get("completed", False),
+    }
+    _sort_planned_trips()
+    logger.info("下次计划[%s]已更新: %s -> %s, 出发 %s", i, body.origin, body.destination, body.departure_time)
+    return {"plans": [_plan_to_dict(p) for p in planned_trips]}
+
+
+@app.post("/planned_trip/complete")
+async def complete_planned_trip(index: int) -> dict:
+    """结束指定索引的找单任务（计划保留不删，仅标记为已结束找单，探子/调度自动取下一条）。"""
+    global planned_trips
+    _sort_planned_trips()
+    if index < 0 or index >= len(planned_trips):
+        raise HTTPException(status_code=400, detail="index 越界")
+    planned_trips[index]["completed"] = True
+    logger.info("找单任务已结束: 第 %s 批（计划保留），下一批自动接上", index + 1)
+    return {"plans": [_plan_to_dict(p) for p in planned_trips]}
 
 
 # ---------------------------------------------------------------------------
@@ -858,8 +917,13 @@ async def order_response(
         probe_cancel_trip_requested = True
         logger.info("用户已接单，已通知探针取消对应已发布行程")
     if not cont:
-        DRIVER_MODE = "pause"
-        logger.info("用户选择不再接单，已切换为 pause")
+        # 附近接力（mode3）下放弃且不再接单 → 开启计划寻找（mode1），否则暂停
+        if DRIVER_MODE == "mode3":
+            DRIVER_MODE = "mode1"
+            logger.info("用户放弃接力任务且不再接单，已切换为计划寻找（mode1）")
+        else:
+            DRIVER_MODE = "pause"
+            logger.info("用户选择不再接单，已切换为 pause")
 
     if ac and cont:
         return {"ok": True, "message": "已记录接单，将继续为你推送顺路单（模式2）"}
@@ -867,7 +931,9 @@ async def order_response(
         return {"ok": True, "message": "已记录接单，已暂停推送；需要时请手动切回模式2"}
     if not ac and cont:
         return {"ok": True, "message": "已放弃该单并不再推送此单，将继续推送其他顺路单"}
-    return {"ok": True, "message": "已放弃该单并暂停推送；需要时请手动切回模式2"}
+    if not ac and not cont and DRIVER_MODE == "mode1":
+        return {"ok": True, "message": "已放弃接力任务，已切换为计划寻找；探子将按下次计划找单"}
+    return {"ok": True, "message": "已放弃该单并暂停推送；需要时请手动切回"}
 
 
 @app.post("/evaluate_new_order")
