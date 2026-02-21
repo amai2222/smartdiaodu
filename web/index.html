@@ -217,6 +217,18 @@
     return window.supabase.createClient(url, anon);
   }
 
+  /** Supabase 脚本未加载时动态插入并重试 loadFromDb */
+  function loadSupabaseScriptThenRetry(cb) {
+    if (window.supabase) { if (cb) cb(); return; }
+    var url = getSupabaseUrl(), anon = getSupabaseAnon();
+    if (!url || !anon) { if (cb) cb(); return; }
+    var script = document.createElement("script");
+    script.src = "https://unpkg.com/@supabase/supabase-js@2";
+    script.onload = function () { if (cb) cb(); };
+    script.onerror = function () { if (cb) cb(); };
+    document.head.appendChild(script);
+  }
+
   function saveStateToStorage() {
     if (typeof localStorage === "undefined") return;
     var loc = document.getElementById("driverLoc");
@@ -233,8 +245,20 @@
     var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.apiBase) || "";
     return (v || "").trim().replace(/\/$/, "");
   }
-  function getSupabaseUrl() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_URL) : "") || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseUrl) || ""; }
-  function getSupabaseAnon() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_ANON) : "") || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseAnonKey) || ""; }
+  function getSupabaseUrl() {
+    try {
+      var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL)) || "";
+      if (v) return v;
+    } catch (e) {}
+    return (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseUrl) || "";
+  }
+  function getSupabaseAnon() {
+    try {
+      var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON)) || "";
+      if (v) return v;
+    } catch (e) {}
+    return (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseAnonKey) || "";
+  }
 
   function renderPassengerList() {
     var list = document.getElementById("passengerList");
@@ -278,8 +302,14 @@
   }
 
   function loadFromDb(cb) {
+    var url = getSupabaseUrl(), anon = getSupabaseAnon();
     var sup = getSupabaseClient();
     if (!sup) {
+      var why = [];
+      if (!url) why.push("缺少 Supabase URL");
+      if (!anon) why.push("缺少 Anon Key");
+      if (!window.supabase) why.push("Supabase 脚本未加载");
+      console.warn("[loadFromDb] 未连上数据库:", why.join("；"), "| 请确保 config.js 已部署且可访问，或登录后 localStorage 已写入。");
       try {
         var p = localStorage.getItem(STORAGE_PICKUPS), d = localStorage.getItem(STORAGE_DELIVERIES);
         if (p) pickups = JSON.parse(p);
@@ -287,6 +317,18 @@
         passengerRows = pickups.map(function (pu, i) { return { id: null, pickup: pu, delivery: deliveries[i] || "" }; });
         applyPassengerRows();
       } catch (e) {}
+      var statusEl = document.getElementById("gpsStatus");
+      if (statusEl) statusEl.innerHTML = "未连接数据库（" + (why.length ? why.join("、") : "未知") + "）。请部署 config.js 或检查登录后 <button type=\"button\" id=\"btnReloadDb\" class=\"underline text-accent\">重新加载</button>";
+      var rel = document.getElementById("btnReloadDb");
+      if (rel) rel.onclick = function () {
+        if (statusEl) statusEl.textContent = "加载中…";
+        loadSupabaseScriptThenRetry(function () {
+          loadFromDb(function () {
+            if (statusEl) statusEl.textContent = getSupabaseClient() ? "" : "仍无法连接，请检查 config.js 与 Supabase 密钥。";
+          });
+        });
+      };
+      updateEntryActions();
       if (cb) cb();
       return;
     }
@@ -685,15 +727,35 @@
     });
   }
 
+  function showSupabaseBlockedNotice() {
+    var header = document.querySelector("header");
+    if (!header || document.getElementById("supabaseBlockedBanner")) return;
+    var banner = document.createElement("div");
+    banner.id = "supabaseBlockedBanner";
+    banner.className = "mb-3 px-4 py-2 rounded-xl bg-amber-900/40 border border-amber-600/50 text-amber-200 text-sm";
+    banner.textContent = "Supabase 连接异常（可能被浏览器「跟踪防护」拦截），乘客数据可能无法加载。请尝试：关闭跟踪/隐私保护、使用无痕模式或换用其他浏览器。";
+    header.insertAdjacentElement("afterend", banner);
+  }
+
   function checkAuthAndRun() {
-    if (typeof localStorage === "undefined") { window.location.replace("login.html"); return; }
-    if (localStorage.getItem(STORAGE_TOKEN)) { run(); return; }
-    var url = getSupabaseUrl(), anon = getSupabaseAnon();
-    if (!url || !anon || !window.supabase) { window.location.replace("login.html"); return; }
-    window.supabase.createClient(url, anon).auth.getSession().then(function (r) {
-      if (r.data && r.data.session) run();
-      else window.location.replace("login.html");
-    }).catch(function () { window.location.replace("login.html"); });
+    try {
+      if (typeof localStorage === "undefined") { window.location.replace("login.html"); return; }
+      if (localStorage.getItem(STORAGE_TOKEN)) { run(); return; }
+      var url = getSupabaseUrl(), anon = getSupabaseAnon();
+      if (!url || !anon || !window.supabase) { window.location.replace("login.html"); return; }
+      window.supabase.createClient(url, anon).auth.getSession()
+        .then(function (r) {
+          if (r.data && r.data.session) run();
+          else window.location.replace("login.html");
+        })
+        .catch(function () {
+          run();
+          showSupabaseBlockedNotice();
+        });
+    } catch (e) {
+      run();
+      showSupabaseBlockedNotice();
+    }
   }
   checkAuthAndRun();
 })();
