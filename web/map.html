@@ -8,8 +8,8 @@
   <script src="config.js"></script>
   <style>
     * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; height: 100%; width: 100%; }
-    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; min-height: 100vh; overflow: hidden; }
+    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; min-height: 300px; z-index: 0; background: #1a1a2e; }
     .toolbar {
       position: fixed;
       top: 12px;
@@ -76,6 +76,7 @@
     <a href="index.html" target="_self">← 返回控制台</a>
     <span id="routeInfo" class="status"></span>
   </div>
+  <p id="mapBlankHint" class="status" style="display:none; position: fixed; top: 52px; left: 12px; right: 12px; z-index: 999; margin: 0; padding: 8px 12px; border-radius: 8px; background: rgba(20,21,26,0.95); border: 1px solid #2a2d35; font-size: 0.85rem; color: #8b9199;"></p>
 
   <div id="navPanel" class="nav-panel" style="display: none;">
     <div id="nextStopText" class="next-stop"></div>
@@ -236,9 +237,19 @@
 
   function initBaiduMap() {
     if (bmap) return;
+    var container = document.getElementById("map");
+    if (!container) return;
     bmap = new window.BMap.Map("map");
     bmap.centerAndZoom(new window.BMap.Point(121.0, 32.0), 10);
     bmap.enableScrollWheelZoom(true);
+    // 瓦片加载完成/失败时在控制台输出，便于排查白屏
+    if (typeof bmap.addEventListener === "function") {
+      bmap.addEventListener("tilesloaded", function () { console.log("[地图] 瓦片已加载"); });
+    }
+    // 容器尺寸变化或延迟渲染时强制刷新，避免白屏
+    setTimeout(function () {
+      if (bmap && typeof bmap.invalidateSize === "function") bmap.invalidateSize();
+    }, 200);
   }
 
   function clearMapOverlays() {
@@ -314,6 +325,14 @@
     drawRouteFromIndex(currentStopIndex);
     updateNavPanel();
     if (bmap && typeof bmap.invalidateSize === "function") bmap.invalidateSize();
+    // 若地图仍为白屏，多为 AK 类型或白名单导致，提示用户
+    var hintEl = document.getElementById("mapBlankHint");
+    if (hintEl) {
+      hintEl.textContent = "若地图为白屏：请确认 app_config 中 baidu_map_ak 为「浏览器端」AK，且在百度地图开放平台已添加当前访问域名白名单。";
+      hintEl.style.display = "block";
+      window.clearTimeout(window._mapBlankHintTimer);
+      window._mapBlankHintTimer = setTimeout(function () { hintEl.style.display = "none"; }, 12000);
+    }
   }
 
   /** 规划结果入库（每司机一条，覆盖） */
