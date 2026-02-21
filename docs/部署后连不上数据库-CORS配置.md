@@ -44,10 +44,28 @@
 
 ---
 
+## 5. 登录后仍无数据：RLS 只允许 anon（身份门禁）
+
+若 **未登录** 时能拿到数据、**登录后** 反而「暂无乘客」或 403，多半是 **RLS 策略只写了 `TO anon`**。登录成功后前端角色从 `anon` 变为 `authenticated`，策略不包含已登录用户就会被拒。
+
+**处理：** 在 Supabase **SQL Editor** 里执行一次迁移 `supabase/migrations/011_fix_rls_authenticated.sql`（或把其中 4 段 DROP/CREATE POLICY 复制进去运行），把相关表的策略改为 `TO public`，再刷新控制台即可。
+
+---
+
+## 6. 登录页控制台常见无关报错（不影响登录）
+
+| 控制台报错 | 原因 | 处理 |
+|------------|------|------|
+| **webextension.js**：`Cannot read properties of null (reading '1')` | **浏览器扩展**注入的脚本报错，不是本站代码。 | 用**无痕/隐私模式**或暂时禁用扩展后再试；可忽略。 |
+| **GET static.cloudflareinsights.com/beacon.min.js**：`net::ERR_ADDRESS_INVALID` | 站点部署在 **Cloudflare Pages** 时，CF 会自动注入统计脚本；你本机网络/DNS 无法访问该域名时会报错。 | **不影响登录**，可忽略。若想去掉该请求：Cloudflare Dashboard → 你的 Pages 项目 → **Settings** → 关闭 **Web Analytics** / **Browser Insights**。 |
+
+---
+
 ## 小结
 
 | 现象 | 先做 |
 |------|------|
 | 找不到 CORS 配置 | 正常，很多项目不用改；先确认 Publishable key 和 config.js 一致、config.js 线上可访问。 |
 | 密钥 | 用 **Publishable key**，和 config 里 `supabaseAnonKey` 一致。 |
+| **登录后** 仍无数据 | 检查 RLS：策略若只允许 `anon`，执行 `011_fix_rls_authenticated.sql` 改为 `public`。 |
 | 仍连不上 | 查 F12 报错、确认 config.js 能加载、换网络/浏览器试。 |
