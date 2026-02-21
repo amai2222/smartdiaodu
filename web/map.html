@@ -240,6 +240,9 @@
   var lastSegmentResults = [];
   /** 当前显示的备选线路索引（0=第一条，1=第二条…）；点「其他线路」时递增并重绘 */
   var routeAlternativeIndex = 0;
+  /** 缩放结束后防抖重绘的定时器（移动端避免缩放时频繁重绘卡顿） */
+  var zoomRedrawTimer = null;
+  var lastRedrawZoom = null;
 
   /** 获取该段算路结果中的方案数量（getPlan(0), getPlan(1)...） */
   function getNumPlans(results) {
@@ -343,11 +346,20 @@
       window.baiduMapReady = null;
       if (window.BMap && typeof window.BMap.Map === "function") {
         initBaiduMap();
-        if (lastRouteData) drawRouteFromIndex(currentStopIndex);
+        loadBaiduSymbolLib(function () {
+          if (lastRouteData) drawRouteFromIndex(currentStopIndex);
+        });
         return;
       }
       document.getElementById("routeInfo").textContent = "百度地图 API 未就绪。请检查 F12 → Network 中 api.map.baidu.com 请求与 AK 白名单。";
     };
+    function loadBaiduSymbolLib(cb) {
+      if (window.BMap_Symbol_SHAPE_FORWARD_CLOSED_ARROW != null) { if (cb) cb(); return; }
+      var s = document.createElement("script");
+      s.src = "https://api.map.baidu.com/library/DrawingManager/1.4/src/DrawingManager_min.js";
+      s.onload = s.onerror = function () { if (cb) cb(); };
+      document.head.appendChild(s);
+    }
     var script = document.createElement("script");
     script.src = "https://api.map.baidu.com/api?v=3.0&ak=" + encodeURIComponent(ak) + "&s=1&callback=baiduMapReady";
     script.onerror = function () {
@@ -376,6 +388,20 @@
       if (typeof bmap.enableDoubleClickZoom === "function") bmap.enableDoubleClickZoom(true);
       if (typeof bmap.addEventListener === "function") {
         bmap.addEventListener("tilesloaded", function () { console.log("[地图] 瓦片已加载"); });
+        bmap.addEventListener("zoomend", function () {
+          if (zoomRedrawTimer) clearTimeout(zoomRedrawTimer);
+          var z = typeof bmap.getZoom === "function" ? bmap.getZoom() : null;
+          if (z === lastRedrawZoom) return;
+          zoomRedrawTimer = setTimeout(function () {
+            zoomRedrawTimer = null;
+            lastRedrawZoom = (typeof bmap.getZoom === "function" ? bmap.getZoom() : null);
+            if (typeof requestAnimationFrame === "function") {
+              requestAnimationFrame(function () { if (typeof redrawRouteOnZoomChange === "function") redrawRouteOnZoomChange(); });
+            } else if (typeof redrawRouteOnZoomChange === "function") {
+              redrawRouteOnZoomChange();
+            }
+          }, 480);
+        });
       }
       setTimeout(function () {
         if (bmap && typeof bmap.invalidateSize === "function") bmap.invalidateSize();
@@ -476,15 +502,28 @@
     return out.length >= 2 ? out : pathBd;
   }
 
-  /** 在 path 上绘制带方向箭头的折线；箭头只画在路线中段（约 3%～97%），不覆盖起点/终点/途经点 */
+  /** 合理箭头密度：按像素间隔，zoom 变化后需重绘路线以更新密度。默认 45 像素间隔。 */
+  function getArrowRepeatPixels() {
+    if (!bmap || typeof bmap.getZoom !== "function") return 45;
+    var z = bmap.getZoom();
+    if (z <= 10) return 60;
+    if (z <= 13) return 45;
+    if (z <= 16) return 35;
+    return 28;
+  }
+
+  /** 在 path 上绘制带方向箭头的折线；箭头只画在路线中段（约 3%～97%），不覆盖起点/终点/途经点；实心导向箭头，密度随缩放合理变化 */
   function addDirectionalPolyline(pathBd, strokeColor) {
     if (useBMapGL) return;
     strokeColor = strokeColor || ROUTE_GREEN;
     try {
-      var SymbolShape = window.BMap_Symbol_SHAPE_FORWARD_CLOSED_ARROW || window.BMap_Symbol_SHAPE_BACKWARD_OPEN_ARROW;
+      var SymbolShape = window.BMap_Symbol_SHAPE_FORWARD_CLOSED_ARROW
+        || (window.BMap.Symbol && (window.BMap.Symbol.SHAPE_FORWARD_CLOSED_ARROW || window.BMap.SymbolShapeType && window.BMap.SymbolShapeType.BMAP_SHAPE_FORWARD_CLOSED_ARROW));
+      if (SymbolShape == null && window.BMap.Symbol) SymbolShape = 2;
       if (window.BMap.Symbol && window.BMap.IconSequence && SymbolShape != null) {
-        var sy = new window.BMap.Symbol(SymbolShape, { scale: 1.0, strokeColor: "#ffffff", fillColor: "#ffffff", strokeWeight: 0 });
-        var icons = new window.BMap.IconSequence(sy, "100%", "0.15%");
+        var sy = new window.BMap.Symbol(SymbolShape, { scale: 1.0, strokeColor: "#ffffff", fillColor: "#ffffff", strokeWeight: 0, fillOpacity: 1 });
+        var repeatPx = getArrowRepeatPixels();
+        var icons = new window.BMap.IconSequence(sy, "100%", repeatPx);
         var lineFull = new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0.95 });
         bmap.addOverlay(lineFull);
         var midPath = pathSegmentForArrows(pathBd, 0.03, 0.97);
@@ -684,8 +723,8 @@
     updateNavPanel();
     var totalPlans = getNumPlans(lastSegmentResults[0] || {});
     var tip = totalPlans > 1
-      ? "已切换为第 " + (routeAlternativeIndex % totalPlans + 1) + " 条备选线路（共 " + totalPlans + " 条）"
-      : "当前仅有一条线路";
+      ? "已切换为第 " + (routeAlternativeIndex % totalPlans + 1) + " 条备选线路（共 " + totalPlans + " 条，浅灰绿）"
+      : "当前仅 1 条方案，已用备选颜色（浅灰绿）显示";
     document.getElementById("routeInfo").textContent = tip;
   }
 
@@ -857,6 +896,7 @@
       btnOther.onclick = function () {
         if (!lastSegmentResults || lastSegmentResults.length === 0) {
           document.getElementById("routeInfo").textContent = "请先规划路线后再切换其他线路";
+          document.getElementById("routeStrategyPanel").classList.remove("show");
           return;
         }
         routeAlternativeIndex++;
@@ -865,6 +905,16 @@
       };
     }
   })();
+
+  function redrawRouteOnZoomChange() {
+    if (!bmap || !lastRouteData) return;
+    lastRedrawZoom = typeof bmap.getZoom === "function" ? bmap.getZoom() : null;
+    if (lastSegmentResults && lastSegmentResults.length > 0 && routeAlternativeIndex > 0) {
+      redrawFromStoredSegments();
+    } else {
+      drawRouteFromIndex(currentStopIndex);
+    }
+  }
 
   document.addEventListener("click", function () {
     document.getElementById("routeStrategyPanel").classList.remove("show");
