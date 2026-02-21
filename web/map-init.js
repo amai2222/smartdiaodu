@@ -40,7 +40,7 @@
     M.useBMapGL = false;
     if (window.BMap && typeof window.BMap.Map === "function") {
       M.initBaiduMap();
-      if (M.lastRouteData && M.drawRouteFromIndex) M.drawRouteFromIndex(M.currentStopIndex);
+      loadBaiduSymbolLib(function () {});
       return;
     }
     window.baiduMapReady = function () {

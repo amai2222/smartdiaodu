@@ -223,7 +223,7 @@
     }
     if (bdPoints.length === 0) return;
 
-    /* 优先使用后端返回的 route_path（已按车牌规避限行），避免前端重新算路丢失限行 */
+    /* 优先使用后端返回的 route_path（已按车牌规避限行 + 当前策略 tactics）。后端按不同 tactics 分别算路并返回，故任意策略下都使用此路径以保证限行生效。 */
     if (fromIndex === 0 && M.route_path && M.route_path.length >= 2 && !M.useBMapGL) {
       var BPoint = window.BMap && window.BMap.Point;
       if (BPoint) {
