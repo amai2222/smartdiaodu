@@ -72,6 +72,7 @@
   <div class="toolbar">
     <span class="toolbar-label">百度地图</span>
     <button type="button" id="btnRefresh">更新路线</button>
+    <button type="button" id="btnRestore">恢复上次线路</button>
     <a href="index.html" target="_self">← 返回控制台</a>
     <span id="routeInfo" class="status"></span>
   </div>
@@ -279,6 +280,62 @@
     }
   }
 
+  /** 将接口或快照数据应用到全局并画图 */
+  function applyRouteData(data) {
+    route_addresses = data.route_addresses || [];
+    route_coords = data.route_coords || [];
+    point_types = data.point_types || [];
+    point_labels = data.point_labels || [];
+    lastRouteData = data;
+    var hash = route_addresses.join("|");
+    var savedHash = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_MAP_ROUTE_HASH) : "";
+    var savedIdx = typeof localStorage !== "undefined" ? parseInt(localStorage.getItem(STORAGE_MAP_STOP_INDEX), 10) : 0;
+    currentStopIndex = (hash === savedHash && !isNaN(savedIdx)) ? Math.max(0, Math.min(savedIdx, route_addresses.length - 1)) : 0;
+    saveStopIndex();
+    initMap();
+    drawRouteFromIndex(currentStopIndex);
+    updateNavPanel();
+    if (bmap && typeof bmap.invalidateSize === "function") bmap.invalidateSize();
+  }
+
+  /** 规划结果入库（每司机一条，覆盖） */
+  function saveRouteSnapshot(data) {
+    var sup = getSupabaseClient();
+    if (!sup || !data || !(data.route_addresses && data.route_addresses.length)) return;
+    var payload = {
+      driver_id: getDriverId(),
+      route_addresses: data.route_addresses,
+      route_coords: data.route_coords || [],
+      point_types: data.point_types || [],
+      point_labels: data.point_labels || [],
+      total_time_seconds: Math.max(0, parseInt(data.total_time_seconds, 10) || 0)
+    };
+    sup.from("driver_route_snapshot").upsert(payload, { onConflict: "driver_id" }).then(function () {});
+  }
+
+  /** 从数据库读取上次保存的线路快照 */
+  function loadSavedRoute(cb) {
+    var sup = getSupabaseClient();
+    if (!sup) { if (cb) cb(null); return; }
+    sup.from("driver_route_snapshot").select("route_addresses, route_coords, point_types, point_labels, total_time_seconds")
+      .eq("driver_id", getDriverId()).maybeSingle()
+      .then(function (r) {
+        var d = r.data;
+        if (d && Array.isArray(d.route_addresses) && d.route_addresses.length > 0 && Array.isArray(d.route_coords) && d.route_coords.length > 0) {
+          if (cb) cb({
+            route_addresses: d.route_addresses,
+            route_coords: d.route_coords,
+            point_types: Array.isArray(d.point_types) ? d.point_types : [],
+            point_labels: Array.isArray(d.point_labels) ? d.point_labels : [],
+            total_time_seconds: d.total_time_seconds || 0
+          });
+        } else {
+          if (cb) cb(null);
+        }
+      })
+      .catch(function () { if (cb) cb(null); });
+  }
+
   function markArrived() {
     currentStopIndex++;
     var addr = route_addresses[currentStopIndex];
@@ -326,21 +383,9 @@
       })
       .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); }); return r.json(); })
       .then(function (data) {
-        route_addresses = data.route_addresses || [];
-        route_coords = data.route_coords || [];
-        point_types = data.point_types || [];
-        point_labels = data.point_labels || [];
-        lastRouteData = data;
-        var hash = route_addresses.join("|");
-        var savedHash = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_MAP_ROUTE_HASH) : "";
-        var savedIdx = typeof localStorage !== "undefined" ? parseInt(localStorage.getItem(STORAGE_MAP_STOP_INDEX), 10) : 0;
-        currentStopIndex = (hash === savedHash && !isNaN(savedIdx)) ? Math.max(0, Math.min(savedIdx, route_addresses.length - 1)) : 0;
-        saveStopIndex();
-        initMap();
-        drawRouteFromIndex(currentStopIndex);
-        updateNavPanel();
-        document.getElementById("routeInfo").textContent = "共 " + route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟";
-        if (bmap && typeof bmap.invalidateSize === "function") bmap.invalidateSize();
+        applyRouteData(data);
+        saveRouteSnapshot(data);
+        document.getElementById("routeInfo").textContent = "共 " + route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟（已入库）";
       })
       .catch(function (e) {
         document.getElementById("routeInfo").textContent = "路线加载失败：" + (e.message || e) + "，仅显示地图";
@@ -358,7 +403,35 @@
     currentStopIndex = 0;
     loadAndDraw();
   };
-  loadAndDraw();
+
+  document.getElementById("btnRestore").onclick = function () {
+    var statusEl = document.getElementById("routeInfo");
+    statusEl.textContent = "加载中…";
+    loadSavedRoute(function (data) {
+      if (data) {
+        applyRouteData(data);
+        statusEl.textContent = "已恢复上次线路（共 " + route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟）";
+      } else {
+        statusEl.textContent = "无已保存线路，请先点「更新路线」规划并入库";
+        if (bmap) clearMapOverlays();
+      }
+    });
+  };
+
+  // 进入页面：先尝试恢复上次线路，无则再请求规划
+  (function onLoad() {
+    var statusEl = document.getElementById("routeInfo");
+    statusEl.textContent = "加载中…";
+    initMap();
+    loadSavedRoute(function (data) {
+      if (data) {
+        applyRouteData(data);
+        statusEl.textContent = "已恢复上次线路（共 " + route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟）";
+      } else {
+        loadAndDraw();
+      }
+    });
+  })();
 })();
   </script>
 </body>
