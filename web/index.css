@@ -1,0 +1,29 @@
+/**
+ * 控制台页样式（弹窗、按钮等，与 Tailwind 配合）
+ */
+body { -webkit-tap-highlight-color: transparent; }
+.btn-touch { min-height: 48px; min-width: 48px; }
+input, select, button { font-size: inherit; }
+
+#planModalOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 1rem; }
+#planModalOverlay.show { display: flex; }
+#planModal { background: #14151a; border: 1px solid #2a2d35; border-radius: 1rem; max-width: 28rem; width: 100%; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; }
+#planModal h3 { margin: 0; padding: 1rem 1.25rem; font-size: 1.125rem; color: #8b9199; border-bottom: 1px solid #2a2d35; }
+#planModalContent { padding: 1rem 1.25rem; overflow-y: auto; flex: 1; }
+#planModalContent .plan-item { padding: 0.75rem 0; border-bottom: 1px solid #2a2d35; }
+#planModalContent .plan-item:last-child { border-bottom: none; }
+#planModalContent .plan-item .label { font-size: 0.9rem; color: #8b9199; margin-bottom: 0.25rem; }
+#planModalContent .plan-item .addr { font-size: 1rem; color: #e6edf3; }
+#planModalClose { margin: 0 1.25rem 1rem; padding: 0.75rem; border-radius: 0.75rem; background: #2a2d35; color: #e6edf3; border: none; font-size: 1rem; cursor: pointer; }
+
+#editPassengerModalOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 1rem; }
+#editPassengerModalOverlay.show { display: flex; }
+#editPassengerModal { background: #14151a; border: 1px solid #2a2d35; border-radius: 1rem; max-width: 28rem; width: 100%; }
+#editPassengerModal h3 { margin: 0; padding: 1rem 1.25rem; font-size: 1.125rem; color: #8b9199; border-bottom: 1px solid #2a2d35; }
+#editPassengerModal .edit-body { padding: 1rem 1.25rem; }
+#editPassengerModal .edit-body label { display: block; font-size: 0.9rem; color: #8b9199; margin-bottom: 0.25rem; }
+#editPassengerModal .edit-body input { width: 100%; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #2a2d35; background: #0c0c0f; color: #e6edf3; margin-bottom: 1rem; }
+#editPassengerModal .edit-actions { display: flex; gap: 0.75rem; padding: 0 1.25rem 1rem; }
+#editPassengerModal .edit-actions button { flex: 1; padding: 0.75rem; border-radius: 0.75rem; font-size: 1rem; cursor: pointer; border: none; }
+#editPassengerModalCancel { background: #2a2d35; color: #e6edf3; }
+#editPassengerModalSave { background: #3b82f6; color: #fff; font-weight: 600; }

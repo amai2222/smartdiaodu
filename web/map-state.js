@@ -32,7 +32,7 @@
       if (p) pickups = JSON.parse(p);
       if (d) deliveries = JSON.parse(d);
     } catch (e) {}
-    return { driver_loc: driver_loc || "如东县委党校", pickups: pickups, deliveries: deliveries };
+    return { driver_loc: driver_loc || "", pickups: pickups, deliveries: deliveries };
   };
 
   M.loadStateFromSupabase = function (cb) {
@@ -51,7 +51,7 @@
                 deliveries.push(o.delivery || "");
               });
             }
-            var state = { driver_loc: driver_loc || "如东县委党校", pickups: pickups, deliveries: deliveries };
+            var state = { driver_loc: driver_loc || "", pickups: pickups, deliveries: deliveries };
             if (typeof localStorage !== "undefined") {
               localStorage.setItem(M.STORAGE_DRIVER_LOC, state.driver_loc);
               localStorage.setItem(M.STORAGE_PICKUPS, JSON.stringify(state.pickups));

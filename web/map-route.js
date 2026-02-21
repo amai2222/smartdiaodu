@@ -201,7 +201,7 @@
     } catch (e) {}
   };
 
-  M.drawRouteFromIndex = function (fromIndex) {
+  M.drawRouteFromIndex = function (fromIndex, preserveViewport) {
     if (!M.lastRouteData) return;
     var coords = M.route_coords.slice(fromIndex), addresses = M.route_addresses.slice(fromIndex);
     var types = M.point_types.slice(fromIndex), labels = M.point_labels.slice(fromIndex);
@@ -221,8 +221,10 @@
     }
     if (bdPoints.length === 0) return;
     if (bdPoints.length === 1) {
-      M.bmap.setCenter && M.bmap.setCenter(bdPoints[0]);
-      M.bmap.setZoom && M.bmap.setZoom(14);
+      if (!preserveViewport) {
+        M.bmap.setCenter && M.bmap.setCenter(bdPoints[0]);
+        M.bmap.setZoom && M.bmap.setZoom(14);
+      }
       M.addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
       if (M.showRestrictionHintIfNeeded) M.showRestrictionHintIfNeeded();
       return;
@@ -245,7 +247,7 @@
     M.addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
     if (typeof window.BMap.DrivingRoute === "undefined") {
       M.addDirectionalPolyline(bdPoints, ROUTE_GREEN);
-      if (M.bmap.setViewport) M.bmap.setViewport(bdPoints);
+      if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
       if (M.showRestrictionHintIfNeeded) M.showRestrictionHintIfNeeded();
       return;
     }
@@ -256,7 +258,7 @@
     function updateStatus() { document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站"; }
     function searchNextSegment() {
       if (segIndex >= bdPoints.length - 1) {
-        if (M.bmap.setViewport) M.bmap.setViewport(bdPoints);
+        if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
         updateStatus();
         if (M.updateNavPanel) M.updateNavPanel();
         if (M.showRestrictionHintIfNeeded) M.showRestrictionHintIfNeeded();
@@ -300,7 +302,7 @@
     searchNextSegment();
   };
 
-  M.redrawFromStoredSegments = function () {
+  M.redrawFromStoredSegments = function (preserveViewport) {
     if (!M.bmap || !M.lastRouteData || !M.lastSegmentResults || M.lastSegmentResults.length === 0) return;
     var fromIndex = M.currentStopIndex;
     var coords = M.route_coords.slice(fromIndex), addresses = M.route_addresses.slice(fromIndex);
@@ -335,7 +337,7 @@
         }
       } catch (e) {}
     }
-    if (M.bmap.setViewport) M.bmap.setViewport(bdPoints);
+    if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
     if (M.updateNavPanel) M.updateNavPanel();
     var name = M.POLICY_NAMES[M.routePolicyKey] || M.routePolicyKey;
     document.getElementById("routeInfo").textContent = "已切换为「" + name + "」路线（浅灰绿）";

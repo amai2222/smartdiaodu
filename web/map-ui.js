@@ -66,10 +66,11 @@
   M.redrawRouteOnZoomChange = function () {
     if (!M.bmap || !M.lastRouteData) return;
     M.lastRedrawZoom = typeof M.bmap.getZoom === "function" ? M.bmap.getZoom() : null;
+    /* 仅重绘路线与标注，不改变中心/缩放，避免用户缩放后被 setViewport 拉回 */
     if (M.lastSegmentResults && M.lastSegmentResults.length > 0 && M.routeAlternativeIndex > 0) {
-      M.redrawFromStoredSegments();
+      M.redrawFromStoredSegments(true);
     } else {
-      M.drawRouteFromIndex(M.currentStopIndex);
+      M.drawRouteFromIndex(M.currentStopIndex, true);
     }
   };
 
@@ -90,6 +91,12 @@
     }
     statusEl.textContent = "从数据库加载计划…";
     M.loadStateFromSupabase(function (state) {
+      var driverLoc = (state && state.driver_loc) ? String(state.driver_loc).trim() : "";
+      if (!driverLoc) {
+        statusEl.textContent = "请先在控制台设置当前位置（刷新 GPS 或输入地址）后点「更新路线」";
+        M.initMap();
+        return;
+      }
       statusEl.textContent = "规划路线中…";
       fetch(base + "/current_route_preview", {
         method: "POST",

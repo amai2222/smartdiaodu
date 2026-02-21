@@ -12,7 +12,7 @@
   <script src="config.js"></script>
   <link rel="stylesheet" href="map.css" />
 </head>
-<body>
+<body class="toolbar-hidden">
   <div id="map"></div>
   <div class="toolbar">
     <div class="toolbar-route-wrap">
@@ -35,7 +35,7 @@
     <button type="button" data-policy="AVOID_CONGESTION">躲避拥堵</button>
     <button type="button" id="btnOtherRoute">其他线路</button>
   </div>
-  <button type="button" id="btnToggleUI" title="显示菜单">≡ 菜单</button>
+  <button type="button" id="btnToggleUI" class="show" title="显示菜单">≡ 菜单</button>
   <div id="navPanel" class="nav-panel" style="display: none;">
     <div id="nextStopText" class="next-stop"></div>
     <div class="btns">
