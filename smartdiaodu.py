@@ -498,21 +498,43 @@ BAIDU_TACTICS_LEAST_FEE = 6
 BAIDU_TACTICS_AVOID_CONGESTION = 5
 
 
+def _parse_one_route_path(route_obj: dict) -> List[List[float]]:
+    """从单条 route 的 steps 解析出 path 点列 [lat, lng] BD09。"""
+    path_bd09: List[List[float]] = []
+    for step in route_obj.get("steps") or []:
+        path_str = step.get("path")
+        if not path_str:
+            continue
+        for part in path_str.split(";"):
+            part = part.strip()
+            if not part:
+                continue
+            seg = part.split(",")
+            if len(seg) >= 2:
+                try:
+                    a, b = float(seg[0].strip()), float(seg[1].strip())
+                    if 70 < a < 140 and 0 < b < 60:
+                        lng_bd, lat_bd = a, b
+                    else:
+                        lat_bd, lng_bd = a, b
+                    path_bd09.append([lat_bd, lng_bd])
+                except (ValueError, TypeError):
+                    continue
+    return path_bd09
+
+
 def fetch_driving_route_path(
     route_coords_bd09: List[List[float]],
     plate_number: Optional[str] = None,
     cartype: Optional[int] = None,
     tactics: Optional[int] = None,
-) -> List[List[float]]:
+) -> Tuple[List[List[List[float]]], List[int]]:
     """
-    调用百度驾车路线规划 Web API（direction/v2/driving），按起终点+途经点一次请求，
-    返回沿道路的路径点序列，格式与 route_coords 一致：[lat, lng] BD09（百度坐标系）。
-    途经点最多 18 个，超出则只取前 18 个。
-    若传 plate_number，则百度会规避限行路段（如上海、北京等）。
-    tactics：百度策略，如 13 时间优先、12 距离优先、6 少收费、5 躲避拥堵等。
+    调用百度驾车路线规划 Web API（direction/v2/driving），一次请求返回多条可选路线。
+    返回 (所有路线的 path 列表, 每条路线的耗时秒数列表)。path 格式 [lat, lng] BD09。
     """
     if not route_coords_bd09 or len(route_coords_bd09) < 2:
-        return []
+        return [], []
     origin = f"{route_coords_bd09[0][0]},{route_coords_bd09[0][1]}"
     destination = f"{route_coords_bd09[-1][0]},{route_coords_bd09[-1][1]}"
     middle = route_coords_bd09[1:-1]
@@ -543,39 +565,28 @@ def fetch_driving_route_path(
         data = resp.json()
     except requests.RequestException as e:
         logger.warning("百度驾车路线规划请求异常: %s", e)
-        return []
+        return [], []
 
     if data.get("status") != 0:
         logger.warning("百度驾车路线规划失败: %s", data.get("message", "未知"))
-        return []
+        return [], []
 
     result = data.get("result") or {}
     routes = result.get("routes") or []
     if not routes:
-        return []
+        return [], []
 
-    path_bd09: List[List[float]] = []
-    for step in routes[0].get("steps") or []:
-        path_str = step.get("path")
-        if not path_str:
-            continue
-        # 返回 path 为 "lng,lat;lng,lat;..."（ret_coordtype=bd09ll），统一为 [lat, lng] 输出
-        for part in path_str.split(";"):
-            part = part.strip()
-            if not part:
-                continue
-            seg = part.split(",")
-            if len(seg) >= 2:
-                try:
-                    a, b = float(seg[0].strip()), float(seg[1].strip())
-                    if 70 < a < 140 and 0 < b < 60:
-                        lng_bd, lat_bd = a, b
-                    else:
-                        lat_bd, lng_bd = a, b
-                    path_bd09.append([lat_bd, lng_bd])
-                except (ValueError, TypeError):
-                    continue
-    return path_bd09
+    all_paths: List[List[List[float]]] = []
+    all_durations: List[int] = []
+    for r in routes:
+        path_bd09 = _parse_one_route_path(r)
+        if len(path_bd09) >= 2:
+            all_paths.append(path_bd09)
+            dur = r.get("duration")
+            if isinstance(dur, dict) and "value" in dur:
+                dur = dur["value"]
+            all_durations.append(int(dur) if isinstance(dur, (int, float)) else 0)
+    return all_paths, all_durations
 
 
 # ---------------------------------------------------------------------------
@@ -993,18 +1004,24 @@ async def current_route_preview(req: dict) -> dict:
         cartype = None
     if tactics not in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
         tactics = 0
-    route_path: List[List[float]] = []
+    all_paths: List[List[List[float]]] = []
+    route_durations: List[int] = []
     try:
-        route_path = fetch_driving_route_path(
+        all_paths, route_durations = fetch_driving_route_path(
             route_coords, plate_number=plate_number, cartype=cartype, tactics=tactics
         )
     except Exception as e:
         logger.warning("获取驾车路径失败（前端将用站点折线或分段规划）: %s", e)
 
+    route_path = all_paths[0] if all_paths else []
+    route_alternatives = all_paths[1:] if len(all_paths) > 1 else []
+
     return {
         "route_addresses": route_addresses,
         "route_coords": route_coords,
         "route_path": route_path,
+        "route_alternatives": route_alternatives,
+        "route_durations": route_durations,
         "point_types": point_types,
         "point_labels": point_labels,
         "total_time_seconds": total_time,

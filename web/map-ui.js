@@ -97,8 +97,7 @@
         M.initMap();
         return;
       }
-      var tacticsMap = { "LEAST_TIME": 0, "LEAST_DISTANCE": 2, "AVOID_CONGESTION": 5, "LEAST_FEE": 6 };
-      var currentTactics = tacticsMap[M.routePolicyKey || "LEAST_TIME"] || 0;
+      var currentTactics = (M.getBaiduTacticsForPolicy && M.getBaiduTacticsForPolicy(M.routePolicyKey)) || 13;
       statusEl.textContent = "规划路线中…";
       fetch(base + "/current_route_preview", {
         method: "POST",
@@ -144,6 +143,8 @@
 
   document.getElementById("btnStrategy").onclick = function (e) {
     e.stopPropagation();
+    var otherPanel = document.getElementById("otherRoutesPanel");
+    if (otherPanel) otherPanel.style.display = "none";
     var panel = document.getElementById("routeStrategyPanel");
     panel.classList.toggle("show");
     M.updateStrategyPanelActive();
@@ -160,29 +161,53 @@
           M.routeAlternativeIndex = idx >= 0 ? idx : 0;
           document.getElementById("routeStrategyPanel").classList.remove("show");
           M.updateStrategyPanelActive();
-          if (M.lastRouteData && M.bmap) {
-            document.getElementById("routeInfo").textContent = "正在按「" + (btn.textContent || key) + "」重新规划…";
-            M.loadAndDraw();
-          }
+          document.getElementById("routeInfo").textContent = "正在按「" + (btn.textContent || key) + "」重新规划…";
+          M.loadAndDraw();
         };
       })(strategyBtns[i]);
     }
     var btnOther = document.getElementById("btnOtherRoute");
-    if (btnOther) {
+    var otherPanel = document.getElementById("otherRoutesPanel");
+    var otherList = document.getElementById("otherRoutesList");
+    if (btnOther && otherPanel && otherList) {
       btnOther.onclick = function () {
-        if (!M.lastRouteData || !M.bmap) {
-          document.getElementById("routeInfo").textContent = "请先规划路线后再切换其他线路";
-          document.getElementById("routeStrategyPanel").classList.remove("show");
-          return;
-        }
-        M.routeAlternativeIndex = (M.routeAlternativeIndex + 1) % M.POLICY_KEYS_ORDER.length;
-        M.routePolicyKey = M.POLICY_KEYS_ORDER[M.routeAlternativeIndex];
-        M.updateStrategyPanelActive();
         document.getElementById("routeStrategyPanel").classList.remove("show");
-        var name = M.POLICY_NAMES[M.routePolicyKey] || M.routePolicyKey;
-        document.getElementById("routeInfo").textContent = "正在按「" + name + "」重新规划其他线路…";
-        M.loadAndDraw();
+        otherList.innerHTML = "";
+        var paths = M.route_paths || (M.route_path && M.route_path.length >= 2 ? [M.route_path] : []);
+        var durations = M.route_durations || [];
+        if (paths.length <= 1) {
+          var empty = document.createElement("div");
+          empty.className = "route-options-title";
+          empty.textContent = "暂无其他线路（仅有一条方案）";
+          otherList.appendChild(empty);
+        } else {
+          for (var i = 0; i < paths.length; i++) {
+            var dur = durations[i];
+            var minStr = (dur > 0) ? " 约 " + Math.round(dur / 60) + " 分钟" : "";
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = "方案" + (i + 1) + minStr;
+            btn.setAttribute("data-route-index", String(i));
+            if (i === M.routeAlternativeIndex) btn.classList.add("active");
+            btn.onclick = function () {
+              var idx = parseInt(this.getAttribute("data-route-index"), 10);
+              if (idx >= 0 && idx < paths.length) {
+                M.routeAlternativeIndex = idx;
+                otherPanel.style.display = "none";
+                if (M.drawRouteFromIndex) M.drawRouteFromIndex(M.currentStopIndex, true);
+                if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
+                document.getElementById("routeInfo").textContent = "已切换至方案" + (idx + 1);
+              }
+            };
+            otherList.appendChild(btn);
+          }
+        }
+        otherPanel.style.display = "flex";
       };
+      document.addEventListener("click", function () {
+        if (otherPanel && otherPanel.style.display === "flex") otherPanel.style.display = "none";
+      });
+      otherPanel.addEventListener("click", function (e) { e.stopPropagation(); });
     }
   })();
 

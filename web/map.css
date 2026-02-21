@@ -97,6 +97,7 @@ body.toolbar-hidden .toolbar { display: none !important; }
 body.toolbar-hidden #navPanel { display: none !important; }
 body.toolbar-hidden #allDonePanel { display: none !important; }
 body.toolbar-hidden #routeStrategyPanel { display: none !important; }
+body.toolbar-hidden #otherRoutesPanel { display: none !important; }
 #routeStrategyPanel {
   position: fixed;
   top: max(52px, calc(12px + 40px + env(safe-area-inset-top)));
@@ -126,6 +127,37 @@ body.toolbar-hidden #routeStrategyPanel { display: none !important; }
 }
 #routeStrategyPanel button:hover, #routeStrategyPanel button:active { background: rgba(59, 130, 246, 0.3); }
 #routeStrategyPanel button.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.2); }
+.route-options-panel {
+  position: fixed;
+  top: max(52px, calc(12px + 40px + env(safe-area-inset-top)));
+  left: max(12px, env(safe-area-inset-left));
+  z-index: 1003;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(20, 21, 26, 0.98);
+  border: 1px solid #2a2d35;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.route-options-title { color: #9ca3af; font-size: 0.85rem; margin-bottom: 4px; }
+#otherRoutesList { display: flex; flex-direction: column; gap: 6px; }
+#otherRoutesList button {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #2a2d35;
+  background: rgba(40, 43, 53, 0.9);
+  color: #e6edf3;
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-align: left;
+  touch-action: manipulation;
+}
+#otherRoutesList button:hover, #otherRoutesList button:active { background: rgba(59, 130, 246, 0.25); }
+#otherRoutesList button.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.2); }
 /* 隐藏百度地图底部版权/署名栏 */
 #map .anchorBL,
 #map .BMap_cpyCtrl { display: none !important; }

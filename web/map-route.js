@@ -219,19 +219,22 @@
     }
     if (bdPoints.length === 0) return;
 
-    /* 优先使用后端返回的 route_path（BD09，已按车牌+策略算路），只要后端有传线就无条件画出来。 */
-    if (fromIndex === 0 && M.route_path && M.route_path.length >= 2 && !M.useBMapGL) {
+    /* 优先使用后端返回的路线（BD09），支持多方案：route_paths[routeAlternativeIndex]。 */
+    var pathToDraw = (M.route_paths && M.route_paths.length > 0 && M.routeAlternativeIndex >= 0 && M.route_paths[M.routeAlternativeIndex])
+      ? M.route_paths[M.routeAlternativeIndex] : M.route_path;
+    if (fromIndex === 0 && pathToDraw && pathToDraw.length >= 2 && !M.useBMapGL) {
       var BPoint = window.BMap && window.BMap.Point;
       if (BPoint) {
         var bdPath = [];
-        for (var i = 0; i < M.route_path.length; i++) {
-          var p = M.route_path[i];
+        for (var i = 0; i < pathToDraw.length; i++) {
+          var p = pathToDraw[i];
           if (!p || p[0] == null || p[1] == null) continue;
           bdPath.push(new BPoint(p[1], p[0]));
         }
         if (bdPath.length >= 2) {
+          var lineColor = (M.routeAlternativeIndex === 0 ? ROUTE_GREEN : ROUTE_ALTERNATIVE_COLOR);
           M.addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
-          M.addDirectionalPolyline(bdPath, ROUTE_GREEN);
+          M.addDirectionalPolyline(bdPath, lineColor);
           if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
           if (M.updateNavPanel) M.updateNavPanel();
           if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
