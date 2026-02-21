@@ -33,6 +33,16 @@
     body { -webkit-tap-highlight-color: transparent; }
     .btn-touch { min-height: 48px; min-width: 48px; }
     input, select, button { font-size: inherit; }
+    #planModalOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 1rem; }
+    #planModalOverlay.show { display: flex; }
+    #planModal { background: #14151a; border: 1px solid #2a2d35; border-radius: 1rem; max-width: 28rem; width: 100%; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; }
+    #planModal h3 { margin: 0; padding: 1rem 1.25rem; font-size: 1.125rem; color: #8b9199; border-bottom: 1px solid #2a2d35; }
+    #planModalContent { padding: 1rem 1.25rem; overflow-y: auto; flex: 1; }
+    #planModalContent .plan-item { padding: 0.75rem 0; border-bottom: 1px solid #2a2d35; }
+    #planModalContent .plan-item:last-child { border-bottom: none; }
+    #planModalContent .plan-item .label { font-size: 0.9rem; color: #8b9199; margin-bottom: 0.25rem; }
+    #planModalContent .plan-item .addr { font-size: 1rem; color: #e6edf3; }
+    #planModalClose { margin: 0 1.25rem 1rem; padding: 0.75rem; border-radius: 0.75rem; background: #2a2d35; color: #e6edf3; border: none; font-size: 1rem; cursor: pointer; }
   </style>
 </head>
 <body class="bg-[#0c0c0f] text-gray-100 min-h-screen font-sans antialiased pb-8">
@@ -77,9 +87,12 @@
       </div>
       <p id="gpsStatus" class="text-sm text-muted mt-2"></p>
 
-      <h3 class="text-muted text-console font-medium mt-5 mb-3 flex items-center gap-2">
-        <span aria-hidden="true">👥</span> 当前车上乘客
-      </h3>
+      <div class="flex items-center justify-between mt-5 mb-3">
+        <h3 class="text-muted text-console font-medium flex items-center gap-2">
+          <span aria-hidden="true">👥</span> 当前车上乘客
+        </h3>
+        <button type="button" id="btnShowPlan" class="text-sm text-accent hover:underline">显示当前计划</button>
+      </div>
       <ul id="passengerList" class="space-y-3">
         <!-- 动态插入：每行 [ 1号客 ] 起点 → 终点 (状态) [ ✖️ 下车 ] -->
       </ul>
@@ -96,6 +109,15 @@
         <p id="entryHint" class="text-sm text-muted text-center"></p>
       </div>
     </section>
+
+    <!-- 当前计划弹窗：各乘客起点、终点 -->
+    <div id="planModalOverlay" aria-hidden="true">
+      <div id="planModal" role="dialog" aria-labelledby="planModalTitle">
+        <h3 id="planModalTitle">当前计划 · 各乘客起点与终点</h3>
+        <div id="planModalContent"></div>
+        <button type="button" id="planModalClose">关闭</button>
+      </div>
+    </div>
 
     <!-- ========== 区块二：AI 调度模式控制台 ========== -->
     <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">
@@ -285,6 +307,12 @@
         applyPassengerRows();
         renderPassengerList();
         saveStateToStorage();
+        // 空座以「当前乘客数」为准：4 座车 - 乘客数 = 空座，避免 DB 里 empty_seats 不准导致显示有空位
+        var emptySeats = Math.max(0, Math.min(4, 4 - passengerRows.length));
+        var seatsEl = document.getElementById("emptySeats");
+        if (seatsEl) seatsEl.value = String(emptySeats);
+        var sup = getSupabaseClient();
+        if (sup) sup.from("driver_state").update({ empty_seats: emptySeats }).eq("driver_id", getDriverId()).then(function () {});
         updateEntryActions();
         if (cb) cb();
       })
@@ -385,6 +413,41 @@
       function () { status.textContent = "定位失败，请允许位置权限"; }
     );
   };
+
+  // ---------- 显示当前计划弹窗 ----------
+  function openPlanModal() {
+    var list = passengerRows.length ? passengerRows : (function () {
+      var p = [], d = [];
+      try {
+        var sp = localStorage.getItem(STORAGE_PICKUPS), sd = localStorage.getItem(STORAGE_DELIVERIES);
+        if (sp) p = JSON.parse(sp);
+        if (sd) d = JSON.parse(sd);
+      } catch (e) {}
+      return p.map(function (pu, i) { return { pickup: pu, delivery: d[i] || "" }; });
+    })();
+    var content = document.getElementById("planModalContent");
+    if (!content) return;
+    if (list.length === 0) {
+      content.innerHTML = "<p class=\"text-muted text-console\">暂无乘客，当前无计划站点。</p>";
+    } else {
+      content.innerHTML = list.map(function (row, i) {
+        var pickup = (row.pickup || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        var delivery = (row.delivery || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return "<div class=\"plan-item\"><div class=\"label\">乘客 " + (i + 1) + " · 起点</div><div class=\"addr\">" + pickup + "</div><div class=\"label mt-2\">终点</div><div class=\"addr\">" + delivery + "</div></div>";
+      }).join("");
+    }
+    document.getElementById("planModalOverlay").classList.add("show");
+  }
+  function closePlanModal() {
+    document.getElementById("planModalOverlay").classList.remove("show");
+  }
+  var btnShowPlan = document.getElementById("btnShowPlan");
+  if (btnShowPlan) btnShowPlan.addEventListener("click", openPlanModal);
+  var planModalClose = document.getElementById("planModalClose");
+  if (planModalClose) planModalClose.addEventListener("click", closePlanModal);
+  document.getElementById("planModalOverlay").addEventListener("click", function (e) {
+    if (e.target === document.getElementById("planModalOverlay")) closePlanModal();
+  });
 
   // ---------- 模式切换 ----------
   var modeLabels = { mode1: "下次计划", mode2: "半路吸尘器", mode3: "附近接力", pause: "停止接单" };
