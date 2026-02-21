@@ -219,30 +219,43 @@
     }
     if (bdPoints.length === 0) return;
 
-    /* 优先使用后端返回的路线（BD09），支持多方案：route_paths[routeAlternativeIndex]。 */
-    var pathToDraw = (M.route_paths && M.route_paths.length > 0 && M.routeAlternativeIndex >= 0 && M.route_paths[M.routeAlternativeIndex])
-      ? M.route_paths[M.routeAlternativeIndex] : M.route_path;
-    if (fromIndex === 0 && pathToDraw && pathToDraw.length >= 2 && !M.useBMapGL) {
+    /* 💡 优先使用后端返回的路线集合，同时在地图上画出所有备选路线 */
+    if (fromIndex === 0 && M.route_paths && M.route_paths.length > 0 && !M.useBMapGL) {
       var BPoint = window.BMap && window.BMap.Point;
       if (BPoint) {
-        var bdPath = [];
-        for (var i = 0; i < pathToDraw.length; i++) {
-          var p = pathToDraw[i];
-          if (!p || p[0] == null || p[1] == null) continue;
-          bdPath.push(new BPoint(p[1], p[0]));
+        M.addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
+
+        for (var i = M.route_paths.length - 1; i >= 0; i--) {
+          if (i === M.routeAlternativeIndex) continue;
+          var pathArr = M.route_paths[i];
+          if (!pathArr || pathArr.length < 2) continue;
+          var bdPath = [];
+          for (var j = 0; j < pathArr.length; j++) {
+            bdPath.push(new BPoint(pathArr[j][1], pathArr[j][0]));
+          }
+          M.bmap.addOverlay(new window.BMap.Polyline(bdPath, {
+            strokeColor: ROUTE_ALTERNATIVE_COLOR,
+            strokeWeight: ROUTE_STROKE_WEIGHT - 4,
+            strokeOpacity: 0.8
+          }));
         }
-        if (bdPath.length >= 2) {
-          var lineColor = (M.routeAlternativeIndex === 0 ? ROUTE_GREEN : ROUTE_ALTERNATIVE_COLOR);
-          M.addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
-          M.addDirectionalPolyline(bdPath, lineColor);
-          if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
-          if (M.updateNavPanel) M.updateNavPanel();
-          if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
-          if (M.bmap && typeof M.bmap.getZoom === "function") M.lastRedrawZoom = M.bmap.getZoom();
-          var hintEl = document.getElementById("restrictionHint");
-          if (hintEl) hintEl.style.display = "none";
-          return;
+
+        var mainPathArr = M.route_paths[M.routeAlternativeIndex] || M.route_paths[0];
+        if (mainPathArr && mainPathArr.length >= 2) {
+          var mainBdPath = [];
+          for (var k = 0; k < mainPathArr.length; k++) {
+            mainBdPath.push(new BPoint(mainPathArr[k][1], mainPathArr[k][0]));
+          }
+          M.addDirectionalPolyline(mainBdPath, ROUTE_GREEN);
         }
+
+        if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
+        if (M.updateNavPanel) M.updateNavPanel();
+        if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
+        if (M.bmap && typeof M.bmap.getZoom === "function") M.lastRedrawZoom = M.bmap.getZoom();
+        var hintEl = document.getElementById("restrictionHint");
+        if (hintEl) hintEl.style.display = "none";
+        return;
       }
     }
 

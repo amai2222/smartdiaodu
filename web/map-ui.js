@@ -163,8 +163,8 @@
         btn.onclick = function () {
           var key = (btn.getAttribute("data-policy") || "LEAST_TIME").toUpperCase();
           M.routePolicyKey = key;
-          var idx = M.POLICY_KEYS_ORDER.indexOf(M.routePolicyKey);
-          M.routeAlternativeIndex = idx >= 0 ? idx : 0;
+          // 💡 核心修复：无论切什么策略，必须把选中序号重置为 0！避免越界触发龟速重算！
+          M.routeAlternativeIndex = 0;
           document.getElementById("routeStrategyPanel").classList.remove("show");
           M.updateStrategyPanelActive();
           document.getElementById("routeInfo").textContent = "正在按「" + (btn.textContent || key) + "」重新规划…";
