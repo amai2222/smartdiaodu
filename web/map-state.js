@@ -21,6 +21,12 @@
   M.routeAlternativeIndex = 0;
   M.POLICY_KEYS_ORDER = ["LEAST_TIME", "LEAST_DISTANCE", "LEAST_FEE", "AVOID_CONGESTION"];
   M.POLICY_NAMES = { LEAST_TIME: "用时最短", LEAST_DISTANCE: "距离最短", LEAST_FEE: "费用最省", AVOID_CONGESTION: "躲避拥堵" };
+  /** 前端策略 key 对应百度驾车 tactics：13 时间优先 12 距离优先 6 少收费 5 躲避拥堵 */
+  M.BAIDU_TACTICS = { LEAST_TIME: 13, LEAST_DISTANCE: 12, LEAST_FEE: 6, AVOID_CONGESTION: 5 };
+  M.getBaiduTacticsForPolicy = function (key) {
+    var k = (key || M.routePolicyKey || "LEAST_TIME").toUpperCase();
+    return M.BAIDU_TACTICS[k] != null ? M.BAIDU_TACTICS[k] : 13;
+  };
   M.zoomRedrawTimer = null;
   M.lastRedrawZoom = null;
 

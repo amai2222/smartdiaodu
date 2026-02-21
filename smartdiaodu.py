@@ -491,16 +491,25 @@ def get_duration_between(origin_addr: str, dest_addr: str) -> int:
     return matrix[0][1]
 
 
+# 百度驾车 tactics：0 默认, 2 距离最短(不考虑限行), 5 躲避拥堵, 6 少收费, 12 距离优先(考虑限行), 13 时间优先
+BAIDU_TACTICS_LEAST_TIME = 13
+BAIDU_TACTICS_LEAST_DISTANCE = 12
+BAIDU_TACTICS_LEAST_FEE = 6
+BAIDU_TACTICS_AVOID_CONGESTION = 5
+
+
 def fetch_driving_route_path(
     route_coords_wgs84: List[List[float]],
     plate_number: Optional[str] = None,
     cartype: Optional[int] = None,
+    tactics: Optional[int] = None,
 ) -> List[List[float]]:
     """
     调用百度驾车路线规划 Web API（direction/v2/driving），按起终点+途经点一次请求，
     返回沿道路的路径点序列，格式与 route_coords 一致：[lat, lng] WGS84。
     途经点最多 18 个，超出则只取前 18 个。
     若传 plate_number，则百度会规避限行路段（如上海、北京等）。
+    tactics：百度策略，如 13 时间优先、12 距离优先、6 少收费、5 躲避拥堵等。
     """
     if not route_coords_wgs84 or len(route_coords_wgs84) < 2:
         return []
@@ -521,6 +530,8 @@ def fetch_driving_route_path(
     }
     if waypoints:
         params["waypoints"] = waypoints
+    if tactics is not None and tactics in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
+        params["tactics"] = tactics
     plate = (plate_number or "").strip()
     if plate:
         params["plate_number"] = plate
@@ -978,14 +989,19 @@ async def current_route_preview(req: dict) -> dict:
         wgs_lat, wgs_lng = _bd09_to_wgs84(lat_bd, lng_bd)
         route_coords.append([wgs_lat, wgs_lng])
 
-    # 调用百度驾车路线规划 Web API，获取沿道路的路径点，供地图画线（传车牌则规避限行）
+    # 调用百度驾车路线规划 Web API，获取沿道路的路径点，供地图画线（传车牌则规避限行，tactics 为策略）
     plate_number = (state.get("plate_number") or "").strip() or None
     cartype = state.get("cartype")
     if cartype is not None and cartype not in (0, 1):
         cartype = None
+    tactics = state.get("route_tactics") or state.get("tactics")
+    if tactics is not None and tactics not in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
+        tactics = None
     route_path: List[List[float]] = []
     try:
-        route_path = fetch_driving_route_path(route_coords, plate_number=plate_number, cartype=cartype)
+        route_path = fetch_driving_route_path(
+            route_coords, plate_number=plate_number, cartype=cartype, tactics=tactics
+        )
     except Exception as e:
         logger.warning("获取驾车路径失败（前端将用站点折线或分段规划）: %s", e)
 

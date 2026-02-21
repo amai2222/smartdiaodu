@@ -35,10 +35,17 @@
   };
 
   C.getDriverId = function () { return C.cachedAppConfig.driver_id || C.DEFAULT_DRIVER_ID; };
+  C._supabaseClient = null;
+  C._supabaseClientUrl = "";
+  C._supabaseClientAnon = "";
   C.getSupabaseClient = function () {
     var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
     if (!url || !anon || !window.supabase) return null;
-    return window.supabase.createClient(url, anon);
+    if (C._supabaseClient && C._supabaseClientUrl === url && C._supabaseClientAnon === anon) return C._supabaseClient;
+    C._supabaseClientUrl = url;
+    C._supabaseClientAnon = anon;
+    C._supabaseClient = window.supabase.createClient(url, anon);
+    return C._supabaseClient;
   };
   C.loadSupabaseScriptThenRetry = function (cb) {
     if (window.supabase) { if (cb) cb(); return; }

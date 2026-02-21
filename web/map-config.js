@@ -45,10 +45,17 @@
       (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseAnonKey) || "";
   };
   M.getDriverId = function () { return M.cachedAppConfig.driver_id || M.DEFAULT_DRIVER_ID; };
+  M._supabaseClient = null;
+  M._supabaseClientUrl = "";
+  M._supabaseClientAnon = "";
   M.getSupabaseClient = function () {
     var url = M.getSupabaseUrl(), anon = M.getSupabaseAnon();
     if (!url || !anon || !window.supabase) return null;
-    return window.supabase.createClient(url, anon);
+    if (M._supabaseClient && M._supabaseClientUrl === url && M._supabaseClientAnon === anon) return M._supabaseClient;
+    M._supabaseClientUrl = url;
+    M._supabaseClientAnon = anon;
+    M._supabaseClient = window.supabase.createClient(url, anon);
+    return M._supabaseClient;
   };
   M.getBaiduMapAk = function () { return M.cachedAppConfig.baidu_map_ak || ""; };
 })();

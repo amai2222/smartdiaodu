@@ -350,9 +350,8 @@
     if (un) un.textContent = "（" + localStorage.getItem(C.STORAGE_USERNAME) + "）";
   }
   document.getElementById("btnLogout").onclick = function () {
-    var url = typeof localStorage !== "undefined" && localStorage.getItem(C.STORAGE_SUPABASE_URL);
-    var anon = typeof localStorage !== "undefined" && localStorage.getItem(C.STORAGE_SUPABASE_ANON);
-    if (url && anon && window.supabase) { try { window.supabase.createClient(url, anon).auth.signOut(); } catch (e) {} }
+    var sup = C.getSupabaseClient();
+    if (sup) { try { sup.auth.signOut(); } catch (e) {} }
     if (typeof localStorage !== "undefined") { localStorage.removeItem(C.STORAGE_TOKEN); localStorage.removeItem(C.STORAGE_USERNAME); }
     window.location.replace("login.html");
   };
@@ -433,7 +432,9 @@
       if (localStorage.getItem(C.STORAGE_TOKEN)) { C.loadAppConfig(run); return; }
       var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
       if (!url || !anon || !window.supabase) { window.location.replace("login.html"); return; }
-      window.supabase.createClient(url, anon).auth.getSession()
+      var sup = C.getSupabaseClient();
+      if (!sup) { window.location.replace("login.html"); return; }
+      sup.auth.getSession()
         .then(function (r) {
           if (r.data && r.data.session) C.loadAppConfig(run);
           else window.location.replace("login.html");

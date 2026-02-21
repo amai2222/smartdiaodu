@@ -199,17 +199,15 @@
   <script src="index-config.js"></script>
   <script src="index-state.js"></script>
   <script src="index-ui.js"></script>
-  <!-- 下方为 Realtime 推送（ES Module），复用 index-config 的配置与取参逻辑 -->
-  <script type="module">
-(async function () {
+  <!-- Realtime 推送：复用同一 Supabase 客户端，避免多实例警告 -->
+  <script>
+(function () {
   var C = window.SmartDiaoduConsole;
   if (!C) return;
-  var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
-  if (!url || !anon) return;
+  var sup = C.getSupabaseClient();
+  if (!sup) return;
   try {
-    var createClient = (await import("https://esm.sh/@supabase/supabase-js@2")).createClient;
-    var supabase = createClient(url, anon);
-    supabase.channel("push_events_channel").on("postgres_changes", { event: "INSERT", schema: "public", table: "push_events" }, function (payload) {
+    sup.channel("push_events_channel").on("postgres_changes", { event: "INSERT", schema: "public", table: "push_events" }, function (payload) {
       if (payload && payload.new) window.dispatchEvent(new CustomEvent("smartdiaodu_push", { detail: payload.new }));
     }).subscribe(function (s) {
       var el = document.getElementById("pushEventsStatus");

@@ -97,6 +97,7 @@
         M.initMap();
         return;
       }
+      if (state) state.route_tactics = M.getBaiduTacticsForPolicy(M.routePolicyKey);
       statusEl.textContent = "规划路线中…";
       fetch(base + "/current_route_preview", {
         method: "POST",
@@ -160,8 +161,7 @@
           M.updateStrategyPanelActive();
           if (M.lastRouteData && M.bmap) {
             document.getElementById("routeInfo").textContent = "正在按「" + (btn.textContent || key) + "」重新规划…";
-            M.drawRouteFromIndex(M.currentStopIndex);
-            M.updateNavPanel();
+            M.loadAndDraw();
           }
         };
       })(strategyBtns[i]);
@@ -180,7 +180,7 @@
         document.getElementById("routeStrategyPanel").classList.remove("show");
         var name = M.POLICY_NAMES[M.routePolicyKey] || M.routePolicyKey;
         document.getElementById("routeInfo").textContent = "正在按「" + name + "」重新规划其他线路…";
-        M.drawRouteFromIndex(M.currentStopIndex);
+        M.loadAndDraw();
       };
     }
   })();
