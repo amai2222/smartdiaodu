@@ -83,6 +83,7 @@
           localStorage.setItem(STORAGE_SUPABASE_ANON, anon);
           if (r.data.user && r.data.user.email) localStorage.setItem(STORAGE_USERNAME, r.data.user.email);
           if (cfg.apiBase) localStorage.setItem(STORAGE_API, cfg.apiBase);
+          if (cfg.driverId) localStorage.setItem("smartdiaodu_driver_id", cfg.driverId);
         }
         window.location.href = "index.html";
       })

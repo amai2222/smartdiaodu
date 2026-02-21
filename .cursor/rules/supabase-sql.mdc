@@ -1,0 +1,12 @@
+---
+description: Supabase 检查/诊断类 SQL 必须一条语句出整张结果
+globs: supabase/**/*.sql
+---
+
+# Supabase SQL 规范（检查/诊断类）
+
+Supabase SQL Editor **不支持分段显示多个结果集**，因此：
+
+- **「检查 / 诊断」类 SQL** 必须用 **一条语句** 输出所有检查项（同一张表、多行），便于一次执行、一次查看。
+- 做法：用 `UNION ALL` 等把多块检查合并为多行，统一两列（如 `检查项`、`结果`），用 `ORDER BY` 控制顺序。
+- 参考：`supabase/migrations/010_check_database.sql`。

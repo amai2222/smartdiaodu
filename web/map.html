@@ -369,8 +369,15 @@
     var base = getApiBase();
     var statusEl = document.getElementById("routeInfo");
     if (!base) {
-      statusEl.textContent = "未配置后端（config.js apiBase），仅显示地图";
       initMap();
+      loadSavedRoute(function (data) {
+        if (data) {
+          applyRouteData(data);
+          statusEl.textContent = "已恢复上次线路（共 " + route_addresses.length + " 站）；未配置 apiBase 无法重新规划";
+        } else {
+          statusEl.textContent = "未配置后端（config.js 的 apiBase）；请用 http 打开页面并确保 config.js 同目录加载，再点「更新路线」规划";
+        }
+      });
       return;
     }
     statusEl.textContent = "从数据库加载计划…";
@@ -418,7 +425,7 @@
     });
   };
 
-  // 进入页面：先尝试恢复上次线路，无则再请求规划
+  // 进入页面：先初始化地图，再尝试恢复上次线路或请求规划
   (function onLoad() {
     var statusEl = document.getElementById("routeInfo");
     statusEl.textContent = "加载中…";

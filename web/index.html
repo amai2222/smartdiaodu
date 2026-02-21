@@ -97,6 +97,7 @@
         <!-- 动态插入：每行 [ 1号客 ] 起点 → 终点 (状态) [ ✖️ 下车 ] -->
       </ul>
       <p id="noPassengersHint" class="text-muted text-console py-2">暂无乘客，抢到单后点下方「添加至我的车厢」</p>
+      <div id="passengerDiagnostic" class="hidden mt-3 p-3 rounded-xl bg-[#0c0c0f] border border-border text-sm text-muted"></div>
 
       <!-- 入口主操作：按空座显示「显示地图」或「继续接单」 -->
       <div id="entryActions" class="mt-6 flex flex-col gap-3">
@@ -317,7 +318,13 @@
         if (cb) cb();
       })
       .catch(function (e) {
+        console.error("[loadFromDb] 拉取乘客/司机状态失败:", e && e.message ? e.message : e);
+        passengerRows = [];
+        applyPassengerRows();
+        renderPassengerList();
         updateEntryActions();
+        var statusEl = document.getElementById("gpsStatus");
+        if (statusEl) statusEl.textContent = "加载失败，请检查 Supabase 配置与网络（F12 控制台有详情）";
         if (cb) cb();
       });
   }
