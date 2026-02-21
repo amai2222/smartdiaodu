@@ -5,8 +5,8 @@ var fs = require("fs");
 var path = require("path");
 var supabaseUrl = process.env.SUPABASE_URL || "";
 var supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "";
-var apiBase = process.env.API_BASE || "http://129.226.191.86:88";
-var baiduMapAk = process.env.BAIDU_MAP_AK || "";
+var apiBase = process.env.API_BASE || "https://xg.325218.xyz/api";
+var baiduMapAk = process.env.BAIDU_MAP_AK || "W5IBbZpLZwYgEhpmeINcv5d8JqLtX1iG";
 var driverId = process.env.DRIVER_ID || "";
 var out = path.join(__dirname, "config.js");
 var js = "// Generated at build time from env. Do not edit in repo.\nwindow.SMARTDIAODU_CONFIG=" + JSON.stringify({
