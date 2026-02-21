@@ -97,7 +97,13 @@
         M.initMap();
         return;
       }
-      var currentTactics = (M.getBaiduTacticsForPolicy && M.getBaiduTacticsForPolicy(M.routePolicyKey)) || 13;
+      var tacticsMap = {
+        "LEAST_TIME": 13,
+        "LEAST_DISTANCE": 12,
+        "AVOID_CONGESTION": 5,
+        "LEAST_FEE": 6
+      };
+      var currentTactics = tacticsMap[M.routePolicyKey || "LEAST_TIME"] || 13;
       statusEl.textContent = "规划路线中…";
       fetch(base + "/current_route_preview", {
         method: "POST",

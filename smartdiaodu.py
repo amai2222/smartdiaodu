@@ -549,6 +549,7 @@ def fetch_driving_route_path(
         "coord_type": "bd09ll",
         "ret_coordtype": "bd09ll",
         "output": "json",
+        "alternatives": 2,
     }
     if waypoints:
         params["waypoints"] = waypoints
@@ -1013,14 +1014,10 @@ async def current_route_preview(req: dict) -> dict:
     except Exception as e:
         logger.warning("获取驾车路径失败（前端将用站点折线或分段规划）: %s", e)
 
-    route_path = all_paths[0] if all_paths else []
-    route_alternatives = all_paths[1:] if len(all_paths) > 1 else []
-
     return {
         "route_addresses": route_addresses,
         "route_coords": route_coords,
-        "route_path": route_path,
-        "route_alternatives": route_alternatives,
+        "route_paths": all_paths,
         "route_durations": route_durations,
         "point_types": point_types,
         "point_labels": point_labels,
