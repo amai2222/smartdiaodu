@@ -224,9 +224,16 @@
     if (!window.BMap) {
       var script = document.createElement("script");
       script.src = "https://api.map.baidu.com/api?v=3.0&ak=" + encodeURIComponent(ak) + "&s=1";
-      script.onload = function () { initBaiduMap(); if (lastRouteData) drawRouteFromIndex(currentStopIndex); };
+      script.onload = function () {
+        if (!window.BMap || typeof window.BMap.Map !== "function") {
+          document.getElementById("routeInfo").textContent = "百度地图 API 未就绪（脚本可能被拦截或返回错误）。请打开 F12 → Network，查看 api.map.baidu.com 是否返回 403，并确认 AK 与白名单正确。";
+          return;
+        }
+        initBaiduMap();
+        if (lastRouteData) drawRouteFromIndex(currentStopIndex);
+      };
       script.onerror = function () {
-        document.getElementById("routeInfo").textContent = "百度地图脚本加载失败，请检查网络或 baiduMapAk 是否有效";
+        document.getElementById("routeInfo").textContent = "百度地图脚本加载失败（网络或地址无效）。请检查 F12 → Network 中 api.map.baidu.com 请求。";
       };
       document.head.appendChild(script);
       return;
@@ -237,6 +244,10 @@
 
   function initBaiduMap() {
     if (bmap) return;
+    if (!window.BMap || typeof window.BMap.Map !== "function") {
+      console.warn("[地图] BMap 未定义，跳过初始化");
+      return;
+    }
     var container = document.getElementById("map");
     if (!container) return;
     bmap = new window.BMap.Map("map");
