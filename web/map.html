@@ -227,25 +227,27 @@
   }
 
   /**
-   * 调起百度地图 App 导航：起点 + 途经点 + 终点（最多 15 个途经点）
-   * 格式：origin=我的位置&destination=终点&waypoints=途经1|途经2&mode=driving
+   * 调起百度地图 App 导航：起点 + 途经点（坐标）+ 终点
+   * 途经点用 BD09 坐标拼接：waypoints=lat1,lng1|lat2,lng2（最多 18 个），确保 App 按途经点规划
    */
   function getNavUrlWithWaypoints() {
     var nextIdx = currentStopIndex + 1;
-    if (nextIdx >= route_addresses.length) return "#";
+    if (nextIdx >= route_addresses.length || !route_coords.length) return "#";
     var origin = "我的位置";
     var destAddr = route_addresses[route_addresses.length - 1] || "";
     var waypointsArr = [];
-    for (var i = nextIdx; i < route_addresses.length - 1 && waypointsArr.length < 15; i++) {
-      var a = (route_addresses[i] || "").trim();
-      if (a) waypointsArr.push(encodeURIComponent(a));
+    for (var i = nextIdx; i < route_addresses.length - 1 && waypointsArr.length < 18; i++) {
+      var c = route_coords[i];
+      if (!c || c[0] == null || c[1] == null) continue;
+      var bd = wgs84ToBd09(c[0], c[1]);
+      if (bd && bd[0] != null && bd[1] != null) waypointsArr.push(bd[1] + "," + bd[0]);
     }
     var params = [
       "origin=" + encodeURIComponent(origin),
       "destination=" + encodeURIComponent(destAddr),
       "mode=driving"
     ];
-    if (waypointsArr.length > 0) params.push("waypoints=" + waypointsArr.join("|"));
+    if (waypointsArr.length > 0) params.push("waypoints=" + encodeURIComponent(waypointsArr.join("|")));
     return "baidumap://map/direction?" + params.join("&");
   }
 
@@ -334,8 +336,16 @@
       var orderStr = orderNums[num - 1] || num + ".";
       var typeLabel = labels[i] || types[i] || "途经";
       var addrShort = addresses[i] ? " " + addresses[i].slice(0, 10) + (addresses[i].length > 10 ? "…" : "") : "";
+      var labelText;
+      if (i === 0) {
+        labelText = orderStr + " 起点 司机" + addrShort;
+      } else if (i === coords.length - 1) {
+        labelText = orderStr + " 终点" + addrShort;
+      } else {
+        labelText = orderStr + " " + typeLabel + addrShort;
+      }
       var mk = new window.BMap.Marker(pt);
-      mk.setLabel(new window.BMap.Label(orderStr + " " + typeLabel + addrShort, { offset: new window.BMap.Size(10, -10) }));
+      mk.setLabel(new window.BMap.Label(labelText, { offset: new window.BMap.Size(10, -10) }));
       bmap.addOverlay(mk);
     }
     if (bdPoints.length === 0) return;
