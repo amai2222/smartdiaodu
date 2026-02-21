@@ -173,47 +173,15 @@
       })(strategyBtns[i]);
     }
     var btnOther = document.getElementById("btnOtherRoute");
-    var otherPanel = document.getElementById("otherRoutesPanel");
-    var otherList = document.getElementById("otherRoutesList");
-    if (btnOther && otherPanel && otherList) {
+    if (btnOther) {
       btnOther.onclick = function () {
         document.getElementById("routeStrategyPanel").classList.remove("show");
-        otherList.innerHTML = "";
-        var paths = M.route_paths || (M.route_path && M.route_path.length >= 2 ? [M.route_path] : []);
-        var durations = M.route_durations || [];
-        if (paths.length <= 1) {
-          var empty = document.createElement("div");
-          empty.className = "route-options-title";
-          empty.textContent = "暂无其他线路（仅有一条方案）";
-          otherList.appendChild(empty);
-        } else {
-          for (var i = 0; i < paths.length; i++) {
-            var dur = durations[i];
-            var minStr = (dur > 0) ? " 约 " + Math.round(dur / 60) + " 分钟" : "";
-            var btn = document.createElement("button");
-            btn.type = "button";
-            btn.textContent = "方案" + (i + 1) + minStr;
-            btn.setAttribute("data-route-index", String(i));
-            if (i === M.routeAlternativeIndex) btn.classList.add("active");
-            btn.onclick = function () {
-              var idx = parseInt(this.getAttribute("data-route-index"), 10);
-              if (idx >= 0 && idx < paths.length) {
-                M.routeAlternativeIndex = idx;
-                otherPanel.style.display = "none";
-                if (M.drawRouteFromIndex) M.drawRouteFromIndex(M.currentStopIndex, true);
-                if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
-                document.getElementById("routeInfo").textContent = "已切换至方案" + (idx + 1);
-              }
-            };
-            otherList.appendChild(btn);
-          }
-        }
-        otherPanel.style.display = "flex";
+        var n = (M.route_paths && M.route_paths.length) ? M.route_paths.length : 1;
+        M.routeAlternativeIndex = (M.routeAlternativeIndex + 1) % n;
+        if (M.drawRouteFromIndex) M.drawRouteFromIndex(M.currentStopIndex, true);
+        if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
+        document.getElementById("routeInfo").textContent = "已切换至方案" + (M.routeAlternativeIndex + 1);
       };
-      document.addEventListener("click", function () {
-        if (otherPanel && otherPanel.style.display === "flex") otherPanel.style.display = "none";
-      });
-      otherPanel.addEventListener("click", function (e) { e.stopPropagation(); });
     }
   })();
 
