@@ -203,14 +203,28 @@
   var STORAGE_DRIVER_ID = "smartdiaodu_driver_id";
   var DEFAULT_DRIVER_ID = "a0000001-0000-4000-8000-000000000001";
 
+  /** 除 Supabase URL/Anon 外，其余配置仅从数据库 app_config 读取 */
+  var cachedAppConfig = { api_base: "", driver_id: "" };
+  function loadAppConfig(cb) {
+    var sup = getSupabaseClient();
+    if (!sup) { if (cb) cb(); return; }
+    sup.from("app_config").select("key, value").then(function (r) {
+      if (r.data && Array.isArray(r.data)) {
+        r.data.forEach(function (row) {
+          var k = row.key, v = (row.value || "").trim();
+          if (k === "api_base") cachedAppConfig.api_base = v.replace(/\/$/, "");
+          else if (k === "driver_id") cachedAppConfig.driver_id = v;
+        });
+      }
+      if (cb) cb();
+    }).catch(function () { if (cb) cb(); });
+  }
+
   var pickups = [];
   var deliveries = [];
   var passengerRows = [];  // { id, pickup, delivery } 用于下车时更新 DB
 
-  function getDriverId() {
-    return (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_DRIVER_ID)) ||
-      (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.driverId) || DEFAULT_DRIVER_ID;
-  }
+  function getDriverId() { return cachedAppConfig.driver_id || DEFAULT_DRIVER_ID; }
   function getSupabaseClient() {
     var url = getSupabaseUrl(), anon = getSupabaseAnon();
     if (!url || !anon || !window.supabase) return null;
@@ -241,10 +255,7 @@
     deliveries = passengerRows.map(function (r) { return r.delivery; });
   }
 
-  function getApiBase() {
-    var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.apiBase) || "";
-    return (v || "").trim().replace(/\/$/, "");
-  }
+  function getApiBase() { return cachedAppConfig.api_base || ""; }
   function getSupabaseUrl() {
     try {
       var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL)) || "";
@@ -758,21 +769,19 @@
   function checkAuthAndRun() {
     try {
       if (typeof localStorage === "undefined") { window.location.replace("login.html"); return; }
-      if (localStorage.getItem(STORAGE_TOKEN)) { run(); return; }
+      if (localStorage.getItem(STORAGE_TOKEN)) { loadAppConfig(run); return; }
       var url = getSupabaseUrl(), anon = getSupabaseAnon();
       if (!url || !anon || !window.supabase) { window.location.replace("login.html"); return; }
       window.supabase.createClient(url, anon).auth.getSession()
         .then(function (r) {
-          if (r.data && r.data.session) run();
+          if (r.data && r.data.session) loadAppConfig(run);
           else window.location.replace("login.html");
         })
         .catch(function () {
-          run();
-          showSupabaseBlockedNotice();
+          loadAppConfig(function () { run(); showSupabaseBlockedNotice(); });
         });
     } catch (e) {
-      run();
-      showSupabaseBlockedNotice();
+      loadAppConfig(function () { run(); showSupabaseBlockedNotice(); });
     }
   }
   checkAuthAndRun();

@@ -103,29 +103,33 @@
   var STORAGE_MAP_ROUTE_HASH = "smartdiaodu_map_route_hash";
   var DEFAULT_DRIVER_ID = "a0000001-0000-4000-8000-000000000001";
 
-  function getApiBase() {
-    var fromStorage = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_API) : null;
-    var fromConfig = (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.apiBase) || "";
-    var v = (fromStorage || "").trim() || (fromConfig || "").trim();
-    // HTTPS 页面若仍用 HTTP 的 apiBase 会被浏览器拦截，优先用 config 里的 HTTPS
-    if (window.location.protocol === "https:" && v && v.indexOf("http://") === 0) {
-      var cfgHttps = (fromConfig || "").trim();
-      if (cfgHttps && cfgHttps.indexOf("https://") === 0) v = cfgHttps;
-    }
-    return (v || "").replace(/\/$/, "");
+  /** 除 Supabase URL/Anon 外，其余配置仅从数据库 app_config 读取 */
+  var cachedAppConfig = { api_base: "", baidu_map_ak: "", driver_id: "" };
+  function loadAppConfig(cb) {
+    var sup = getSupabaseClient();
+    if (!sup) { if (cb) cb(); return; }
+    sup.from("app_config").select("key, value").then(function (r) {
+      if (r.data && Array.isArray(r.data)) {
+        r.data.forEach(function (row) {
+          var k = row.key, v = (row.value || "").trim();
+          if (k === "api_base") cachedAppConfig.api_base = v.replace(/\/$/, "");
+          else if (k === "baidu_map_ak") cachedAppConfig.baidu_map_ak = v;
+          else if (k === "driver_id") cachedAppConfig.driver_id = v;
+        });
+      }
+      if (cb) cb();
+    }).catch(function () { if (cb) cb(); });
   }
+  function getApiBase() { return cachedAppConfig.api_base || ""; }
   function getSupabaseUrl() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_URL) : "") || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseUrl) || ""; }
   function getSupabaseAnon() { return (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_SUPABASE_ANON) : "") || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseAnonKey) || ""; }
-  function getDriverId() {
-    return (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_DRIVER_ID)) ||
-      (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.driverId) || DEFAULT_DRIVER_ID;
-  }
+  function getDriverId() { return cachedAppConfig.driver_id || DEFAULT_DRIVER_ID; }
   function getSupabaseClient() {
     var url = getSupabaseUrl(), anon = getSupabaseAnon();
     if (!url || !anon || !window.supabase) return null;
     return window.supabase.createClient(url, anon);
   }
-  function getBaiduMapAk() { return (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.baiduMapAk) || ""; }
+  function getBaiduMapAk() { return cachedAppConfig.baidu_map_ak || ""; }
   function getCurrentState() {
     var driver_loc = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_DRIVER_LOC)) || "";
     var pickups = [], deliveries = [];
@@ -388,7 +392,7 @@
           applyRouteData(data);
           statusEl.textContent = "已恢复上次线路（共 " + route_addresses.length + " 站）；未配置 apiBase 无法重新规划";
         } else {
-          statusEl.textContent = "未配置后端（config.js 的 apiBase）；请用 http 打开页面并确保 config.js 同目录加载，再点「更新路线」规划";
+          statusEl.textContent = "未配置后端（请在 Supabase 表 app_config 中设置 key=api_base）";
         }
       });
       return;
@@ -443,18 +447,21 @@
     });
   };
 
-  // 进入页面：先初始化地图，再尝试恢复上次线路或请求规划
+  // 进入页面：先从数据库加载 app_config，再初始化地图与路线
   (function onLoad() {
     var statusEl = document.getElementById("routeInfo");
-    statusEl.textContent = "加载中…";
-    initMap();
-    loadSavedRoute(function (data) {
-      if (data) {
-        applyRouteData(data);
-        statusEl.textContent = "已恢复上次线路（共 " + route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟）";
-      } else {
-        loadAndDraw();
-      }
+    statusEl.textContent = "加载配置…";
+    loadAppConfig(function () {
+      statusEl.textContent = "加载中…";
+      initMap();
+      loadSavedRoute(function (data) {
+        if (data) {
+          applyRouteData(data);
+          statusEl.textContent = "已恢复上次线路（共 " + route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟）";
+        } else {
+          loadAndDraw();
+        }
+      });
     });
   })();
 })();

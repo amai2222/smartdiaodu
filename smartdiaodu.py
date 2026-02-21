@@ -49,39 +49,114 @@ app.add_middleware(
 )
 
 # ================= 配置区 =================
-# 百度地图服务器端：AK + 应用 Service ID（地理编码、路网矩阵）
+# 以下为默认值，启动时由 _load_app_config_from_db() 从 app_config 表覆盖（除 Supabase/JWT 外仅从 DB 读）
 BAIDU_AK = "wxw2PvK3nWeOCGk1rZDe2krnlc1jbzsc"
 BAIDU_SERVICE_ID = "119231078"
 BARK_KEY = "bGPZAHqjNjdiQZTg5GeWWG"
-MAX_DETOUR_SECONDS = 900  # 绕路容忍阈值（秒），例如 15 分钟
-REQUEST_TIMEOUT = 5       # 所有外部 API 统一超时（秒）
-# 防骚扰：订单指纹 -> 上次处理时间戳
+MAX_DETOUR_SECONDS = 900
+REQUEST_TIMEOUT = 5
 pushed_orders_cache: Dict[str, float] = {}
-# 业务模式：mode1=出发前找单 | mode2=路上接满 | mode3=送人后周边接单 | pause=停止
 DRIVER_MODE = "mode2"
-# 模式2：耽误时间范围(分钟)；高收益(元)以上可放宽到 detour_max
 MODE2_DETOUR_MINUTES_MIN = 20
 MODE2_DETOUR_MINUTES_MAX = 60
 MODE2_HIGH_PROFIT_THRESHOLD = 100
-# 模式3：基于「预估下一送客点」提前匹配，可串行重复（送完 A 接一单 B，送 B 时又可接 C，只要耽误在阈值内）
-MODE3_MAX_MINUTES_TO_PICKUP = 30   # 预估送客点 → 新单起点 驾车不超过此分钟
-MODE3_MAX_DETOUR_MINUTES = 25      # 剩余路线最多允许多绕的分钟数（耽误多久），每次接单都按此卡
-# 模式1：多批次下次计划（一台车可有多条：晚回程、次日出发、次日回程等；探子/调度按每条找单）
-planned_trips: List[Dict[str, Any]] = []  # 每项: origin, destination, departure_time, time_window_minutes, min_orders, max_orders
-# 推送后用户反馈：超时未操作则指纹该单不再推送；接单/停推由网页或链接回传
-RESPONSE_TIMEOUT_SECONDS = 300   # 推送后若此秒数内未操作，视为放弃，指纹该单
-RESPONSE_PAGE_BASE = ""          # 网页端「接单/是否继续接单」页面基础 URL，如 https://ui.xxx.com/response
-abandoned_fingerprints: Set[str] = set()   # 已放弃的订单指纹，不再推送
-pending_response: Dict[str, float] = {}   # fingerprint -> 推送时间戳，超时未响应则移入 abandoned
-# 接单后通知探针取消已发布行程（探针轮询 probe_publish_trip 时会拿到 cancel_current_trip）
+MODE3_MAX_MINUTES_TO_PICKUP = 30
+MODE3_MAX_DETOUR_MINUTES = 25
+planned_trips: List[Dict[str, Any]] = []
+RESPONSE_TIMEOUT_SECONDS = 300
+RESPONSE_PAGE_BASE = ""
+abandoned_fingerprints: Set[str] = set()
+pending_response: Dict[str, float] = {}
 probe_cancel_trip_requested: bool = False
-# 网页内推送：与 Bark 同时，写入 Supabase push_events 表，前端通过 Realtime 订阅展示
+
+# 仅从环境变量读取：连接数据库与登录签发
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip() or "https://zqcctbcwibnqmumtqweu.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or ""  # 服务端密钥，从 Dashboard → API 获取
-# 登录：JWT 签发密钥（请改为随机字符串）；未配置时登录接口不可用
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or ""
 JWT_SECRET = os.environ.get("JWT_SECRET", "").strip() or "smartdiaodu_jwt_change_me"
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_SECONDS = 7 * 24 * 3600  # 7 天
+JWT_EXPIRE_SECONDS = 7 * 24 * 3600
+
+
+def _load_app_config_from_db() -> None:
+    """从 app_config 表加载配置并覆盖全局变量（除 Supabase/JWT 外）。"""
+    global BAIDU_AK, BAIDU_SERVICE_ID, BARK_KEY, MAX_DETOUR_SECONDS, REQUEST_TIMEOUT
+    global DRIVER_MODE, MODE2_DETOUR_MINUTES_MIN, MODE2_DETOUR_MINUTES_MAX, MODE2_HIGH_PROFIT_THRESHOLD
+    global MODE3_MAX_MINUTES_TO_PICKUP, MODE3_MAX_DETOUR_MINUTES
+    global RESPONSE_TIMEOUT_SECONDS, RESPONSE_PAGE_BASE
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        logger.warning("未配置 SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY，跳过从 DB 加载 app_config")
+        return
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/app_config?select=key,value"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            logger.warning("app_config 请求失败 status=%s", resp.status_code)
+            return
+        data = resp.json()
+        if not isinstance(data, list):
+            return
+        cfg = {row["key"]: (row.get("value") or "").strip() for row in data if isinstance(row, dict) and "key" in row}
+        if cfg.get("baidu_map_ak"):
+            BAIDU_AK = cfg["baidu_map_ak"]
+        if cfg.get("baidu_service_id"):
+            BAIDU_SERVICE_ID = cfg["baidu_service_id"]
+        if "bark_key" in cfg:
+            BARK_KEY = cfg["bark_key"]
+        if cfg.get("max_detour_seconds"):
+            try:
+                MAX_DETOUR_SECONDS = int(cfg["max_detour_seconds"])
+            except ValueError:
+                pass
+        if cfg.get("request_timeout"):
+            try:
+                REQUEST_TIMEOUT = int(cfg["request_timeout"])
+            except ValueError:
+                pass
+        if cfg.get("driver_mode") in ("mode1", "mode2", "mode3", "pause"):
+            DRIVER_MODE = cfg["driver_mode"]
+        if cfg.get("mode2_detour_min"):
+            try:
+                MODE2_DETOUR_MINUTES_MIN = max(0, int(cfg["mode2_detour_min"]))
+            except ValueError:
+                pass
+        if cfg.get("mode2_detour_max"):
+            try:
+                MODE2_DETOUR_MINUTES_MAX = max(0, int(cfg["mode2_detour_max"]))
+            except ValueError:
+                pass
+        if cfg.get("mode2_high_profit_threshold"):
+            try:
+                MODE2_HIGH_PROFIT_THRESHOLD = max(0, float(cfg["mode2_high_profit_threshold"]))
+            except ValueError:
+                pass
+        if cfg.get("mode3_max_minutes_to_pickup"):
+            try:
+                MODE3_MAX_MINUTES_TO_PICKUP = max(1, int(cfg["mode3_max_minutes_to_pickup"]))
+            except ValueError:
+                pass
+        if cfg.get("mode3_max_detour_minutes"):
+            try:
+                MODE3_MAX_DETOUR_MINUTES = max(0, int(cfg["mode3_max_detour_minutes"]))
+            except ValueError:
+                pass
+        if cfg.get("response_timeout_seconds"):
+            try:
+                RESPONSE_TIMEOUT_SECONDS = max(60, int(cfg["response_timeout_seconds"]))
+            except ValueError:
+                pass
+        if "response_page_base" in cfg:
+            RESPONSE_PAGE_BASE = cfg["response_page_base"] or ""
+        logger.info("已从 app_config 加载配置: baidu_ak=%s, driver_mode=%s", bool(BAIDU_AK), DRIVER_MODE)
+    except Exception as e:
+        logger.warning("从 app_config 加载配置失败: %s，使用默认值", e)
+
+
+_load_app_config_from_db()
 # ==========================================
 
 
