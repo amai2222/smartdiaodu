@@ -18,13 +18,14 @@
     return n;
   };
 
-  /** 百度驾车策略枚举值。BMap 未就绪时用 0（用时最短）兜底，避免首次打开路线策略未生效。 */
+  /** 百度驾车策略枚举值。BMap 未就绪时用 0（默认）兜底，避免首次打开路线策略未生效。 */
   M.getDrivingPolicyValue = function (key) {
     var P = window.BMap && window.BMap.DrivingPolicy;
-    var k = (key || M.routePolicyKey || "LEAST_TIME").toUpperCase();
+    var k = (key || M.routePolicyKey || "DEFAULT").toUpperCase();
     if (P) {
       if (P[k] != null) return P[k];
       if (k === "LEAST_FEE" && P.LEAST_TOLL != null) return P.LEAST_TOLL;
+      if (k === "DEFAULT") return 0;
       if (P.LEAST_TIME != null) return P.LEAST_TIME;
     }
     return 0;

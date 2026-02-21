@@ -59,7 +59,7 @@
     if (!panel) return;
     var btns = panel.querySelectorAll("button[data-policy]");
     for (var i = 0; i < btns.length; i++) {
-      btns[i].classList.toggle("active", (btns[i].getAttribute("data-policy") || "").toUpperCase() === (M.routePolicyKey || "LEAST_TIME").toUpperCase());
+      btns[i].classList.toggle("active", (btns[i].getAttribute("data-policy") || "").toUpperCase() === (M.routePolicyKey || "DEFAULT").toUpperCase());
     }
   };
 
@@ -98,13 +98,14 @@
         return;
       }
       var tacticsMap = {
+        "DEFAULT": 0,
         "LEAST_TIME": 13,
         "LEAST_DISTANCE": 12,
         "AVOID_CONGESTION": 5,
         "LEAST_FEE": 6,
         "AVOID_HIGHWAY": 3
       };
-      var currentTactics = tacticsMap[M.routePolicyKey || "LEAST_TIME"] || 13;
+      var currentTactics = tacticsMap[M.routePolicyKey || "DEFAULT"] || 0;
       statusEl.textContent = "规划路线中…";
       fetch(base + "/current_route_preview", {
         method: "POST",
@@ -162,7 +163,7 @@
     for (var i = 0; i < strategyBtns.length; i++) {
       (function (btn) {
         btn.onclick = function () {
-          var key = (btn.getAttribute("data-policy") || "LEAST_TIME").toUpperCase();
+          var key = (btn.getAttribute("data-policy") || "DEFAULT").toUpperCase();
           M.routePolicyKey = key;
           // 💡 核心修复：无论切什么策略，必须把选中序号重置为 0！避免越界触发龟速重算！
           M.routeAlternativeIndex = 0;

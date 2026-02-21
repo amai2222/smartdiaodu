@@ -20,16 +20,16 @@
   M.route_paths = [];
   M.route_steps = [];
   M.currentStopIndex = 0;
-  M.routePolicyKey = "LEAST_TIME";
+  M.routePolicyKey = "DEFAULT";
   M.lastSegmentResults = [];
   M.routeAlternativeIndex = 0;
-  M.POLICY_KEYS_ORDER = ["LEAST_TIME", "LEAST_DISTANCE", "LEAST_FEE", "AVOID_CONGESTION", "AVOID_HIGHWAY"];
-  M.POLICY_NAMES = { LEAST_TIME: "用时最短", LEAST_DISTANCE: "距离最短", LEAST_FEE: "费用最省", AVOID_CONGESTION: "躲避拥堵", AVOID_HIGHWAY: "不走高速" };
-  /** 前端策略 key 对应百度驾车 tactics：13 时间优先 12 距离优先 6 少收费 5 躲避拥堵 3 不走高速 */
-  M.BAIDU_TACTICS = { LEAST_TIME: 13, LEAST_DISTANCE: 12, LEAST_FEE: 6, AVOID_CONGESTION: 5, AVOID_HIGHWAY: 3 };
+  M.POLICY_KEYS_ORDER = ["DEFAULT", "LEAST_TIME", "LEAST_DISTANCE", "LEAST_FEE", "AVOID_CONGESTION", "AVOID_HIGHWAY"];
+  M.POLICY_NAMES = { DEFAULT: "默认", LEAST_TIME: "用时最短", LEAST_DISTANCE: "距离最短", LEAST_FEE: "费用最省", AVOID_CONGESTION: "躲避拥堵", AVOID_HIGHWAY: "不走高速" };
+  /** 前端策略 key 对应百度驾车 tactics：0 默认 13 时间优先 12 距离优先 6 少收费 5 躲避拥堵 3 不走高速 */
+  M.BAIDU_TACTICS = { DEFAULT: 0, LEAST_TIME: 13, LEAST_DISTANCE: 12, LEAST_FEE: 6, AVOID_CONGESTION: 5, AVOID_HIGHWAY: 3 };
   M.getBaiduTacticsForPolicy = function (key) {
-    var k = (key || M.routePolicyKey || "LEAST_TIME").toUpperCase();
-    return M.BAIDU_TACTICS[k] != null ? M.BAIDU_TACTICS[k] : 13;
+    var k = (key || M.routePolicyKey || "DEFAULT").toUpperCase();
+    return M.BAIDU_TACTICS[k] != null ? M.BAIDU_TACTICS[k] : 0;
   };
   M.zoomRedrawTimer = null;
   M.lastRedrawZoom = null;
