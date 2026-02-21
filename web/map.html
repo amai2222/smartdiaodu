@@ -227,28 +227,35 @@
   }
 
   /**
-   * 调起百度地图 App 导航：起点 + 途经点（坐标）+ 终点
-   * 途经点用 BD09 坐标拼接：waypoints=lat1,lng1|lat2,lng2（最多 18 个），确保 App 按途经点规划
+   * 调起百度地图 App 导航（URL Scheme）
+   * 格式要求：origin/destination 为 latlng:纬度,经度|name:名称；途经点用 viaPoints（JSON 且 URL 编码）
+   * 按路线顺序：起点 → viaPoints → 终点，coord_type=bd09ll
    */
   function getNavUrlWithWaypoints() {
-    var nextIdx = currentStopIndex + 1;
-    if (nextIdx >= route_addresses.length || !route_coords.length) return "#";
-    var origin = "我的位置";
-    var destAddr = route_addresses[route_addresses.length - 1] || "";
-    var waypointsArr = [];
-    for (var i = nextIdx; i < route_addresses.length - 1 && waypointsArr.length < 18; i++) {
+    if (!route_coords.length || route_addresses.length !== route_coords.length) return "#";
+    var bd0 = wgs84ToBd09(route_coords[0][0], route_coords[0][1]);
+    var bdLast = wgs84ToBd09(route_coords[route_coords.length - 1][0], route_coords[route_coords.length - 1][1]);
+    if (!bd0 || bd0[0] == null || bd0[1] == null || !bdLast || bdLast[0] == null || bdLast[1] == null) return "#";
+    var lat0 = bd0[1], lng0 = bd0[0];
+    var latLast = bdLast[1], lngLast = bdLast[0];
+    var origin = "latlng:" + lat0 + "," + lng0 + "|name:" + (point_labels[0] || "起点");
+    var destination = "latlng:" + latLast + "," + lngLast + "|name:" + (point_labels[point_labels.length - 1] || "终点");
+    var viaPointsList = [];
+    for (var i = 1; i < route_coords.length - 1; i++) {
       var c = route_coords[i];
       if (!c || c[0] == null || c[1] == null) continue;
       var bd = wgs84ToBd09(c[0], c[1]);
-      if (bd && bd[0] != null && bd[1] != null) waypointsArr.push(bd[1] + "," + bd[0]);
+      if (!bd || bd[0] == null || bd[1] == null) continue;
+      viaPointsList.push({
+        name: (point_labels[i] || ("第" + (i + 1) + "站")) + "",
+        lat: bd[1],
+        lng: bd[0]
+      });
     }
-    var params = [
-      "origin=" + encodeURIComponent(origin),
-      "destination=" + encodeURIComponent(destAddr),
-      "mode=driving"
-    ];
-    if (waypointsArr.length > 0) params.push("waypoints=" + encodeURIComponent(waypointsArr.join("|")));
-    return "baidumap://map/direction?" + params.join("&");
+    var viaData = { viaPoints: viaPointsList };
+    var viaPointsStr = encodeURIComponent(JSON.stringify(viaData));
+    var baiduUrl = "baidumap://map/direction?mode=driving&origin=" + encodeURIComponent(origin) + "&destination=" + encodeURIComponent(destination) + "&viaPoints=" + viaPointsStr + "&coord_type=bd09ll&src=smartdiaodu";
+    return baiduUrl;
   }
 
   function destroyMap() {
