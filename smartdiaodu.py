@@ -489,6 +489,74 @@ def get_duration_between(origin_addr: str, dest_addr: str) -> int:
     return matrix[0][1]
 
 
+def fetch_driving_route_path(route_coords_wgs84: List[List[float]]) -> List[List[float]]:
+    """
+    调用百度驾车路线规划 Web API（direction/v2/driving），按起终点+途经点一次请求，
+    返回沿道路的路径点序列，格式与 route_coords 一致：[lat, lng] WGS84。
+    途经点最多 18 个，超出则只取前 18 个。
+    """
+    if not route_coords_wgs84 or len(route_coords_wgs84) < 2:
+        return []
+    origin = f"{route_coords_wgs84[0][0]},{route_coords_wgs84[0][1]}"
+    destination = f"{route_coords_wgs84[-1][0]},{route_coords_wgs84[-1][1]}"
+    middle = route_coords_wgs84[1:-1]
+    if len(middle) > 18:
+        middle = middle[:18]
+    waypoints = "|".join(f"{c[0]},{c[1]}" for c in middle) if middle else None
+    url = "https://api.map.baidu.com/direction/v2/driving"
+    params: Dict[str, Any] = {
+        "ak": BAIDU_AK,
+        "origin": origin,
+        "destination": destination,
+        "coord_type": "wgs84",
+        "ret_coordtype": "bd09ll",
+        "output": "json",
+    }
+    if waypoints:
+        params["waypoints"] = waypoints
+    try:
+        resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as e:
+        logger.warning("百度驾车路线规划请求异常: %s", e)
+        return []
+
+    if data.get("status") != 0:
+        logger.warning("百度驾车路线规划失败: %s", data.get("message", "未知"))
+        return []
+
+    result = data.get("result") or {}
+    routes = result.get("routes") or []
+    if not routes:
+        return []
+
+    path_wgs84: List[List[float]] = []
+    for step in routes[0].get("steps") or []:
+        path_str = step.get("path")
+        if not path_str:
+            continue
+        # 返回 path 为 "lng,lat;lng,lat;..." 或 "lat,lng;..."，百度文档多为经度,纬度
+        for part in path_str.split(";"):
+            part = part.strip()
+            if not part:
+                continue
+            seg = part.split(",")
+            if len(seg) >= 2:
+                try:
+                    a, b = float(seg[0].strip()), float(seg[1].strip())
+                    # 百度 API 返回一般为 经度,纬度；国内经度约 73–135，纬度约 3–54
+                    if 70 < a < 140 and 0 < b < 60:
+                        lng_bd, lat_bd = a, b
+                    else:
+                        lat_bd, lng_bd = a, b
+                    wgs_lat, wgs_lng = _bd09_to_wgs84(lat_bd, lng_bd)
+                    path_wgs84.append([wgs_lat, wgs_lng])
+                except (ValueError, TypeError):
+                    continue
+    return path_wgs84
+
+
 # ---------------------------------------------------------------------------
 # 三、核心算法 - OR-Tools PDP 路径规划
 # ---------------------------------------------------------------------------
@@ -897,9 +965,18 @@ async def current_route_preview(req: dict) -> dict:
         lat_bd, lng_bd = float(parts[0]), float(parts[1])
         wgs_lat, wgs_lng = _bd09_to_wgs84(lat_bd, lng_bd)
         route_coords.append([wgs_lat, wgs_lng])
+
+    # 调用百度驾车路线规划 Web API，获取沿道路的路径点，供地图画线
+    route_path: List[List[float]] = []
+    try:
+        route_path = fetch_driving_route_path(route_coords)
+    except Exception as e:
+        logger.warning("获取驾车路径失败（前端将用站点折线或分段规划）: %s", e)
+
     return {
         "route_addresses": route_addresses,
         "route_coords": route_coords,
+        "route_path": route_path,
         "point_types": point_types,
         "point_labels": point_labels,
         "total_time_seconds": total_time,

@@ -33,6 +33,7 @@
       font-size: 0.95rem;
       text-decoration: none;
     }
+    .toolbar a.toolbar-nav { background: #3b82f6; color: #fff; border-color: #2563eb; }
     .toolbar button { cursor: pointer; }
     .toolbar a { display: inline-block; }
     .toolbar .status { color: #8b9199; font-size: 0.85rem; }
@@ -86,6 +87,7 @@
     <button type="button" id="btnRefresh">更新路线</button>
     <button type="button" id="btnRestore">恢复上次线路</button>
     <a href="index.html" target="_self">← 返回控制台</a>
+    <a id="btnOpenNavToolbar" href="#" target="_blank" rel="noopener" class="toolbar-nav" style="display: none;">打开百度导航</a>
     <span id="routeInfo" class="status"></span>
     <button type="button" id="btnCollapse" title="收起菜单">收起</button>
   </div>
@@ -191,6 +193,7 @@
 
   var bmap = null, lastRouteData = null;
   var route_addresses = [], route_coords = [], point_types = [], point_labels = [];
+  var route_path = [];
   var currentStopIndex = 0;
 
   function wgs84ToBd09(lat, lng) {
@@ -307,7 +310,7 @@
     if (bmap) bmap.clearOverlays();
   }
 
-  /** 按实际驾车道路绘制路线：使用 BMap.DrivingRoute 一次 search(start, end, { waypoints }) 传入途经点 */
+  /** 按实际驾车道路绘制路线：优先用后端返回的 route_path（百度 direction/v2/driving），否则分段 BMap.DrivingRoute */
   function drawRouteFromIndex(fromIndex) {
     if (!lastRouteData) return;
     var coords = route_coords.slice(fromIndex);
@@ -341,36 +344,85 @@
       bmap.setZoom(14);
       return;
     }
+    if (route_path && route_path.length > 1) {
+      var pathBd = [];
+      for (var j = 0; j < route_path.length; j++) {
+        var p = route_path[j];
+        if (!p || p[0] == null || p[1] == null) continue;
+        var bd = wgs84ToBd09(p[0], p[1]);
+        if (bd && bd[0] != null && bd[1] != null) pathBd.push(new window.BMap.Point(bd[0], bd[1]));
+      }
+      if (pathBd.length > 1) {
+        bmap.addOverlay(new window.BMap.Polyline(pathBd, { strokeColor: "#3b82f6", strokeWeight: 4 }));
+        bmap.setViewport(bdPoints);
+        document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站";
+        return;
+      }
+    }
     if (typeof window.BMap.DrivingRoute === "undefined") {
       bmap.addOverlay(new window.BMap.Polyline(bdPoints, { strokeColor: "#3b82f6", strokeWeight: 4 }));
       bmap.setViewport(bdPoints);
       return;
     }
-    var startPoint = bdPoints[0];
-    var endPoint = bdPoints[bdPoints.length - 1];
-    var waypointsArr = bdPoints.slice(1, -1);
-    if (waypointsArr.length > 10) waypointsArr = waypointsArr.slice(0, 10);
+    // 无 route_path 时：分段 BMap.DrivingRoute 规划
     var opts = {
-      renderOptions: { map: bmap, autoViewport: true },
+      renderOptions: { map: null },
       policy: (window.BMap.DrivingPolicy && window.BMap.DrivingPolicy.LEAST_TIME) || undefined
     };
     var driving = new window.BMap.DrivingRoute(bmap, opts);
-    driving.setSearchCompleteCallback(function () {
+    var segIndex = 0;
+    var failed = false;
+    function updateStatus() {
       document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站";
+    }
+    function searchNextSegment() {
+      if (failed || segIndex >= bdPoints.length - 1) {
+        bmap.setViewport(bdPoints);
+        updateStatus();
+        return;
+      }
+      driving.search(bdPoints[segIndex], bdPoints[segIndex + 1]);
+    }
+    driving.setSearchCompleteCallback(function () {
+      var results = driving.getResults && driving.getResults();
+      if (results && results.getPlan && results.getPlan(0)) {
+        try {
+          var route = results.getPlan(0).getRoute && results.getPlan(0).getRoute(0);
+          var path = route && route.getPath && route.getPath();
+          if (path && path.length > 0) {
+            var line = new window.BMap.Polyline(path, { strokeColor: "#3b82f6", strokeWeight: 4 });
+            bmap.addOverlay(line);
+          } else {
+            bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#3b82f6", strokeWeight: 4 }));
+          }
+        } catch (e) {
+          bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#3b82f6", strokeWeight: 4 }));
+        }
+      } else {
+        bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#3b82f6", strokeWeight: 4 }));
+      }
+      segIndex++;
+      searchNextSegment();
     });
     driving.setErrorCallback(function () {
-      bmap.addOverlay(new window.BMap.Polyline(bdPoints, { strokeColor: "#3b82f6", strokeWeight: 4 }));
-      bmap.setViewport(bdPoints);
-      document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站（规划失败，已画直线）";
+      bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#3b82f6", strokeWeight: 4 }));
+      segIndex++;
+      searchNextSegment();
     });
     document.getElementById("routeInfo").textContent = "正在规划驾车路线…";
-    driving.search(startPoint, endPoint, { waypoints: waypointsArr });
+    searchNextSegment();
   }
 
   function updateNavPanel() {
     var nextIdx = currentStopIndex + 1;
     var navPanel = document.getElementById("navPanel");
     var allDonePanel = document.getElementById("allDonePanel");
+    var navUrl = (route_addresses.length >= 2) ? getNavUrlWithWaypoints() : "#";
+    var toolbarNav = document.getElementById("btnOpenNavToolbar");
+    if (toolbarNav) {
+      toolbarNav.href = navUrl;
+      toolbarNav.style.display = (route_addresses.length >= 2 && navUrl !== "#") ? "" : "none";
+    }
     if (nextIdx >= route_addresses.length) {
       navPanel.style.display = "none";
       allDonePanel.style.display = "block";
@@ -382,7 +434,7 @@
     var addr = route_addresses[nextIdx] || "";
     document.getElementById("nextStopText").textContent = "下一站: " + label + " " + (addr.length > 18 ? addr.slice(0, 18) + "…" : addr);
     var a = document.getElementById("btnOpenNav");
-    a.href = getNavUrlWithWaypoints();
+    a.href = navUrl;
     a.textContent = "打开导航（百度地图，含途经点）";
   }
 
@@ -399,6 +451,7 @@
     route_coords = data.route_coords || [];
     point_types = data.point_types || [];
     point_labels = data.point_labels || [];
+    route_path = Array.isArray(data.route_path) ? data.route_path : [];
     lastRouteData = data;
     var hash = route_addresses.join("|");
     var savedHash = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_MAP_ROUTE_HASH) : "";
@@ -485,6 +538,7 @@
   document.getElementById("btnToggleUI").onclick = function () {
     document.body.classList.remove("toolbar-hidden");
     document.getElementById("btnToggleUI").classList.remove("show");
+    updateNavPanel();
   };
 
   function loadAndDraw() {
