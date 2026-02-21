@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0c0c0f" />
   <title>顺风车调度 · 控制台</title>
+  <script src="config.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -148,27 +149,17 @@
       </ul>
     </section>
 
-    <!-- 地图与设置折叠 -->
-    <details class="bg-panel border border-border rounded-2xl overflow-hidden mb-4">
-      <summary class="p-4 text-muted text-console cursor-pointer select-none">地图与更多设置</summary>
-      <div class="p-4 pt-0 border-t border-border space-y-4">
-        <div>
-          <label class="block text-muted text-sm mb-1">地图类型</label>
-          <select id="mapType" class="w-full bg-[#0c0c0f] border border-border rounded-lg px-3 py-2">
-            <option value="baidu">百度地图</option>
-            <option value="osm">OpenStreetMap</option>
-          </select>
-        </div>
-        <div id="map" class="h-64 rounded-xl bg-[#0c0c0f] border border-border"></div>
-        <button type="button" id="btnUpdateMap" class="w-full py-3 rounded-xl border border-border hover:bg-border font-medium">更新路线地图</button>
-        <p id="routeInfo" class="text-sm text-muted"></p>
-      </div>
-    </details>
+    <!-- 全屏地图（单独标签页） -->
+    <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">
+      <h2 class="text-muted text-console font-medium mb-3">🗺️ 路线地图</h2>
+      <a href="map.html" target="_blank" rel="noopener" class="block w-full py-4 rounded-xl bg-accent hover:bg-blue-600 text-white font-medium text-center text-big">
+        打开全屏地图
+      </a>
+      <p class="text-sm text-muted mt-2">在新标签页全屏显示司机起点与乘客起终点路线，数据与当前「我的位置」「车上乘客」同步。</p>
+    </section>
   </div>
 
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script>
 (function () {
   var STORAGE_API = "smartdiaodu_api_base";
@@ -176,9 +167,37 @@
   var STORAGE_USERNAME = "smartdiaodu_username";
   var STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
   var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
+  var STORAGE_DRIVER_LOC = "smartdiaodu_driver_loc";
+  var STORAGE_PICKUPS = "smartdiaodu_pickups";
+  var STORAGE_DELIVERIES = "smartdiaodu_deliveries";
+  var STORAGE_DRIVER_ID = "smartdiaodu_driver_id";
+  var DEFAULT_DRIVER_ID = "a0000001-0000-4000-8000-000000000001";
 
   var pickups = [];
   var deliveries = [];
+  var passengerRows = [];  // { id, pickup, delivery } 用于下车时更新 DB
+
+  function getDriverId() {
+    return (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_DRIVER_ID)) ||
+      (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.driverId) || DEFAULT_DRIVER_ID;
+  }
+  function getSupabaseClient() {
+    var url = getSupabaseUrl(), anon = getSupabaseAnon();
+    if (!url || !anon || !window.supabase) return null;
+    return window.supabase.createClient(url, anon);
+  }
+
+  function saveStateToStorage() {
+    if (typeof localStorage === "undefined") return;
+    var loc = document.getElementById("driverLoc");
+    if (loc) localStorage.setItem(STORAGE_DRIVER_LOC, loc.value.trim());
+    localStorage.setItem(STORAGE_PICKUPS, JSON.stringify(pickups));
+    localStorage.setItem(STORAGE_DELIVERIES, JSON.stringify(deliveries));
+  }
+  function applyPassengerRows() {
+    pickups = passengerRows.map(function (r) { return r.pickup; });
+    deliveries = passengerRows.map(function (r) { return r.delivery; });
+  }
 
   function getApiBase() {
     var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.apiBase) || "";
@@ -191,30 +210,105 @@
     var list = document.getElementById("passengerList");
     var hint = document.getElementById("noPassengersHint");
     list.innerHTML = "";
-    if (pickups.length === 0) {
+    var len = passengerRows.length > 0 ? passengerRows.length : pickups.length;
+    if (len === 0) {
       hint.classList.remove("hidden");
       return;
     }
     hint.classList.add("hidden");
-    for (var i = 0; i < pickups.length; i++) {
-      (function (idx) {
+    for (var idx = 0; idx < len; idx++) {
+      (function (i) {
+        var row = passengerRows[i];
+        var p = row ? row.pickup : (pickups[i] || "");
+        var d = row ? row.delivery : (deliveries[i] || "");
+        var orderId = row && row.id ? row.id : "";
+        var shortP = p.length > 12 ? p.slice(0, 12) + "…" : p;
+        var shortD = d.length > 12 ? d.slice(0, 12) + "…" : d;
         var li = document.createElement("li");
         li.className = "flex items-center justify-between gap-3 p-3 rounded-xl bg-[#0c0c0f] border border-border";
-        var shortP = (pickups[idx] || "").length > 12 ? (pickups[idx].slice(0, 12) + "…") : (pickups[idx] || "");
-        var shortD = (deliveries[idx] || "").length > 12 ? (deliveries[idx].slice(0, 12) + "…") : (deliveries[idx] || "");
-        li.innerHTML = "<span class=\"text-console flex-1 min-w-0\"><strong>" + (idx + 1) + "号客</strong> " + shortP + " → " + shortD + "</span>" +
-          "<button type=\"button\" class=\"drop-passenger shrink-0 px-3 py-2 rounded-lg bg-danger/20 text-danger font-medium\" data-idx=\"" + idx + "\">✖️ 下车</button>";
+        li.innerHTML = "<span class=\"text-console flex-1 min-w-0\"><strong>" + (i + 1) + "号客</strong> " + shortP + " → " + shortD + "</span>" +
+          "<button type=\"button\" class=\"drop-passenger shrink-0 px-3 py-2 rounded-lg bg-danger/20 text-danger font-medium\" data-idx=\"" + i + "\" data-order-id=\"" + (orderId || "") + "\" data-delivery=\"" + (d || "").replace(/"/g, "&quot;") + "\">✖️ 下车</button>";
         li.querySelector(".drop-passenger").onclick = function () {
-          var i = parseInt(this.getAttribute("data-idx"), 10);
-          var dest = deliveries[i];
-          pickups.splice(i, 1);
-          deliveries.splice(i, 1);
-          if (dest) document.getElementById("driverLoc").value = dest;
-          renderPassengerList();
+          var idx = parseInt(this.getAttribute("data-idx"), 10);
+          var oid = this.getAttribute("data-order-id");
+          var dest = this.getAttribute("data-delivery") || (deliveries[idx] || "");
+          if (oid && getSupabaseClient()) {
+            dropOffAndUpdateDb(oid, dest, idx);
+          } else {
+            passengerRows.splice(idx, 1);
+            if (passengerRows.length === 0) { pickups = []; deliveries = []; } else { applyPassengerRows(); }
+            if (dest) document.getElementById("driverLoc").value = dest;
+            renderPassengerList();
+            saveStateToStorage();
+          }
         };
         list.appendChild(li);
-      })(i);
+      })(idx);
     }
+  }
+
+  function loadFromDb(cb) {
+    var sup = getSupabaseClient();
+    if (!sup) {
+      try {
+        var p = localStorage.getItem(STORAGE_PICKUPS), d = localStorage.getItem(STORAGE_DELIVERIES);
+        if (p) pickups = JSON.parse(p);
+        if (d) deliveries = JSON.parse(d);
+        passengerRows = pickups.map(function (pu, i) { return { id: null, pickup: pu, delivery: deliveries[i] || "" }; });
+        applyPassengerRows();
+      } catch (e) {}
+      if (cb) cb();
+      return;
+    }
+    var driverId = getDriverId();
+    sup.from("driver_state").select("current_loc, empty_seats").eq("driver_id", driverId).maybeSingle()
+      .then(function (r) {
+        var locEl = document.getElementById("driverLoc");
+        var seatsEl = document.getElementById("emptySeats");
+        if (r.data && locEl) { locEl.value = r.data.current_loc || ""; }
+        if (r.data && seatsEl) { seatsEl.value = String(Math.max(0, Math.min(4, r.data.empty_seats || 0))); }
+        return sup.from("order_pool").select("id, pickup, delivery").eq("assigned_driver_id", driverId).eq("status", "assigned");
+      })
+      .then(function (r) {
+        if (r.data && Array.isArray(r.data)) {
+          passengerRows = r.data.map(function (o) { return { id: o.id, pickup: o.pickup || "", delivery: o.delivery || "" }; });
+        } else {
+          passengerRows = [];
+        }
+        applyPassengerRows();
+        renderPassengerList();
+        saveStateToStorage();
+        if (cb) cb();
+      })
+      .catch(function (e) {
+        if (cb) cb();
+      });
+  }
+
+  function dropOffAndUpdateDb(orderId, newLoc, idx) {
+    var sup = getSupabaseClient();
+    if (!sup) return;
+    var driverId = getDriverId();
+    sup.from("driver_state").select("empty_seats").eq("driver_id", driverId).maybeSingle()
+      .then(function (r) {
+        var nextSeats = (r.data && r.data.empty_seats != null) ? Math.min(4, r.data.empty_seats + 1) : 1;
+        return Promise.all([
+          sup.from("driver_state").update({ current_loc: newLoc, empty_seats: nextSeats }).eq("driver_id", driverId),
+          sup.from("order_pool").update({ status: "completed", assigned_driver_id: null }).eq("id", orderId)
+        ]);
+      })
+      .then(function () {
+        passengerRows.splice(idx, 1);
+        applyPassengerRows();
+        if (newLoc) document.getElementById("driverLoc").value = newLoc;
+        var seatsEl = document.getElementById("emptySeats");
+        if (seatsEl) seatsEl.value = String(Math.min(4, parseInt(seatsEl.value, 10) + 1));
+        renderPassengerList();
+        saveStateToStorage();
+      })
+      .catch(function (e) {
+        document.getElementById("gpsStatus").textContent = "下车更新失败: " + (e.message || e);
+      });
   }
 
   function getCurrentState() {
@@ -248,9 +342,14 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ lat: lat, lng: lng })
-        }).then(function (r) { return r.json(); }).then(function (d) {
+        }).then(function (r) { return r.json();         }).then(function (d) {
           input.value = d.address || (lat.toFixed(5) + ", " + lng.toFixed(5));
           status.textContent = "已更新位置";
+          saveStateToStorage();
+          var sup = getSupabaseClient();
+          if (sup) {
+            sup.from("driver_state").update({ current_loc: input.value.trim() }).eq("driver_id", getDriverId()).then(function () {});
+          }
         }).catch(function (e) {
           input.value = lat.toFixed(5) + ", " + lng.toFixed(5);
           status.textContent = "反查地址失败，已填经纬度";
@@ -372,9 +471,32 @@
       "<p class=\"text-console text-muted mb-3\">送：" + (row.delivery || "").slice(0, 28) + (row.delivery && row.delivery.length > 28 ? "…" : "") + "</p>" +
       "<button type=\"button\" class=\"add-to-cabin w-full py-3 rounded-xl bg-accent hover:bg-blue-600 text-white font-medium\">➕ 添加至我的车厢</button>";
     li.querySelector(".add-to-cabin").onclick = function () {
-      pickups.push(row.pickup || "");
-      deliveries.push(row.delivery || "");
-      renderPassengerList();
+      var sup = getSupabaseClient();
+      if (sup) {
+        var driverId = getDriverId();
+        sup.from("order_pool").select("id").eq("pickup", row.pickup || "").eq("delivery", row.delivery || "").eq("status", "pending_match").limit(1)
+          .then(function (res) {
+            if (res.data && res.data[0]) {
+              return sup.from("order_pool").update({ status: "assigned", assigned_driver_id: driverId }).eq("id", res.data[0].id)
+                .then(function () { return sup.from("driver_state").select("empty_seats").eq("driver_id", driverId).maybeSingle(); })
+                .then(function (r) {
+                  var next = (r.data && r.data.empty_seats != null) ? Math.max(0, r.data.empty_seats - 1) : 3;
+                  return sup.from("driver_state").update({ empty_seats: next }).eq("driver_id", driverId);
+                })
+                .then(function () { loadFromDb(); });
+            }
+            passengerRows.push({ id: null, pickup: row.pickup || "", delivery: row.delivery || "" });
+            applyPassengerRows();
+            renderPassengerList();
+            saveStateToStorage();
+          });
+      } else {
+        pickups.push(row.pickup || "");
+        deliveries.push(row.delivery || "");
+        passengerRows.push({ id: null, pickup: row.pickup || "", delivery: row.delivery || "" });
+        renderPassengerList();
+        saveStateToStorage();
+      }
     };
     list.insertBefore(li, list.firstChild);
     while (list.children.length > 20) list.removeChild(list.lastChild);
@@ -382,113 +504,6 @@
     if (status) status.textContent = "新推送会出现在上方；抢到后点「添加至我的车厢」。";
   }
   window.addEventListener("smartdiaodu_push", function (e) { if (e.detail) addPushEvent(e.detail); });
-
-  // ---------- 地图（沿用原逻辑） ----------
-  var map = null, bmap = null, markers = [], routeLine = null, lastRouteData = null;
-  var mapTypeEl = document.getElementById("mapType");
-  function getBaiduMapAk() { return (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.baiduMapAk) || ""; }
-  function wgs84ToBd09(lat, lng) {
-    var x_PI = (3.14159265358979324 * 3000.0) / 180.0, a = 6378245.0, ee = 0.00669342162296594323;
-    function trLat(x, y) {
-      var r = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
-      r += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
-      r += (20 * Math.sin(y * Math.PI) + 40 * Math.sin(y / 3 * Math.PI)) * 2 / 3;
-      return r;
-    }
-    function trLng(x, y) {
-      var r = 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
-      r += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
-      r += (20 * Math.sin(x * Math.PI) + 40 * Math.sin(x / 3 * Math.PI)) * 2 / 3;
-      return r;
-    }
-    var dlat = trLat(lng - 105, lat - 35), dlng = trLng(lng - 105, lat - 35);
-    var radlat = (lat / 180) * Math.PI, magic = 1 - ee * Math.sin(radlat) * Math.sin(radlat), sqrtmagic = Math.sqrt(magic);
-    dlat = (dlat * 180) / ((a * (1 - ee)) / (magic * sqrtmagic) * Math.PI);
-    dlng = (dlng * 180) / (a / sqrtmagic * Math.cos(radlat) * Math.PI);
-    var mglat = lat + dlat, mglng = lng + dlng;
-    return [mglng + 0.0065 * Math.cos(mglat * x_PI), mglat + 0.006 * Math.sin(mglng * x_PI)];
-  }
-  function getMapType() { return (mapTypeEl && mapTypeEl.value) || "osm"; }
-  function destroyMap() {
-    if (map) { map.remove(); map = null; }
-    if (bmap) { try { bmap.destroy(); } catch (e) {} bmap = null; }
-    markers = []; routeLine = null;
-  }
-  function initMap() {
-    var useBaidu = getMapType() === "baidu";
-    var ak = getBaiduMapAk();
-    if (useBaidu && !ak) {
-      document.getElementById("routeInfo").textContent = "未配置百度地图 AK，或选 OpenStreetMap";
-      return;
-    }
-    destroyMap();
-    if (useBaidu) {
-      if (!window.BMap) {
-        var script = document.createElement("script");
-        script.src = "https://api.map.baidu.com/api?v=3.0&ak=" + ak + "&s=1";
-        script.onload = function () { initBaiduMap(); if (lastRouteData) drawRoute(lastRouteData); };
-        document.head.appendChild(script);
-        return;
-      }
-      initBaiduMap();
-      if (lastRouteData) drawRoute(lastRouteData);
-      return;
-    }
-    map = L.map("map").setView([32.0, 121.0], 10);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OSM" }).addTo(map);
-    if (lastRouteData) drawRoute(lastRouteData);
-  }
-  function initBaiduMap() {
-    if (bmap) return;
-    bmap = new window.BMap.Map("map");
-    bmap.centerAndZoom(new window.BMap.Point(121.0, 32.0), 10);
-    bmap.enableScrollWheelZoom(true);
-  }
-  function clearMapOverlays() {
-    if (map) { markers.forEach(function (m) { map.removeLayer(m); }); markers = []; if (routeLine) { map.removeLayer(routeLine); routeLine = null; } }
-    if (bmap) bmap.clearOverlays();
-  }
-  var typeColor = { driver: "#3b82f6", pickup: "#22c55e", delivery: "#ef4444" };
-  function drawRoute(data) {
-    lastRouteData = data;
-    var coords = data.route_coords || [], addresses = data.route_addresses || [], types = data.point_types || [];
-    if (coords.length === 0) return;
-    clearMapOverlays();
-    var useBaidu = getMapType() === "baidu" && bmap;
-    if (useBaidu) {
-      var points = [];
-      coords.forEach(function (c, i) {
-        var bd = wgs84ToBd09(c[0], c[1]);
-        points.push(new window.BMap.Point(bd[0], bd[1]));
-        var mk = new window.BMap.Marker(new window.BMap.Point(bd[0], bd[1]));
-        mk.setLabel(new window.BMap.Label((types[i] || "途经") + (addresses[i] ? " " + addresses[i].slice(0, 10) + "…" : ""), { offset: new window.BMap.Size(10, -10) }));
-        bmap.addOverlay(mk);
-      });
-      bmap.addOverlay(new window.BMap.Polyline(points.map(function (p) { return p; }), { strokeColor: "#3b82f6", strokeWeight: 4 }));
-      bmap.setViewport(points);
-    } else if (map) {
-      var latlngs = coords.map(function (c) { return [c[0], c[1]]; });
-      routeLine = L.polyline(latlngs, { color: "#3b82f6", weight: 4 }).addTo(map);
-      map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
-      coords.forEach(function (c, i) {
-        var color = typeColor[types[i]] || "#888";
-        var m = L.circleMarker([c[0], c[1]], { radius: 8, fillColor: color, color: "#fff", weight: 2, fillOpacity: 1 }).addTo(map);
-        m.bindPopup(addresses[i] || "");
-        markers.push(m);
-      });
-    }
-    document.getElementById("routeInfo").textContent = "途经 " + addresses.length + " 点，预估约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟";
-  }
-  document.getElementById("btnUpdateMap").onclick = function () {
-    var base = getApiBase();
-    if (!base) return;
-    initMap();
-    document.getElementById("routeInfo").textContent = "加载中…";
-    fetch(base + "/current_route_preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ current_state: getCurrentState() }) })
-      .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); }); return r.json(); })
-      .then(drawRoute)
-      .catch(function (e) { document.getElementById("routeInfo").textContent = "失败：" + (e.message || e); clearMapOverlays(); });
-  };
 
   // ---------- 登录与退出 ----------
   if (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_USERNAME)) {
@@ -504,11 +519,17 @@
   };
 
   function run() {
-    renderPassengerList();
-    refreshMode();
-    loadConfig();
+    var locEl = document.getElementById("driverLoc");
+    if (locEl) locEl.addEventListener("change", saveStateToStorage);
+    if (locEl) locEl.addEventListener("input", saveStateToStorage);
     document.getElementById("planPanel").classList.add("hidden");
-    refreshMode();
+    loadFromDb(function () {
+      renderPassengerList();
+      refreshMode();
+      loadConfig();
+      refreshMode();
+      saveStateToStorage();
+    });
   }
 
   function checkAuthAndRun() {

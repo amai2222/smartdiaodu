@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c0c0f" />
+  <title>路线地图 · 全屏</title>
+  <script src="config.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; }
+    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+    .toolbar {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      z-index: 1000;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .toolbar select, .toolbar button, .toolbar a {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid #2a2d35;
+      background: rgba(20, 21, 26, 0.95);
+      color: #e6edf3;
+      font-size: 0.95rem;
+      text-decoration: none;
+    }
+    .toolbar button { cursor: pointer; }
+    .toolbar a { display: inline-block; }
+    .toolbar .status { color: #8b9199; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="toolbar">
+    <select id="mapType">
+      <option value="baidu">百度地图</option>
+      <option value="osm">OpenStreetMap</option>
+    </select>
+    <button type="button" id="btnRefresh">更新路线</button>
+    <a href="index.html" target="_self">← 返回控制台</a>
+    <span id="routeInfo" class="status"></span>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+(function () {
+  var STORAGE_API = "smartdiaodu_api_base";
+  var STORAGE_DRIVER_LOC = "smartdiaodu_driver_loc";
+  var STORAGE_PICKUPS = "smartdiaodu_pickups";
+  var STORAGE_DELIVERIES = "smartdiaodu_deliveries";
+
+  function getApiBase() {
+    var v = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) || (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.apiBase) || "";
+    return (v || "").trim().replace(/\/$/, "");
+  }
+  function getBaiduMapAk() { return (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.baiduMapAk) || ""; }
+  function getCurrentState() {
+    var driver_loc = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_DRIVER_LOC)) || "";
+    var pickups = [];
+    var deliveries = [];
+    try {
+      var p = localStorage.getItem(STORAGE_PICKUPS);
+      var d = localStorage.getItem(STORAGE_DELIVERIES);
+      if (p) pickups = JSON.parse(p);
+      if (d) deliveries = JSON.parse(d);
+    } catch (e) {}
+    return { driver_loc: driver_loc || "如东县委党校", pickups: pickups, deliveries: deliveries };
+  }
+
+  var map = null, bmap = null, markers = [], routeLine = null, lastRouteData = null;
+  var mapTypeEl = document.getElementById("mapType");
+
+  function wgs84ToBd09(lat, lng) {
+    var x_PI = (3.14159265358979324 * 3000.0) / 180.0, a = 6378245.0, ee = 0.00669342162296594323;
+    function trLat(x, y) {
+      var r = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+      r += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
+      r += (20 * Math.sin(y * Math.PI) + 40 * Math.sin(y / 3 * Math.PI)) * 2 / 3;
+      return r;
+    }
+    function trLng(x, y) {
+      var r = 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+      r += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
+      r += (20 * Math.sin(x * Math.PI) + 40 * Math.sin(x / 3 * Math.PI)) * 2 / 3;
+      return r;
+    }
+    var dlat = trLat(lng - 105, lat - 35), dlng = trLng(lng - 105, lat - 35);
+    var radlat = (lat / 180) * Math.PI, magic = 1 - ee * Math.sin(radlat) * Math.sin(radlat), sqrtmagic = Math.sqrt(magic);
+    dlat = (dlat * 180) / ((a * (1 - ee)) / (magic * sqrtmagic) * Math.PI);
+    dlng = (dlng * 180) / (a / sqrtmagic * Math.cos(radlat) * Math.PI);
+    var mglat = lat + dlat, mglng = lng + dlng;
+    return [mglng + 0.0065 * Math.cos(mglat * x_PI), mglat + 0.006 * Math.sin(mglng * x_PI)];
+  }
+
+  function getMapType() { return (mapTypeEl && mapTypeEl.value) || "osm"; }
+  function destroyMap() {
+    if (map) { map.remove(); map = null; }
+    if (bmap) { try { bmap.destroy(); } catch (e) {} bmap = null; }
+    markers = []; routeLine = null;
+  }
+
+  function initMap() {
+    var useBaidu = getMapType() === "baidu";
+    var ak = getBaiduMapAk();
+    if (useBaidu && !ak) {
+      document.getElementById("routeInfo").textContent = "未配置百度地图 AK，或选 OpenStreetMap";
+      return;
+    }
+    destroyMap();
+    if (useBaidu) {
+      if (!window.BMap) {
+        var script = document.createElement("script");
+        script.src = "https://api.map.baidu.com/api?v=3.0&ak=" + ak + "&s=1";
+        script.onload = function () { initBaiduMap(); if (lastRouteData) drawRoute(lastRouteData); };
+        document.head.appendChild(script);
+        return;
+      }
+      initBaiduMap();
+      if (lastRouteData) drawRoute(lastRouteData);
+      return;
+    }
+    map = L.map("map").setView([32.0, 121.0], 10);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OSM" }).addTo(map);
+    if (lastRouteData) drawRoute(lastRouteData);
+  }
+
+  function initBaiduMap() {
+    if (bmap) return;
+    bmap = new window.BMap.Map("map");
+    bmap.centerAndZoom(new window.BMap.Point(121.0, 32.0), 10);
+    bmap.enableScrollWheelZoom(true);
+  }
+
+  function clearMapOverlays() {
+    if (map) { markers.forEach(function (m) { map.removeLayer(m); }); markers = []; if (routeLine) { map.removeLayer(routeLine); routeLine = null; } }
+    if (bmap) bmap.clearOverlays();
+  }
+
+  var typeColor = { driver: "#3b82f6", pickup: "#22c55e", delivery: "#ef4444" };
+  function drawRoute(data) {
+    lastRouteData = data;
+    var coords = data.route_coords || [], addresses = data.route_addresses || [], types = data.point_types || [];
+    document.getElementById("routeInfo").textContent = "途经 " + addresses.length + " 点，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟";
+    if (coords.length === 0) return;
+    clearMapOverlays();
+    var useBaidu = getMapType() === "baidu" && bmap;
+    if (useBaidu) {
+      var points = [];
+      coords.forEach(function (c, i) {
+        var bd = wgs84ToBd09(c[0], c[1]);
+        points.push(new window.BMap.Point(bd[0], bd[1]));
+        var mk = new window.BMap.Marker(new window.BMap.Point(bd[0], bd[1]));
+        mk.setLabel(new window.BMap.Label((types[i] || "途经") + (addresses[i] ? " " + addresses[i].slice(0, 10) + "…" : ""), { offset: new window.BMap.Size(10, -10) }));
+        bmap.addOverlay(mk);
+      });
+      bmap.addOverlay(new window.BMap.Polyline(points, { strokeColor: "#3b82f6", strokeWeight: 4 }));
+      bmap.setViewport(points);
+    } else if (map) {
+      var latlngs = coords.map(function (c) { return [c[0], c[1]]; });
+      routeLine = L.polyline(latlngs, { color: "#3b82f6", weight: 4 }).addTo(map);
+      map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+      coords.forEach(function (c, i) {
+        var color = typeColor[types[i]] || "#888";
+        var m = L.circleMarker([c[0], c[1]], { radius: 10, fillColor: color, color: "#fff", weight: 2, fillOpacity: 1 }).addTo(map);
+        m.bindPopup(addresses[i] || "");
+        markers.push(m);
+      });
+    }
+  }
+
+  function loadAndDraw() {
+    var base = getApiBase();
+    if (!base) {
+      document.getElementById("routeInfo").textContent = "未配置后端（config.js apiBase）";
+      return;
+    }
+    document.getElementById("routeInfo").textContent = "加载中…";
+    var state = getCurrentState();
+    fetch(base + "/current_route_preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current_state: state })
+    })
+      .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); }); return r.json(); })
+      .then(function (data) {
+        initMap();
+        drawRoute(data);
+        if (bmap && typeof bmap.invalidateSize === "function") bmap.invalidateSize();
+        if (map && typeof map.invalidateSize === "function") map.invalidateSize();
+      })
+      .catch(function (e) {
+        document.getElementById("routeInfo").textContent = "失败：" + (e.message || e);
+        clearMapOverlays();
+      });
+  }
+
+  document.getElementById("btnRefresh").onclick = loadAndDraw;
+  if (mapTypeEl) mapTypeEl.addEventListener("change", function () { destroyMap(); initMap(); if (lastRouteData) drawRoute(lastRouteData); });
+
+  loadAndDraw();
+})();
+  </script>
+</body>
+</html>
