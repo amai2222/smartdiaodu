@@ -78,6 +78,9 @@
     /* 隐藏百度地图底部版权/署名栏 */
     #map .anchorBL,
     #map .BMap_cpyCtrl { display: none !important; }
+    /* 起点/终点标注样式（与百度 App 一致：起=绿，终=红） */
+    .route-label-qi { font-weight: 700; font-size: 14px; color: #fff !important; background: #22c55e !important; border: none; padding: 4px 10px; border-radius: 50%; min-width: 28px; text-align: center; }
+    .route-label-zhong { font-weight: 700; font-size: 14px; color: #fff !important; background: #ef4444 !important; border: none; padding: 4px 10px; border-radius: 50%; min-width: 28px; text-align: center; }
   </style>
 </head>
 <body>
@@ -192,6 +195,7 @@
   }
 
   var bmap = null, lastRouteData = null;
+  var useBMapGL = false;
   var route_addresses = [], route_coords = [], point_types = [], point_labels = [];
   var route_path = [];
   var currentStopIndex = 0;
@@ -269,57 +273,132 @@
       return;
     }
     destroyMap();
-    if (!window.BMap) {
-      window.baiduMapReady = function () {
-        window.baiduMapReady = null;
-        if (!window.BMap || typeof window.BMap.Map !== "function") {
-          document.getElementById("routeInfo").textContent = "百度地图 API 未就绪（脚本可能被拦截或返回错误）。请打开 F12 → Network，查看 api.map.baidu.com 是否返回 403，并确认 AK 与白名单正确。";
-          return;
-        }
-        initBaiduMap();
-        if (lastRouteData) drawRouteFromIndex(currentStopIndex);
-      };
-      var script = document.createElement("script");
-      script.src = "https://api.map.baidu.com/api?v=3.0&ak=" + encodeURIComponent(ak) + "&s=1&callback=baiduMapReady";
-      script.onerror = function () {
-        document.getElementById("routeInfo").textContent = "百度地图脚本加载失败（网络或地址无效）。请检查 F12 → Network 中 api.map.baidu.com 请求。";
-      };
-      document.head.appendChild(script);
+    if (window.BMapGL && typeof window.BMapGL.Map === "function") {
+      useBMapGL = true;
+      initBaiduMap();
+      if (lastRouteData) drawRouteFromIndex(currentStopIndex);
       return;
     }
-    initBaiduMap();
-    if (lastRouteData) drawRouteFromIndex(currentStopIndex);
+    if (window.BMap && typeof window.BMap.Map === "function") {
+      useBMapGL = false;
+      initBaiduMap();
+      if (lastRouteData) drawRouteFromIndex(currentStopIndex);
+      return;
+    }
+    window.baiduMapReady = function () {
+      window.baiduMapReady = null;
+      if (window.BMapGL && typeof window.BMapGL.Map === "function") {
+        useBMapGL = true;
+        initBaiduMap();
+        if (lastRouteData) drawRouteFromIndex(currentStopIndex);
+        return;
+      }
+      if (window.BMap && typeof window.BMap.Map === "function") {
+        useBMapGL = false;
+        initBaiduMap();
+        if (lastRouteData) drawRouteFromIndex(currentStopIndex);
+        return;
+      }
+      document.getElementById("routeInfo").textContent = "百度地图 API 未就绪。请检查 F12 → Network 中 api.map.baidu.com 请求与 AK 白名单。";
+    };
+    var script = document.createElement("script");
+    script.src = "https://api.map.baidu.com/api?v=1.0&type=webgl&ak=" + encodeURIComponent(ak) + "&callback=baiduMapReady";
+    script.onerror = function () {
+      var fallback = document.createElement("script");
+      fallback.src = "https://api.map.baidu.com/api?v=3.0&ak=" + encodeURIComponent(ak) + "&s=1&callback=baiduMapReady";
+      fallback.onerror = function () {
+        document.getElementById("routeInfo").textContent = "百度地图脚本加载失败。请检查网络与 AK。";
+      };
+      document.head.appendChild(fallback);
+    };
+    document.head.appendChild(script);
   }
 
   function initBaiduMap() {
     if (bmap) return;
-    if (!window.BMap || typeof window.BMap.Map !== "function") {
-      console.warn("[地图] BMap 未定义，跳过初始化");
-      return;
-    }
     var container = document.getElementById("map");
     if (!container) return;
-    bmap = new window.BMap.Map("map");
-    bmap.centerAndZoom(new window.BMap.Point(121.0, 32.0), 10);
-    bmap.enableScrollWheelZoom(true);
-    if (typeof bmap.enableDragging === "function") bmap.enableDragging();
-    if (typeof bmap.enableInertialDragging === "function") bmap.enableInertialDragging();
-    if (typeof bmap.enableDoubleClickZoom === "function") bmap.enableDoubleClickZoom(true);
-    // 瓦片加载完成/失败时在控制台输出，便于排查白屏
-    if (typeof bmap.addEventListener === "function") {
-      bmap.addEventListener("tilesloaded", function () { console.log("[地图] 瓦片已加载"); });
+    if (useBMapGL && window.BMapGL && typeof window.BMapGL.Map === "function") {
+      bmap = new window.BMapGL.Map("map");
+      bmap.centerAndZoom(new window.BMapGL.Point(121.18, 32.32), 10);
+      bmap.enableScrollWheelZoom(true);
+      if (typeof bmap.invalidateSize === "function") setTimeout(function () { bmap.invalidateSize(); }, 200);
+      return;
     }
-    // 容器尺寸变化或延迟渲染时强制刷新，避免白屏
-    setTimeout(function () {
-      if (bmap && typeof bmap.invalidateSize === "function") bmap.invalidateSize();
-    }, 200);
+    if (window.BMap && typeof window.BMap.Map === "function") {
+      bmap = new window.BMap.Map("map");
+      bmap.centerAndZoom(new window.BMap.Point(121.0, 32.0), 10);
+      bmap.enableScrollWheelZoom(true);
+      if (typeof bmap.enableDragging === "function") bmap.enableDragging();
+      if (typeof bmap.enableInertialDragging === "function") bmap.enableInertialDragging();
+      if (typeof bmap.enableDoubleClickZoom === "function") bmap.enableDoubleClickZoom(true);
+      if (typeof bmap.addEventListener === "function") {
+        bmap.addEventListener("tilesloaded", function () { console.log("[地图] 瓦片已加载"); });
+      }
+      setTimeout(function () {
+        if (bmap && typeof bmap.invalidateSize === "function") bmap.invalidateSize();
+      }, 200);
+    }
   }
 
   function clearMapOverlays() {
-    if (bmap) bmap.clearOverlays();
+    if (bmap) {
+      if (typeof bmap.clearOverlays === "function") bmap.clearOverlays();
+      else if (typeof bmap.getOverlays === "function") {
+        var list = bmap.getOverlays();
+        if (list && list.length) for (var i = 0; i < list.length; i++) bmap.removeOverlay(list[i]);
+      }
+    }
   }
 
-  /** 按实际驾车道路绘制路线：优先用后端返回的 route_path（百度 direction/v2/driving），否则分段 BMap.DrivingRoute */
+  /** 生成起点/终点圆形图标 data URL（与百度 App 一致：起=绿，终=红） */
+  function getStartEndIconDataURL(text, bgColor) {
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36"><circle cx="18" cy="18" r="16" fill="' + bgColor + '" stroke="#fff" stroke-width="2"/><text x="18" y="23" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold" font-family="sans-serif">' + text + '</text></svg>';
+    return "data:image/svg+xml," + encodeURIComponent(s);
+  }
+
+  /** 添加起/终/途经点标注（NS = BMapGL 或 BMap） */
+  function addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS) {
+    var orderNums = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
+    for (var i = 0; i < bdPoints.length; i++) {
+      var pt = bdPoints[i];
+      var num = fromIndex + i + 1;
+      var orderStr = orderNums[num - 1] || num + ".";
+      var typeLabel = (labels && labels[i]) || (types && types[i]) || "途经";
+      var addrShort = (addresses && addresses[i]) ? " " + addresses[i].slice(0, 10) + (addresses[i].length > 10 ? "…" : "") : "";
+      var mk;
+      if (i === 0) {
+        mk = new NS.Marker(pt, { icon: new NS.Icon(getStartEndIconDataURL("起", "#22c55e"), new NS.Size(36, 36)) });
+        if (mk.setLabel) mk.setLabel(new NS.Label("起点 " + (addrShort || "司机"), { offset: new NS.Size(0, -22) }));
+      } else if (i === bdPoints.length - 1) {
+        mk = new NS.Marker(pt, { icon: new NS.Icon(getStartEndIconDataURL("终", "#ef4444"), new NS.Size(36, 36)) });
+        if (mk.setLabel) mk.setLabel(new NS.Label("终点" + addrShort, { offset: new NS.Size(0, -22) }));
+      } else {
+        mk = new NS.Marker(pt);
+        if (mk.setLabel) mk.setLabel(new NS.Label(orderStr + " " + typeLabel + addrShort, { offset: new NS.Size(10, -10) }));
+      }
+      bmap.addOverlay(mk);
+    }
+  }
+
+  /** 在 path 上绘制带方向箭头的折线（BMap 时用；BMapGL 由 DrivingRoute 直接画） */
+  function addDirectionalPolyline(pathBd, strokeColor) {
+    if (useBMapGL) return;
+    strokeColor = strokeColor || "#18a45b";
+    try {
+      var SymbolShape = window.BMap_Symbol_SHAPE_FORWARD_CLOSED_ARROW || window.BMap_Symbol_SHAPE_BACKWARD_OPEN_ARROW;
+      if (window.BMap.Symbol && window.BMap.IconSequence && SymbolShape != null) {
+        var sy = new window.BMap.Symbol(SymbolShape, { scale: 0.6, strokeColor: "#fff", fillColor: "#fff", strokeWeight: 1 });
+        var icons = new window.BMap.IconSequence(sy, "100%", "8%");
+        var line = new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: 6, strokeOpacity: 0.95, icons: [icons] });
+        bmap.addOverlay(line);
+        return;
+      }
+    } catch (e) {}
+    bmap.addOverlay(new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: 6, strokeOpacity: 0.95 }));
+  }
+
+  /** 按实际驾车道路绘制路线：BMapGL 用 DrivingRoute 一次规划贴合道路，BMap 用 route_path 或分段规划 */
   function drawRouteFromIndex(fromIndex) {
     if (!lastRouteData) return;
     var coords = route_coords.slice(fromIndex);
@@ -330,37 +409,43 @@
     if (coords.length === 0) return;
     clearMapOverlays();
     if (!bmap) return;
+    var NS = useBMapGL ? window.BMapGL : window.BMap;
+    if (!NS || !NS.Point) return;
     var bdPoints = [];
-    var orderNums = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
     for (var i = 0; i < coords.length; i++) {
       var c = coords[i];
       if (!c || c[0] == null || c[1] == null) continue;
       var bd = wgs84ToBd09(c[0], c[1]);
       if (!bd || bd[0] == null || bd[1] == null) continue;
-      var pt = new window.BMap.Point(bd[0], bd[1]);
-      bdPoints.push(pt);
-      var num = fromIndex + i + 1;
-      var orderStr = orderNums[num - 1] || num + ".";
-      var typeLabel = labels[i] || types[i] || "途经";
-      var addrShort = addresses[i] ? " " + addresses[i].slice(0, 10) + (addresses[i].length > 10 ? "…" : "") : "";
-      var labelText;
-      if (i === 0) {
-        labelText = orderStr + " 起点 司机" + addrShort;
-      } else if (i === coords.length - 1) {
-        labelText = orderStr + " 终点" + addrShort;
-      } else {
-        labelText = orderStr + " " + typeLabel + addrShort;
-      }
-      var mk = new window.BMap.Marker(pt);
-      mk.setLabel(new window.BMap.Label(labelText, { offset: new window.BMap.Size(10, -10) }));
-      bmap.addOverlay(mk);
+      bdPoints.push(new NS.Point(bd[0], bd[1]));
     }
     if (bdPoints.length === 0) return;
     if (bdPoints.length === 1) {
-      bmap.setCenter(bdPoints[0]);
-      bmap.setZoom(14);
+      bmap.setCenter && bmap.setCenter(bdPoints[0]);
+      bmap.setZoom && bmap.setZoom(14);
+      addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
       return;
     }
+    if (useBMapGL && window.BMapGL && window.BMapGL.DrivingRoute) {
+      var driving = new window.BMapGL.DrivingRoute(bmap, {
+        renderOptions: { map: bmap, autoViewport: true }
+      });
+      var start = bdPoints[0], end = bdPoints[bdPoints.length - 1];
+      var waypoints = bdPoints.length > 2 ? bdPoints.slice(1, -1).slice(0, 10) : [];
+      document.getElementById("routeInfo").textContent = "正在规划驾车路线…";
+      driving.search(start, end, waypoints.length ? { waypoints: waypoints } : undefined);
+      var onDone = function () {
+        addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
+        document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站";
+      };
+      if (typeof driving.setSearchCompleteCallback === "function") {
+        driving.setSearchCompleteCallback(onDone);
+      } else {
+        setTimeout(onDone, 1500);
+      }
+      return;
+    }
+    addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
     if (route_path && route_path.length > 1) {
       var pathBd = [];
       for (var j = 0; j < route_path.length; j++) {
@@ -370,31 +455,29 @@
         if (bd && bd[0] != null && bd[1] != null) pathBd.push(new window.BMap.Point(bd[0], bd[1]));
       }
       if (pathBd.length > 1) {
-        bmap.addOverlay(new window.BMap.Polyline(pathBd, { strokeColor: "#3b82f6", strokeWeight: 4 }));
-        bmap.setViewport(bdPoints);
+        addDirectionalPolyline(pathBd, "#18a45b");
+        if (bmap.setViewport) bmap.setViewport(bdPoints);
         document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站";
         return;
       }
     }
     if (typeof window.BMap.DrivingRoute === "undefined") {
-      bmap.addOverlay(new window.BMap.Polyline(bdPoints, { strokeColor: "#3b82f6", strokeWeight: 4 }));
-      bmap.setViewport(bdPoints);
+      addDirectionalPolyline(bdPoints, "#18a45b");
+      if (bmap.setViewport) bmap.setViewport(bdPoints);
       return;
     }
-    // 无 route_path 时：分段 BMap.DrivingRoute 规划
     var opts = {
       renderOptions: { map: null },
       policy: (window.BMap.DrivingPolicy && window.BMap.DrivingPolicy.LEAST_TIME) || undefined
     };
     var driving = new window.BMap.DrivingRoute(bmap, opts);
     var segIndex = 0;
-    var failed = false;
     function updateStatus() {
       document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站";
     }
     function searchNextSegment() {
-      if (failed || segIndex >= bdPoints.length - 1) {
-        bmap.setViewport(bdPoints);
+      if (segIndex >= bdPoints.length - 1) {
+        if (bmap.setViewport) bmap.setViewport(bdPoints);
         updateStatus();
         return;
       }
@@ -406,23 +489,19 @@
         try {
           var route = results.getPlan(0).getRoute && results.getPlan(0).getRoute(0);
           var path = route && route.getPath && route.getPath();
-          if (path && path.length > 0) {
-            var line = new window.BMap.Polyline(path, { strokeColor: "#3b82f6", strokeWeight: 4 });
-            bmap.addOverlay(line);
-          } else {
-            bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#3b82f6", strokeWeight: 4 }));
-          }
+          if (path && path.length > 0) addDirectionalPolyline(path, "#18a45b");
+          else bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#18a45b", strokeWeight: 6 }));
         } catch (e) {
-          bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#3b82f6", strokeWeight: 4 }));
+          bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#18a45b", strokeWeight: 6 }));
         }
       } else {
-        bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#3b82f6", strokeWeight: 4 }));
+        bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#18a45b", strokeWeight: 6 }));
       }
       segIndex++;
       searchNextSegment();
     });
     driving.setErrorCallback(function () {
-      bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#3b82f6", strokeWeight: 4 }));
+      bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#18a45b", strokeWeight: 6 }));
       segIndex++;
       searchNextSegment();
     });
