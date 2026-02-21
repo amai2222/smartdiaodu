@@ -75,6 +75,34 @@
     body.toolbar-hidden .toolbar { display: none !important; }
     body.toolbar-hidden #navPanel { display: none !important; }
     body.toolbar-hidden #allDonePanel { display: none !important; }
+    body.toolbar-hidden #routeStrategyPanel { display: none !important; }
+    #routeStrategyPanel {
+      position: fixed;
+      top: 52px;
+      left: 12px;
+      z-index: 1002;
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(20, 21, 26, 0.98);
+      border: 1px solid #2a2d35;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 140px;
+    }
+    #routeStrategyPanel.show { display: flex; }
+    #routeStrategyPanel button {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #2a2d35;
+      background: rgba(40, 43, 53, 0.9);
+      color: #e6edf3;
+      font-size: 0.9rem;
+      cursor: pointer;
+      text-align: left;
+    }
+    #routeStrategyPanel button:hover { background: rgba(59, 130, 246, 0.3); }
+    #routeStrategyPanel button.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.2); }
     /* 隐藏百度地图底部版权/署名栏 */
     #map .anchorBL,
     #map .BMap_cpyCtrl { display: none !important; }
@@ -91,8 +119,15 @@
     <button type="button" id="btnRestore">恢复上次线路</button>
     <a href="index.html" target="_self">← 返回控制台</a>
     <a id="btnOpenNavToolbar" href="#" target="_blank" rel="noopener" class="toolbar-nav" style="display: none;">打开百度导航</a>
+    <button type="button" id="btnStrategy" title="路线策略">路线策略</button>
     <span id="routeInfo" class="status"></span>
     <button type="button" id="btnCollapse" title="收起菜单">收起</button>
+  </div>
+  <div id="routeStrategyPanel" class="">
+    <button type="button" data-policy="LEAST_TIME">用时最短</button>
+    <button type="button" data-policy="LEAST_DISTANCE">距离最短</button>
+    <button type="button" data-policy="LEAST_FEE">费用最省</button>
+    <button type="button" data-policy="AVOID_CONGESTION">躲避拥堵</button>
   </div>
   <button type="button" id="btnToggleUI" title="显示菜单">≡ 菜单</button>
   <div id="navPanel" class="nav-panel" style="display: none;">
@@ -199,6 +234,18 @@
   var route_addresses = [], route_coords = [], point_types = [], point_labels = [];
   var route_path = [];
   var currentStopIndex = 0;
+  var routePolicyKey = "LEAST_TIME";
+
+  /** 根据策略 key 返回 BMap.DrivingPolicy 常量（无则回退 LEAST_TIME） */
+  function getDrivingPolicyValue(key) {
+    var P = window.BMap && window.BMap.DrivingPolicy;
+    if (!P) return undefined;
+    var k = (key || routePolicyKey || "LEAST_TIME").toUpperCase();
+    if (P[k] != null) return P[k];
+    if (k === "LEAST_FEE" && P.LEAST_TOLL != null) return P.LEAST_TOLL;
+    if (P.LEAST_TIME != null) return P.LEAST_TIME;
+    return undefined;
+  }
 
   function wgs84ToBd09(lat, lng) {
     var x_PI = (3.14159265358979324 * 3000.0) / 180.0, a = 6378245.0, ee = 0.00669342162296594323;
@@ -452,7 +499,7 @@
     }
     var opts = {
       renderOptions: { map: null },
-      policy: (window.BMap.DrivingPolicy && window.BMap.DrivingPolicy.LEAST_TIME) || undefined
+      policy: getDrivingPolicyValue(routePolicyKey)
     };
     var driving = new window.BMap.DrivingRoute(bmap, opts);
     var segIndex = 0;
@@ -463,32 +510,37 @@
       if (segIndex >= bdPoints.length - 1) {
         if (bmap.setViewport) bmap.setViewport(bdPoints);
         updateStatus();
+        updateNavPanel();
         return;
       }
       driving.search(bdPoints[segIndex], bdPoints[segIndex + 1]);
     }
-    driving.setSearchCompleteCallback(function () {
-      var results = driving.getResults && driving.getResults();
-      if (results && results.getPlan && results.getPlan(0)) {
-        try {
-          var route = results.getPlan(0).getRoute && results.getPlan(0).getRoute(0);
-          var path = route && route.getPath && route.getPath();
-          if (path && path.length > 0) addDirectionalPolyline(path, "#18a45b");
-          else bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#18a45b", strokeWeight: 6 }));
-        } catch (e) {
-          bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#18a45b", strokeWeight: 6 }));
-        }
-      } else {
-        bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#18a45b", strokeWeight: 6 }));
-      }
-      segIndex++;
-      searchNextSegment();
-    });
-    driving.setErrorCallback(function () {
+    var onSegmentFail = function () {
       bmap.addOverlay(new window.BMap.Polyline([bdPoints[segIndex], bdPoints[segIndex + 1]], { strokeColor: "#18a45b", strokeWeight: 6 }));
       segIndex++;
       searchNextSegment();
-    });
+    };
+    if (typeof driving.setSearchCompleteCallback === "function") {
+      driving.setSearchCompleteCallback(function () {
+        var results = driving.getResults && driving.getResults();
+        if (results && results.getPlan && results.getPlan(0)) {
+          try {
+            var route = results.getPlan(0).getRoute && results.getPlan(0).getRoute(0);
+            var path = route && route.getPath && route.getPath();
+            if (path && path.length > 0) {
+              addDirectionalPolyline(path, "#18a45b");
+              segIndex++;
+              searchNextSegment();
+              return;
+            }
+          } catch (e) {}
+        }
+        onSegmentFail();
+      });
+    }
+    if (typeof driving.setErrorCallback === "function") {
+      driving.setErrorCallback(onSegmentFail);
+    }
     document.getElementById("routeInfo").textContent = "正在规划驾车路线…";
     searchNextSegment();
   }
@@ -614,12 +666,56 @@
   document.getElementById("btnCollapse").onclick = function () {
     document.body.classList.add("toolbar-hidden");
     document.getElementById("btnToggleUI").classList.add("show");
+    document.getElementById("routeStrategyPanel").classList.remove("show");
   };
   document.getElementById("btnToggleUI").onclick = function () {
     document.body.classList.remove("toolbar-hidden");
     document.getElementById("btnToggleUI").classList.remove("show");
+    document.getElementById("routeStrategyPanel").classList.remove("show");
     updateNavPanel();
   };
+
+  function updateStrategyPanelActive() {
+    var panel = document.getElementById("routeStrategyPanel");
+    if (!panel) return;
+    var btns = panel.querySelectorAll("button[data-policy]");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle("active", (btns[i].getAttribute("data-policy") || "").toUpperCase() === (routePolicyKey || "LEAST_TIME").toUpperCase());
+    }
+  }
+
+  document.getElementById("btnStrategy").onclick = function (e) {
+    e.stopPropagation();
+    var panel = document.getElementById("routeStrategyPanel");
+    panel.classList.toggle("show");
+    updateStrategyPanelActive();
+  };
+
+  (function () {
+    var strategyBtns = document.getElementById("routeStrategyPanel").querySelectorAll("button[data-policy]");
+    for (var i = 0; i < strategyBtns.length; i++) {
+      (function (btn) {
+        btn.onclick = function () {
+          var key = (btn.getAttribute("data-policy") || "LEAST_TIME").toUpperCase();
+          routePolicyKey = key;
+          document.getElementById("routeStrategyPanel").classList.remove("show");
+          updateStrategyPanelActive();
+          if (lastRouteData && bmap) {
+            document.getElementById("routeInfo").textContent = "正在按「" + (btn.textContent || key) + "」重新规划…";
+            drawRouteFromIndex(currentStopIndex);
+            updateNavPanel();
+          }
+        };
+      })(strategyBtns[i]);
+    }
+  })();
+
+  document.addEventListener("click", function () {
+    document.getElementById("routeStrategyPanel").classList.remove("show");
+  });
+  document.getElementById("routeStrategyPanel").addEventListener("click", function (e) {
+    e.stopPropagation();
+  });
 
   function loadAndDraw() {
     var base = getApiBase();
