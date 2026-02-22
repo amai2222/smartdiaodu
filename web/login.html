@@ -40,6 +40,7 @@
   <script>
 (function () {
   var STORAGE_API = "smartdiaodu_api_base";
+  var STORAGE_TOKEN = "smartdiaodu_token";
   var STORAGE_USERNAME = "smartdiaodu_username";
   var STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
   var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
@@ -85,6 +86,8 @@
         if (typeof localStorage !== "undefined") {
           localStorage.setItem(STORAGE_SUPABASE_URL, url);
           localStorage.setItem(STORAGE_SUPABASE_ANON, anon);
+          var tok = (r.data.session && r.data.session.access_token) ? r.data.session.access_token : "1";
+          localStorage.setItem(STORAGE_TOKEN, tok);
           if (r.data.user && r.data.user.email) localStorage.setItem(STORAGE_USERNAME, r.data.user.email);
           if (cfg.apiBase) localStorage.setItem(STORAGE_API, cfg.apiBase);
           if (cfg.driverId) localStorage.setItem("smartdiaodu_driver_id", cfg.driverId);

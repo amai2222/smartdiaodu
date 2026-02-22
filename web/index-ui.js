@@ -508,12 +508,17 @@
     var un = document.getElementById("userName");
     if (un) un.textContent = "（" + localStorage.getItem(C.STORAGE_USERNAME) + "）";
   }
-  document.getElementById("btnLogout").onclick = function () {
+  function doLogout() {
     var sup = C.getSupabaseClient();
     if (sup) { try { sup.auth.signOut(); } catch (e) {} }
     if (typeof localStorage !== "undefined") { localStorage.removeItem(C.STORAGE_TOKEN); localStorage.removeItem(C.STORAGE_USERNAME); }
     window.location.replace("login.html");
-  };
+  }
+  var btnLogout = document.getElementById("btnLogout");
+  if (btnLogout) {
+    btnLogout.addEventListener("touchstart", function (e) { e.preventDefault(); doLogout(); }, { passive: false });
+    btnLogout.addEventListener("click", function (e) { e.preventDefault(); doLogout(); });
+  }
 
   document.getElementById("btnContinueMatch").onclick = function () {
     var base = C.getApiBase();
@@ -583,27 +588,28 @@
     header.insertAdjacentElement("afterend", banner);
   }
 
-  function checkAuthAndRun() {
-    try {
-      if (typeof localStorage === "undefined") { window.location.replace("login.html"); return; }
-      if (localStorage.getItem(C.STORAGE_TOKEN)) { C.loadAppConfig(run); return; }
-      var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
-      if (!url || !anon || !window.supabase) { window.location.replace("login.html"); return; }
-      var sup = C.getSupabaseClient();
-      if (!sup) { window.location.replace("login.html"); return; }
-      sup.auth.getSession()
-        .then(function (r) {
-          if (r.data && r.data.session) C.loadAppConfig(run);
-          else window.location.replace("login.html");
-        })
-        .catch(function () {
-          C.loadAppConfig(function () { run(); showSupabaseBlockedNotice(); });
-        });
-    } catch (e) {
-      C.loadAppConfig(function () { run(); showSupabaseBlockedNotice(); });
-    }
+  if (window.SmartDiaoduAuth && typeof window.SmartDiaoduAuth.requireAuth === "function") {
+    window.SmartDiaoduAuth.requireAuth(run, { onBlocked: showSupabaseBlockedNotice });
+  } else {
+    (function fallback() {
+      try {
+        if (typeof localStorage === "undefined") { window.location.replace("login.html"); return; }
+        if (localStorage.getItem(C.STORAGE_TOKEN)) { C.loadAppConfig(run); return; }
+        var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
+        if (!url || !anon || !window.supabase) { window.location.replace("login.html"); return; }
+        var sup = C.getSupabaseClient();
+        if (!sup) { window.location.replace("login.html"); return; }
+        sup.auth.getSession()
+          .then(function (r) {
+            if (r.data && r.data.session) C.loadAppConfig(run);
+            else window.location.replace("login.html");
+          })
+          .catch(function () { C.loadAppConfig(function () { run(); showSupabaseBlockedNotice(); }); });
+      } catch (e) {
+        C.loadAppConfig(function () { run(); showSupabaseBlockedNotice(); });
+      }
+    })();
   }
-  checkAuthAndRun();
 })();
 
 (function () {

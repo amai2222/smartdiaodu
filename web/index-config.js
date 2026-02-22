@@ -1,6 +1,7 @@
 /**
  * 控制台 - 配置与 Supabase 连接
  * 依赖：Supabase 已通过 <script> 加载；config.js 可选
+ * 鉴权：需登录页面请引入 auth.js 并调用 SmartDiaoduAuth.requireAuth(callback)，见 web/PAGES.md
  */
 (function () {
   "use strict";

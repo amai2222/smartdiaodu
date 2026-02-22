@@ -1,12 +1,13 @@
 /**
  * 设置页 - 车牌、调度模式、计划、清空途经、绕路/高收益
- * 依赖：index-config.js, index-state.js（共用 C、Supabase、API）
+ * 依赖：index-config.js, index-state.js, auth.js（统一鉴权）
  */
 (function () {
   "use strict";
   var C = window.SmartDiaoduConsole;
   if (!C) {
-    window.location.replace("login.html");
+    if (window.SmartDiaoduAuth) window.SmartDiaoduAuth.redirectToLogin();
+    else window.location.replace("login.html");
     return;
   }
 
@@ -221,63 +222,36 @@
     loadConfig();
   }
 
-  function init() {
-    try {
-      if (typeof localStorage === "undefined") {
-        window.location.replace("login.html");
-        return;
-      }
-      if (localStorage.getItem(C.STORAGE_TOKEN)) {
-        go();
-        return;
-      }
-      var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
-      if (!url || !anon || !window.supabase) {
-        window.location.replace("login.html");
-        return;
-      }
-      var sup = C.getSupabaseClient();
-      if (!sup) {
-        window.location.replace("login.html");
-        return;
-      }
-      sup.auth.getSession()
+  function loadDriverPlateThenRun() {
+    var sup = C.getSupabaseClient();
+    var driverId = C.getDriverId();
+    if (sup && driverId) {
+      sup.from("drivers").select("plate_number").eq("id", driverId).maybeSingle()
         .then(function (r) {
-          if (r.data && r.data.session) go();
-          else window.location.replace("login.html");
+          if (r && r.data && (r.data.plate_number || "").trim()) {
+            C.driverPlateNumber = (r.data.plate_number || "").trim();
+            var pe = document.getElementById("driverPlate");
+            if (pe) pe.value = C.driverPlateNumber;
+          }
+          run();
         })
-        .catch(function () {
-          C.loadAppConfig(function () { go(); });
-        });
-    } catch (e) {
-      C.loadAppConfig(function () { go(); });
+        .catch(function () { run(); });
+    } else {
+      run();
     }
   }
 
-  function go() {
-    C.loadAppConfig(function () {
-      var sup = C.getSupabaseClient();
-      var driverId = C.getDriverId();
-      if (sup && driverId) {
-        sup.from("drivers").select("plate_number").eq("id", driverId).maybeSingle()
-          .then(function (r) {
-            if (r && r.data && (r.data.plate_number || "").trim()) {
-              C.driverPlateNumber = (r.data.plate_number || "").trim();
-              var pe = document.getElementById("driverPlate");
-              if (pe) pe.value = C.driverPlateNumber;
-            }
-            run();
-          })
-          .catch(function () { run(); });
-      } else {
-        run();
-      }
-    });
+  function boot() {
+    if (window.SmartDiaoduAuth && typeof window.SmartDiaoduAuth.requireAuth === "function") {
+      window.SmartDiaoduAuth.requireAuth(loadDriverPlateThenRun);
+    } else {
+      C.loadAppConfig(loadDriverPlateThenRun);
+    }
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", boot);
   } else {
-    init();
+    boot();
   }
 })();

@@ -182,13 +182,14 @@
     }
     return outSegments.length ? outSegments : [pathBd];
   }
+  /** 箭头沿线的间距（像素），与百度导航一致：按像素密度显示，缩放时密度不变 */
   function getArrowRepeatPixels() {
-    if (!M.bmap || typeof M.bmap.getZoom !== "function") return 45;
+    if (!M.bmap || typeof M.bmap.getZoom !== "function") return 24;
     var z = M.bmap.getZoom();
-    if (z <= 10) return 60;
-    if (z <= 13) return 45;
-    if (z <= 16) return 35;
-    return 28;
+    if (z <= 10) return 32;
+    if (z <= 13) return 26;
+    if (z <= 16) return 22;
+    return 20;
   }
 
   M.addDirectionalPolyline = function (pathBd, strokeColor, excludeRanges) {
@@ -201,16 +202,15 @@
       if (window.BMap.Symbol && window.BMap.IconSequence && SymbolShape != null) {
         var lineFull = new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0.95 });
         M.bmap.addOverlay(lineFull);
-        var totalM = pathLengthMeters(pathBd);
-        var metersPerPixel = getMetersPerPixel();
         var arrowPx = getArrowRepeatPixels();
-        var repeatMeters = arrowPx * metersPerPixel;
-        var repeatFrac = totalM > 0 ? repeatMeters / totalM : 0.03;
-        if (repeatFrac < 0.01) repeatFrac = 0.01;
-        if (repeatFrac > 0.05) repeatFrac = 0.05;
-        var repeatPercent = (repeatFrac * 100).toFixed(1) + "%";
-        var sy = new window.BMap.Symbol(SymbolShape, { scale: 1.0, strokeColor: "#ffffff", fillColor: "#ffffff", strokeWeight: 0, fillOpacity: 1 });
-        var icons = new window.BMap.IconSequence(sy, "100%", repeatPercent);
+        var sy = new window.BMap.Symbol(SymbolShape, {
+          scale: 0.9,
+          strokeColor: "#ffffff",
+          fillColor: strokeColor,
+          strokeWeight: 1,
+          fillOpacity: 1
+        });
+        var icons = new window.BMap.IconSequence(sy, "0", String(arrowPx));
         var arrowSegments = pathSegmentForArrows(pathBd, 0.08, 0.92, excludeRanges || []);
         for (var si = 0; si < arrowSegments.length; si++) {
           if (arrowSegments[si].length >= 2) {
@@ -226,7 +226,8 @@
 
   M.addRoadNameLabelsFromSteps = function (route_steps, BPoint) {
     if (!M.bmap || !route_steps || !route_steps.length || !BPoint || typeof window.BMap.Label === "undefined") return;
-    var roadNameRe = /高速|国道|省道|大道|快速路|环路$/;
+    var roadNameRe = /高速|国道|省道|大道|快速路|环路|线|路$/;
+    var maxFontPx = Math.min(12, ROUTE_STROKE_WEIGHT);
     for (var i = 0; i < route_steps.length; i++) {
       var step = route_steps[i];
       var name = (step.road_name || "").trim();
@@ -238,7 +239,7 @@
       if (!p || p[0] == null || p[1] == null) continue;
       var pt = new BPoint(p[1], p[0]);
       var label = new window.BMap.Label(name, { offset: new window.BMap.Size(0, 0), position: pt, enableMassClear: true });
-      label.setStyle({ color: "#1a1a1a", fontSize: "14px", fontWeight: "bold", border: "none", backgroundColor: "rgba(255,255,255,0.9)", padding: "2px 6px" });
+      label.setStyle({ color: "#1a1a1a", fontSize: maxFontPx + "px", fontWeight: "bold", border: "none", backgroundColor: "transparent", padding: "0" });
       M.bmap.addOverlay(label);
     }
   };
@@ -246,6 +247,7 @@
   M.addRoadNameLabels = function (route) {
     if (!M.bmap || !route || typeof route.getNumSteps !== "function") return;
     try {
+      var maxFontPx = Math.min(12, ROUTE_STROKE_WEIGHT);
       var n = route.getNumSteps();
       for (var i = 0; i < n; i++) {
         var step = route.getStep && route.getStep(i);
@@ -258,7 +260,7 @@
         var mid = path[Math.floor(path.length / 2)];
         if (!mid) continue;
         var label = new window.BMap.Label(name, { offset: new window.BMap.Size(0, 0), position: mid, enableMassClear: true });
-        label.setStyle({ color: "#1a1a1a", fontSize: "18px", fontWeight: "bold", border: "none", backgroundColor: "transparent", padding: "0" });
+        label.setStyle({ color: "#1a1a1a", fontSize: maxFontPx + "px", fontWeight: "bold", border: "none", backgroundColor: "transparent", padding: "0" });
         M.bmap.addOverlay(label);
       }
     } catch (e) {}
@@ -313,7 +315,7 @@
           if (M.routeAlternativeIndex === 0 && M.route_steps && M.route_steps.length > 0) {
             var totalLen = pathLengthMeters(mainBdPath);
             if (totalLen > 0) {
-              var roadNameRe = /高速|国道|省道|大道|快速路|环路$/;
+              var roadNameRe = /高速|国道|省道|大道|快速路|环路|线|路$/;
               var acc = 0;
               for (var si = 0; si < M.route_steps.length; si++) {
                 var step = M.route_steps[si];
