@@ -83,13 +83,13 @@
     <p id="setupStatus" class="mt-4 text-sm text-muted"></p>
     </main>
 
-    <!-- 底部导航栏（与首页一致） -->
+    <!-- 底部导航栏（与首页一致）；内嵌在首页 iframe 时通过 postMessage 切换视图，不整页跳转 -->
     <nav id="bottomNav" class="fixed bottom-0 left-0 right-0 max-w-lg mx-auto flex items-stretch bg-panel border-t border-border z-1000 pb-safe">
-      <a href="index.html" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100 no-underline">
+      <a id="setupNavHome" href="index.html" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100 no-underline">
         <span class="text-lg">🏠</span>
         <span class="text-xs font-medium">首页</span>
       </a>
-      <a href="index.html#map" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100 no-underline">
+      <a id="setupNavMap" href="index.html#map" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100 no-underline">
         <span class="text-lg">🗺️</span>
         <span class="text-xs font-medium">地图</span>
       </a>
@@ -100,6 +100,18 @@
     </nav>
   </div>
 
+  <script>
+  (function () {
+    if (window === window.top) return;
+    var home = document.getElementById("setupNavHome");
+    var map = document.getElementById("setupNavMap");
+    function send(type) {
+      try { window.parent.postMessage({ type: type }, "*"); } catch (e) {}
+    }
+    if (home) { home.addEventListener("click", function (e) { e.preventDefault(); send("smartdiaodu_show_home"); }); }
+    if (map) { map.addEventListener("click", function (e) { e.preventDefault(); send("smartdiaodu_show_map"); }); }
+  })();
+  </script>
   <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
   <script src="index-config.js" defer></script>
   <script src="index-state.js" defer></script>

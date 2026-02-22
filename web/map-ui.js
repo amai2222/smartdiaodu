@@ -4,18 +4,17 @@
  */
 (function () {
   "use strict";
+  if (!document.getElementById("map")) return;
   var M = window.SmartDiaoduMap;
   if (!M) return;
 
-  /** 预计用时文案：≥1 小时为「x小时x分钟」，否则「x分钟」。暴露给 map-route 等使用。 */
+  /** 预计用时文案：统一为「x小时x分钟」（不足 1 小时为 0小时x分钟）。暴露给 map-route 等使用。 */
   function formatDurationFromSeconds(seconds) {
     var mins = Math.round((seconds || 0) / 60);
-    if (mins >= 60) {
-      var h = Math.floor(mins / 60);
-      var m = mins % 60;
-      return m === 0 ? (h + "小时") : (h + "小时" + m + "分钟");
-    }
-    return mins + "分钟";
+    var h = Math.floor(mins / 60);
+    var m = mins % 60;
+    if (h === 0) return "0小时" + m + "分钟";
+    return m === 0 ? (h + "小时0分钟") : (h + "小时" + m + "分钟");
   }
   M.formatDurationFromSeconds = formatDurationFromSeconds;
 
@@ -294,8 +293,9 @@
     var dd = document.getElementById("toolbarRouteDropdown");
     if (dd) dd.classList.remove("show");
     var statusEl = document.getElementById("routeInfo");
-    statusEl.textContent = "加载中…";
+    if (statusEl) statusEl.textContent = "加载中…";
     M.loadSavedRoute(function (data) {
+      if (!statusEl) return;
       if (data) {
         M.applyRouteData(data);
         statusEl.textContent = "已恢复上次线路（剩余 " + (M.route_addresses.length - 1) + " 站，预计 " + formatDurationFromSeconds(data.total_time_seconds) + "！）";
@@ -306,20 +306,27 @@
     });
   };
 
+  /** 打开地图时用当前计划（含首页途经点）重新请求路线，保证新加的途经点会参与规划；无后端或失败时再恢复上次保存的路线。 */
   (function onLoad() {
     var statusEl = document.getElementById("routeInfo");
-    statusEl.textContent = "加载配置…";
+    var mapEl = document.getElementById("map");
+    if (!mapEl) return;
+    if (statusEl) statusEl.textContent = "加载配置…";
     M.loadAppConfig(function () {
-      statusEl.textContent = "加载中…";
+      if (statusEl) statusEl.textContent = "加载中…";
       M.initMap();
-      M.loadSavedRoute(function (data) {
-        if (data) {
-          M.applyRouteData(data);
-          statusEl.textContent = "已恢复上次线路（剩余 " + (M.route_addresses.length - 1) + " 站，预计 " + formatDurationFromSeconds(data.total_time_seconds) + "！）";
-        } else {
-          M.loadAndDraw();
-        }
-      });
+      if (M.loadAndDraw) {
+        M.loadAndDraw();
+      } else {
+        M.loadSavedRoute(function (data) {
+          if (data) {
+            M.applyRouteData(data);
+            if (statusEl) statusEl.textContent = "已恢复上次线路（剩余 " + (M.route_addresses.length - 1) + " 站，预计 " + formatDurationFromSeconds(data.total_time_seconds) + "！）";
+          } else {
+            if (statusEl) statusEl.textContent = "无已保存线路，请先点「更新路线」规划并入库";
+          }
+        });
+      }
     });
   })();
 

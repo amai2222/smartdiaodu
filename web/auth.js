@@ -4,7 +4,7 @@
  *
  * 用法（任意需登录页面）：
  *   1. 页面引入：config.js → Supabase → index-config.js → [index-state.js 按需] → auth.js → 业务脚本
- *   2. 业务里调用：SmartDiaoduAuth.requireAuth(function () { /* 已登录，拉配置后执行 */ });
+ *   2. 业务里调用：SmartDiaoduAuth.requireAuth(function () { ... });  // 已登录且 loadAppConfig 完成后执行
  *
  * 登录页需在登录成功后写入：localStorage.setItem(C.STORAGE_TOKEN, access_token 或 "1")
  */

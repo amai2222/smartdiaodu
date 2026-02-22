@@ -30,10 +30,15 @@
   }
   M.loadBaiduSymbolLib = loadBaiduSymbolLib;
 
+  function setRouteStatus(msg) {
+    var el = document.getElementById("routeInfo");
+    if (el) el.textContent = msg || "";
+  }
+
   M.initMap = function () {
     var ak = (M.getBaiduMapAk() || "").trim();
     if (!ak) {
-      document.getElementById("routeInfo").textContent = "请在 app_config 中配置 baidu_map_ak（网页端 AK）";
+      setRouteStatus("请在 app_config 中配置 baidu_map_ak（网页端 AK）");
       return;
     }
     M.destroyMap();
@@ -51,24 +56,29 @@
     }
     window.baiduMapReady = function () {
       window.baiduMapReady = null;
-      if (window.BMap && typeof window.BMap.Map === "function") {
-        M.initBaiduMap();
-        loadBaiduSymbolLib(function () {
-          if (M.lastRouteData && M.drawRouteFromIndex) {
-            M.drawRouteFromIndex(M.currentStopIndex);
-          } else if (M.getCurrentState && M.loadAndDraw) {
-            var state = M.getCurrentState();
-            if (state && (state.driver_loc || "").trim()) M.loadAndDraw();
-          }
-        });
+      try {
+        if (window.BMap && typeof window.BMap.Map === "function") {
+          M.initBaiduMap();
+          loadBaiduSymbolLib(function () {
+            if (M.lastRouteData && M.drawRouteFromIndex) {
+              M.drawRouteFromIndex(M.currentStopIndex);
+            } else if (M.getCurrentState && M.loadAndDraw) {
+              var state = M.getCurrentState();
+              if (state && (state.driver_loc || "").trim()) M.loadAndDraw();
+            }
+          });
+          return;
+        }
+      } catch (e) {
+        setRouteStatus("百度地图加载异常，请刷新重试。若仍失败，请检查网络能否访问百度地图。");
         return;
       }
-      document.getElementById("routeInfo").textContent = "百度地图 API 未就绪。请检查 F12 → Network 中 api.map.baidu.com 请求与 AK 白名单。";
+      setRouteStatus("百度地图 API 未就绪。请检查 F12 → Network 中 api.map.baidu.com 请求与 AK 白名单。");
     };
     var script = document.createElement("script");
     script.src = "https://api.map.baidu.com/api?v=3.0&ak=" + encodeURIComponent(ak) + "&s=1&callback=baiduMapReady";
     script.onerror = function () {
-      document.getElementById("routeInfo").textContent = "百度地图脚本加载失败。请检查网络与 AK。";
+      setRouteStatus("百度地图脚本加载失败（网络错误）。请检查：1) 网络能否访问 api.map.baidu.com 2) AK 是否有效。");
     };
     document.head.appendChild(script);
   };

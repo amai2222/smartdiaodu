@@ -164,6 +164,10 @@
       <div id="viewMap" class="app-view hidden">
         <iframe id="mapFrame" src="about:blank" class="w-full h-full border-0 block" title="路线地图"></iframe>
       </div>
+      <!-- 设置视图：内嵌 setup.html，预加载后点击即显，避免整页跳转卡顿 -->
+      <div id="viewSetup" class="app-view hidden">
+        <iframe id="setupFrame" src="about:blank" class="w-full h-full min-h-[60vh] border-0 block" title="设置"></iframe>
+      </div>
     </main>
 
     <!-- 底部导航栏（App 风格） -->
@@ -176,10 +180,10 @@
         <span class="text-lg">🗺️</span>
         <span class="text-xs font-medium">地图</span>
       </button>
-      <a id="navSettings" href="setup.html" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100 no-underline">
+      <button type="button" id="navSettings" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100">
         <span class="text-lg">⚙️</span>
         <span class="text-xs font-medium">设置</span>
-      </a>
+      </button>
     </nav>
   </div>
 
@@ -188,6 +192,7 @@
   function setupNav() {
     var viewHome = document.getElementById("viewHome");
     var viewMap = document.getElementById("viewMap");
+    var viewSetup = document.getElementById("viewSetup");
     var navHome = document.getElementById("navHome");
     var navMap = document.getElementById("navMap");
     var navSettings = document.getElementById("navSettings");
@@ -196,6 +201,7 @@
     var appHeader = document.getElementById("appHeader");
     var appHeaderExtra = document.getElementById("appHeaderExtra");
     var mapFrame = document.getElementById("mapFrame");
+    var setupFrame = document.getElementById("setupFrame");
     if (!viewHome || !viewMap || !navHome || !navMap) return;
     function addTap(el, fn) {
       if (!el) return;
@@ -208,6 +214,7 @@
     function showHome() {
       viewHome.classList.remove("hidden");
       viewMap.classList.add("hidden");
+      if (viewSetup) viewSetup.classList.add("hidden");
       if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
       if (appMain) appMain.classList.remove("map-fullscreen");
       if (appHeader) appHeader.classList.remove("app-header-hidden");
@@ -216,25 +223,44 @@
     }
     var mapLoaded = false;
     function showMap() {
-      if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
+      if (mapFrame && !mapLoaded) { mapLoaded = true; }
       viewHome.classList.add("hidden");
       viewMap.classList.remove("hidden");
+      if (viewSetup) viewSetup.classList.add("hidden");
       if (bottomNav) bottomNav.classList.add("bottom-nav-hidden");
       if (appMain) appMain.classList.add("map-fullscreen");
       if (appHeader) appHeader.classList.add("app-header-hidden");
       if (appHeaderExtra) appHeaderExtra.classList.add("app-header-hidden");
       setActive(navMap);
     }
+    var setupLoaded = false;
+    function showSetup() {
+      if (setupFrame && !setupLoaded) { setupFrame.src = "setup.html"; setupLoaded = true; }
+      viewHome.classList.add("hidden");
+      viewMap.classList.add("hidden");
+      if (viewSetup) viewSetup.classList.remove("hidden");
+      if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
+      if (appMain) appMain.classList.remove("map-fullscreen");
+      if (appHeader) appHeader.classList.remove("app-header-hidden");
+      if (appHeaderExtra) appHeaderExtra.classList.remove("app-header-hidden");
+      setActive(navSettings);
+    }
     addTap(navHome, showHome);
     addTap(navMap, showMap);
-    if (navSettings) navSettings.addEventListener("click", function () { this.classList.add("nav-tab--loading"); });
+    addTap(navSettings, showSetup);
     var btnShowMap = document.getElementById("btnShowMap");
     if (btnShowMap) addTap(btnShowMap, showMap);
     window.addEventListener("message", function (e) {
-      if (e.data && e.data.type === "smartdiaodu_map_back") showHome();
+      if (!e.data || !e.data.type) return;
+      if (e.data.type === "smartdiaodu_map_back") showHome();
+      if (e.data.type === "smartdiaodu_show_home") showHome();
+      if (e.data.type === "smartdiaodu_show_map") showMap();
     });
     setActive(navHome);
     if (location.hash === "#map") showMap();
+    if (location.hash === "#setup") showSetup();
+    if (mapFrame) mapFrame.src = "map.html";
+    if (setupFrame) setupFrame.src = "setup.html";
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", setupNav);
   else setupNav();

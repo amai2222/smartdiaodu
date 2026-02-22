@@ -68,11 +68,16 @@
                 deliveries.push(o.delivery || "");
               });
             }
-            var state = { driver_loc: driver_loc || "", pickups: pickups, deliveries: deliveries };
+            var state = { driver_loc: driver_loc || "", pickups: pickups, deliveries: deliveries, waypoints: [] };
             if (typeof localStorage !== "undefined") {
               localStorage.setItem(M.STORAGE_DRIVER_LOC, state.driver_loc);
               localStorage.setItem(M.STORAGE_PICKUPS, JSON.stringify(state.pickups));
               localStorage.setItem(M.STORAGE_DELIVERIES, JSON.stringify(state.deliveries));
+              try {
+                var sw = localStorage.getItem(M.STORAGE_WAYPOINTS);
+                if (sw) state.waypoints = JSON.parse(sw);
+                if (!Array.isArray(state.waypoints)) state.waypoints = [];
+              } catch (e) {}
             }
             return sup.from("drivers").select("plate_number").eq("id", driverId).maybeSingle()
               .then(function (rr) {
