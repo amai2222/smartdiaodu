@@ -238,7 +238,6 @@
     }
     var mapLoaded = false;
     function showMap() {
-      if (mapFrame && !mapLoaded) { mapLoaded = true; }
       viewHome.classList.add("hidden");
       viewMap.classList.remove("hidden");
       if (viewSetup) viewSetup.classList.add("hidden");
@@ -247,7 +246,10 @@
       if (appHeader) appHeader.classList.add("app-header-hidden");
       if (appHeaderExtra) appHeaderExtra.classList.add("app-header-hidden");
       setActive(navMap);
-      if (mapFrame && mapFrame.contentWindow) {
+      if (mapFrame && !mapLoaded) {
+        mapLoaded = true;
+        mapFrame.src = "map.html";
+      } else if (mapFrame && mapFrame.contentWindow) {
         var w = mapFrame.contentWindow;
         setTimeout(function () { try { w.postMessage({ type: "smartdiaodu_map_visible" }, "*"); } catch (e) {} }, 150);
         setTimeout(function () { try { w.postMessage({ type: "smartdiaodu_map_visible" }, "*"); } catch (e) {} }, 500);
@@ -279,7 +281,6 @@
     setActive(navHome);
     if (location.hash === "#map") showMap();
     if (location.hash === "#setup") showSetup();
-    if (mapFrame) mapFrame.src = "map.html";
     if (setupFrame) setupFrame.src = "setup.html";
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", setupNav);
