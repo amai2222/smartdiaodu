@@ -13,6 +13,7 @@
   C.waypoints = [];
   C.editingPassengerIdx = -1;
   C.driverPlateNumber = "";
+  C._driverLocVoiceFirstClick = true;
 
   /** 同步完整起终点到 C.pickups/C.deliveries（供当前计划与持久化）；路线规划用 getCurrentState 中的「有效」列表排除已上车接客点 */
   C.applyPassengerRows = function () {
@@ -88,18 +89,15 @@
   C.updateEntryActions = function () {
     var seatsEl = document.getElementById("emptySeats");
     var emptySeats = seatsEl ? Math.max(0, parseInt(seatsEl.value, 10) || 0) : 0;
-    var btnMap = document.getElementById("btnShowMap");
     var btnMatch = document.getElementById("btnContinueMatch");
     var hint = document.getElementById("entryHint");
-    if (!btnMap || !btnMatch) return;
+    if (!btnMatch) return;
     if (emptySeats === 0) {
-      btnMap.classList.remove("hidden");
       btnMatch.classList.add("hidden");
-      if (hint) hint.textContent = "车已满，打开地图按路线接送；到达每站后在地图页点「已到达」推进。";
+      if (hint) hint.textContent = "车已满，点底部「地图」按路线接送；到达每站后在地图页点「已到达」推进。";
     } else {
-      btnMap.classList.remove("hidden");
       btnMatch.classList.remove("hidden");
-      if (hint) hint.textContent = "有空位，点「继续接单」让后端匹配顺路单；也可打开地图查看当前路线。";
+      if (hint) hint.textContent = "有空位，点「继续接单」让后端匹配顺路单；也可点底部「地图」查看当前路线。";
     }
   };
 

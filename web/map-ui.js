@@ -7,7 +7,7 @@
   var M = window.SmartDiaoduMap;
   if (!M) return;
 
-  /** 预计用时文案：≥1 小时为「x小时x分钟」，否则「x分钟」 */
+  /** 预计用时文案：≥1 小时为「x小时x分钟」，否则「x分钟」。暴露给 map-route 等使用。 */
   function formatDurationFromSeconds(seconds) {
     var mins = Math.round((seconds || 0) / 60);
     if (mins >= 60) {
@@ -17,21 +17,21 @@
     }
     return mins + "分钟";
   }
+  M.formatDurationFromSeconds = formatDurationFromSeconds;
 
   M.updateNavPanel = function () {
+    var baiduLink = document.getElementById("btnOpenBaiduNav");
+    if (baiduLink) {
+      var navUrl = (M.route_addresses && M.route_addresses.length >= 2 && M.getNavUrlWithWaypoints) ? M.getNavUrlWithWaypoints() : "#";
+      baiduLink.href = navUrl;
+      baiduLink.style.display = navUrl === "#" ? "none" : "";
+    }
     var nextIdx = M.currentStopIndex + 1;
     var navPanel = document.getElementById("navPanel");
     var allDonePanel = document.getElementById("allDonePanel");
-    var navUrl = (M.route_addresses.length >= 2) ? M.getNavUrlWithWaypoints() : "#";
     if (nextIdx >= M.route_addresses.length) {
       navPanel.style.display = "none";
       allDonePanel.style.display = "block";
-      var aAllDone = document.getElementById("btnOpenNavAllDone");
-      if (aAllDone) {
-        var url = (M.route_addresses.length >= 2 && M.getNavUrlWithWaypoints) ? M.getNavUrlWithWaypoints() : "#";
-        aAllDone.href = url;
-        aAllDone.style.display = url === "#" ? "none" : "";
-      }
       return;
     }
     allDonePanel.style.display = "none";
@@ -39,9 +39,6 @@
     var label = M.point_labels[nextIdx] || M.point_types[nextIdx] || ("第" + (nextIdx + 1) + "站");
     var addr = M.route_addresses[nextIdx] || "";
     document.getElementById("nextStopText").textContent = "下一站: " + label + " " + (addr.length > 18 ? addr.slice(0, 18) + "…" : addr);
-    var a = document.getElementById("btnOpenNav");
-    a.href = navUrl;
-    a.textContent = "打开导航";
   };
 
   M.markArrived = function () {
@@ -115,7 +112,7 @@
     .then(function (data) {
       M.applyRouteData(data);
       M.saveRouteSnapshot(data);
-      if (statusEl) statusEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已与控制台同步）" : "共 " + M.route_addresses.length + " 站，约 " + formatDurationFromSeconds(data.total_time_seconds) + "（已与控制台同步）";
+      if (statusEl) statusEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已与控制台同步）" : "剩余 " + (M.route_addresses.length - 1) + " 站，预计 " + formatDurationFromSeconds(data.total_time_seconds) + "！（已与控制台同步）";
     })
     .catch(function () {
       if (statusEl) statusEl.textContent = "同步路线失败，请点「更新路线」重试";
@@ -130,7 +127,7 @@
       M.loadSavedRoute(function (data) {
         if (data) {
           M.applyRouteData(data);
-          statusEl.textContent = "已恢复上次线路（共 " + M.route_addresses.length + " 站）；未配置 apiBase 无法重新规划";
+          statusEl.textContent = "已恢复上次线路（剩余 " + (M.route_addresses.length - 1) + " 站）；未配置 apiBase 无法重新规划";
         } else {
           statusEl.textContent = "未配置后端（请在 Supabase 表 app_config 中设置 key=api_base）";
         }
@@ -165,7 +162,7 @@
         M.applyRouteData(data);
         M.saveRouteSnapshot(data);
         var routeInfoEl = document.getElementById("routeInfo");
-        if (routeInfoEl) routeInfoEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已入库）" : "共 " + M.route_addresses.length + " 站，约 " + formatDurationFromSeconds(data.total_time_seconds) + "（已入库）";
+        if (routeInfoEl) routeInfoEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已入库）" : "剩余 " + (M.route_addresses.length - 1) + " 站，预计 " + formatDurationFromSeconds(data.total_time_seconds) + "！（已入库）";
       })
       .catch(function (e) {
         document.getElementById("navPanel").style.display = "none";
@@ -184,7 +181,8 @@
     });
   };
 
-  document.getElementById("btnArrived").onclick = M.markArrived;
+  var btnArrived = document.getElementById("btnArrived");
+  if (btnArrived) btnArrived.onclick = M.markArrived;
 
   document.getElementById("btnCollapse").onclick = function () {
     document.body.classList.add("toolbar-hidden");
@@ -286,7 +284,7 @@
     M.loadSavedRoute(function (data) {
       if (data) {
         M.applyRouteData(data);
-        statusEl.textContent = "已恢复上次线路（共 " + M.route_addresses.length + " 站，约 " + formatDurationFromSeconds(data.total_time_seconds) + "）";
+        statusEl.textContent = "已恢复上次线路（剩余 " + (M.route_addresses.length - 1) + " 站，预计 " + formatDurationFromSeconds(data.total_time_seconds) + "！）";
       } else {
         statusEl.textContent = "无已保存线路，请先点「更新路线」规划并入库";
         if (M.bmap) M.clearMapOverlays();
@@ -303,7 +301,7 @@
       M.loadSavedRoute(function (data) {
         if (data) {
           M.applyRouteData(data);
-          statusEl.textContent = "已恢复上次线路（共 " + M.route_addresses.length + " 站，约 " + formatDurationFromSeconds(data.total_time_seconds) + "）";
+          statusEl.textContent = "已恢复上次线路（剩余 " + (M.route_addresses.length - 1) + " 站，预计 " + formatDurationFromSeconds(data.total_time_seconds) + "！）";
         } else {
           M.loadAndDraw();
         }

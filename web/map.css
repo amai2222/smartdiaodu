@@ -16,13 +16,15 @@ html, body { margin: 0; padding: 0; height: 100%; width: 100%; min-height: 100vh
   z-index: 1000;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px 8px;
   align-items: center;
   pointer-events: none;
 }
-.toolbar { flex-wrap: nowrap; gap: 6px; }
-.toolbar > * { pointer-events: auto; min-height: 40px; flex-shrink: 0; }
-.toolbar select, .toolbar button, .toolbar a {
+.toolbar .toolbar-row { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; pointer-events: auto; }
+.toolbar .toolbar-row--btns { flex-shrink: 0; }
+.toolbar .toolbar-row--btns > * { min-height: 40px; flex-shrink: 0; }
+.toolbar .toolbar-row--status { width: 100%; min-height: 40px; flex-basis: 100%; order: 1; }
+.toolbar select, .toolbar button, .toolbar a.toolbar-btn-link {
   padding: 10px 12px;
   min-height: 40px;
   border-radius: 10px;
@@ -34,8 +36,8 @@ html, body { margin: 0; padding: 0; height: 100%; width: 100%; min-height: 100vh
   touch-action: manipulation;
 }
 .toolbar button { cursor: pointer; }
-.toolbar a { display: inline-flex; align-items: center; }
-.toolbar .status { color: #8b9199; font-size: 0.8rem; padding: 10px 4px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar a.toolbar-btn-link { display: inline-flex; align-items: center; cursor: pointer; }
+.toolbar .status { color: #8b9199; font-size: 0.8rem; padding: 10px 4px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .restriction-hint {
   position: fixed;
   left: max(12px, env(safe-area-inset-left));

@@ -114,6 +114,7 @@
     navigator.geolocation.getCurrentPosition(
       function (pos) {
         var lat = pos.coords.latitude, lng = pos.coords.longitude;
+        try { C._lastGps = { lat: lat, lng: lng }; } catch (e) {}
         var base = C.getApiBase();
         if (!base) {
           input.value = lat.toFixed(5) + ", " + lng.toFixed(5);
@@ -143,44 +144,55 @@
     var input = document.getElementById("driverLoc");
     var statusEl = document.getElementById("gpsStatus");
     var addr = (input && input.value) ? input.value.trim() : "";
-    function doShare(gpsText) {
-      var text = "地址：" + (addr || "（未填写）") + (gpsText ? "\nGPS：" + gpsText : "");
-      if (navigator.share && navigator.canShare && navigator.canShare({ text: text })) {
-        navigator.share({ title: "我的位置", text: text }).then(function () {
-          if (statusEl) statusEl.textContent = "已分享";
-        }).catch(function () {
-          copyFallback(text, statusEl);
-        });
-      } else {
-        copyFallback(text, statusEl);
+    var gpsStr = "";
+    try {
+      if (C._lastGps && typeof C._lastGps.lat === "number" && typeof C._lastGps.lng === "number") {
+        gpsStr = C._lastGps.lat.toFixed(5) + ", " + C._lastGps.lng.toFixed(5);
       }
-    }
-    function copyFallback(text, statusEl) {
+    } catch (e) {}
+    var text = "地址：" + (addr || "（未填写）") + (gpsStr ? "\nGPS：" + gpsStr : "");
+
+    function setStatus(msg) { if (statusEl) statusEl.textContent = msg || ""; }
+
+    function copyFallback(t, el) {
       if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function () {
+          setStatus("已复制到剪贴板，可粘贴到其他 App");
+        }).catch(function () { setStatus("复制失败，请允许剪贴板权限"); });
+      } else {
+        setStatus("已复制（可粘贴到其他 App）");
+      }
+    }
+
+    if (navigator.share) {
+      if (navigator.clipboard && navigator.clipboard.writeText && navigator.clipboard.readText) {
         navigator.clipboard.writeText(text).then(function () {
-          if (statusEl) statusEl.textContent = "已复制到剪贴板，可粘贴到其他 App";
-        }).catch(function () {
-          if (statusEl) statusEl.textContent = "复制失败，请手动复制";
+          return navigator.clipboard.readText();
+        }).then(function (clipboardText) {
+          if (!clipboardText) clipboardText = text;
+          return navigator.share({ title: "我的位置", text: clipboardText });
+        }).then(function () {
+          setStatus("已分享");
+        }).catch(function (err) {
+          if (err && err.name === "NotAllowedError") {
+            setStatus("未允许剪贴板或取消了分享");
+          } else if (err && err.name === "AbortError") {
+            setStatus("已取消分享");
+          } else {
+            copyFallback(text, statusEl);
+          }
         });
       } else {
-        if (statusEl) statusEl.textContent = text.length > 30 ? "已复制（见下方）" : "请手动复制";
+        navigator.share({ title: "我的位置", text: text }).then(function () {
+          setStatus("已分享");
+        }).catch(function (err) {
+          if (err && err.name === "AbortError") setStatus("已取消分享");
+          else copyFallback(text, statusEl);
+        });
       }
+    } else {
+      copyFallback(text, statusEl);
     }
-    if (!navigator.geolocation) {
-      doShare("");
-      return;
-    }
-    if (statusEl) statusEl.textContent = "获取坐标中…";
-    navigator.geolocation.getCurrentPosition(
-      function (pos) {
-        var gpsText = pos.coords.latitude.toFixed(5) + ", " + pos.coords.longitude.toFixed(5);
-        doShare(gpsText);
-      },
-      function () {
-        doShare("");
-        if (statusEl) statusEl.textContent = "地址已分享，GPS 获取失败";
-      }
-    );
   };
 
   function openPlanModal() {
@@ -426,6 +438,10 @@
           btnEl.textContent = "🎤";
           btnEl.setAttribute("title", originalTitle);
           return;
+        }
+        if (btnEl.id === "driverLocVoiceBtn" && C._driverLocVoiceFirstClick) {
+          C._driverLocVoiceFirstClick = false;
+          inputEl.value = "";
         }
         if (btnEl.id === "editPickupVoiceBtn" && C._editPickupVoiceFirstClick) {
           C._editPickupVoiceFirstClick = false;

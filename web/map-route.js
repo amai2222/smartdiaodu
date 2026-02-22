@@ -249,10 +249,11 @@
     M.bmap.addOverlay(new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0.95 }));
   };
 
-  /** 仅当路段在屏幕上的像素长度 ≥ 该值时才显示路名（随缩放变化），优先保证箭头清晰 */
+  /** 仅当路段在屏幕上的像素长度 ≥ 该值时才显示路名（随缩放变化），优先保证箭头清晰。已关闭：不在任何策略/备选路线上显示路名。 */
   var MIN_SEGMENT_PIXELS_FOR_ROAD_NAME = 80;
 
   M.addRoadNameLabelsFromSteps = function (route_steps, BPoint) {
+    return;
     if (!M.bmap || !route_steps || !route_steps.length || !BPoint || typeof window.BMap.Label === "undefined") return;
     var roadNameRe = /高速|国道|省道|大道|快速路|环路|线|路$/;
     var maxFontPx = Math.min(12, ROUTE_STROKE_WEIGHT);
@@ -288,6 +289,7 @@
   };
 
   M.addRoadNameLabels = function (route) {
+    return;
     if (!M.bmap || !route || typeof route.getNumSteps !== "function") return;
     try {
       var maxFontPx = Math.min(12, ROUTE_STROKE_WEIGHT);
@@ -331,11 +333,19 @@
     } catch (e) {}
   };
 
+  function setRouteInfoRemaining(remainingStations) {
+    var el = document.getElementById("routeInfo");
+    if (!el) return;
+    var totalSec = (M.lastRouteData && M.lastRouteData.total_time_seconds != null) ? M.lastRouteData.total_time_seconds : null;
+    var durStr = (totalSec != null && typeof M.formatDurationFromSeconds === "function") ? "，预计 " + M.formatDurationFromSeconds(totalSec) + "！" : "";
+    el.textContent = "剩余 " + remainingStations + " 站" + durStr;
+  }
+
   M.drawRouteFromIndex = function (fromIndex, preserveViewport) {
     if (!M.lastRouteData) return;
     var coords = M.route_coords.slice(fromIndex), addresses = M.route_addresses.slice(fromIndex);
     var types = M.point_types.slice(fromIndex), labels = M.point_labels.slice(fromIndex);
-    document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站";
+    setRouteInfoRemaining(addresses.length - 1);
     if (coords.length === 0) return;
     M.clearMapOverlays();
     if (!M.bmap) return;
@@ -411,7 +421,7 @@
       driving.search(start, end, waypoints.length ? { waypoints: waypoints } : undefined);
       var onDone = function () {
         M.addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
-        document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站";
+        setRouteInfoRemaining(addresses.length - 1);
         if (M.showRestrictionHintIfNeeded) M.showRestrictionHintIfNeeded();
       };
       if (typeof driving.setSearchCompleteCallback === "function") driving.setSearchCompleteCallback(onDone);
@@ -432,7 +442,7 @@
     M.lastSegmentResults = [];
     var driving = new window.BMap.DrivingRoute(M.bmap, opts);
     var segIndex = 0;
-    function updateStatus() { document.getElementById("routeInfo").textContent = "剩余 " + (addresses.length - 1) + " 站"; }
+    function updateStatus() { setRouteInfoRemaining(addresses.length - 1); }
     function searchNextSegment() {
       if (segIndex >= bdPoints.length - 1) {
         if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);

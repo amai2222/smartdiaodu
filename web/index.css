@@ -111,6 +111,7 @@ input, select, button { font-size: inherit; }
 #bottomNav .nav-tab { transition: color 0.15s, border-color 0.15s; }
 #bottomNav .nav-tab.active { color: var(--tw-color-accent, #3b82f6); border-top-color: var(--tw-color-accent, #3b82f6); }
 #bottomNav .nav-tab:not(.active) { color: #8b9199; border-top-color: transparent; }
+#bottomNav .nav-tab--loading { opacity: 0.7; pointer-events: none; }
 #bottomNav.bottom-nav-hidden { display: none !important; }
 #appMain.map-fullscreen { padding-bottom: 0 !important; }
 .app-header-hidden { display: none !important; }

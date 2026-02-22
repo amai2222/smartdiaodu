@@ -117,30 +117,39 @@
   }
 
   function runClearWaypointsAndPlan() {
-    if (!confirm("确定清空本车本次计划？将取消数据库内本车所有已分配订单，并清空本地途经点与乘客列表，仅保留司机位置。")) return;
-    var sup = C.getSupabaseClient();
-    var driverId = C.getDriverId();
-    function done() {
-      C.passengerRows = [];
-      C.pickups = [];
-      C.deliveries = [];
-      C.waypoints = [];
-      C.applyPassengerRows();
-      C.saveStateToStorage();
-      if (C.renderPassengerList) C.renderPassengerList();
-      if (C.updateEntryActions) C.updateEntryActions();
-      status("已清空途经与计划，仅保留司机位置。");
-    }
-    if (sup && driverId) {
-      sup.from("order_pool").update({ assigned_driver_id: null, status: "pending_match" }).eq("assigned_driver_id", driverId).eq("status", "assigned")
-        .then(function () { return sup.from("driver_state").update({ empty_seats: 4 }).eq("driver_id", driverId); })
-        .then(function () { done(); })
-        .catch(function (e) {
-          done();
-          status("本地已清空；数据库操作失败: " + (e.message || "").slice(0, 40));
-        });
-    } else {
-      done();
+    if (!confirm("确定清空本车本次计划？将取消数据库内本车所有已分配订单，并清空本地乘客起终点与途经点，仅保留司机位置。")) return;
+    try {
+      var sup = C.getSupabaseClient();
+      var driverId = C.getDriverId();
+      function done() {
+        try {
+          C.passengerRows = [];
+          C.pickups = [];
+          C.deliveries = [];
+          C.waypoints = [];
+          C.applyPassengerRows();
+          C.saveStateToStorage();
+          if (typeof C.renderPassengerList === "function") C.renderPassengerList();
+          if (typeof C.updateEntryActions === "function") C.updateEntryActions();
+        } catch (e) {
+          status("清空时出错: " + (e.message || String(e)).slice(0, 60));
+          return;
+        }
+        status("已清空所有乘客起终点与途经点，仅保留司机位置。返回首页可见空列表；若首页已打开请刷新一次。");
+      }
+      if (sup && driverId) {
+        sup.from("order_pool").update({ assigned_driver_id: null, status: "pending_match" }).eq("assigned_driver_id", driverId).eq("status", "assigned")
+          .then(function () { return sup.from("driver_state").update({ empty_seats: 4 }).eq("driver_id", driverId); })
+          .then(function () { done(); })
+          .catch(function (e) {
+            done();
+            status("本地已清空；数据库操作失败: " + (e.message || "").slice(0, 40));
+          });
+      } else {
+        done();
+      }
+    } catch (err) {
+      status("操作失败: " + (err.message || String(err)).slice(0, 80));
     }
   }
 
@@ -212,12 +221,6 @@
       saveProfit(v);
     };
 
-    var btnClear = document.getElementById("btnClearWaypointsAndPlan");
-    if (btnClear) {
-      btnClear.addEventListener("click", function (e) { e.preventDefault(); runClearWaypointsAndPlan(); });
-      btnClear.addEventListener("touchend", function (e) { e.preventDefault(); runClearWaypointsAndPlan(); }, { passive: false });
-    }
-
     refreshMode();
     loadConfig();
   }
@@ -249,9 +252,27 @@
     }
   }
 
+  function bindClearButton() {
+    var btn = document.getElementById("btnClearWaypointsAndPlan");
+    if (!btn || btn._clearBound) return;
+    btn._clearBound = true;
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      runClearWaypointsAndPlan();
+    });
+    btn.addEventListener("touchend", function (e) {
+      e.preventDefault();
+      runClearWaypointsAndPlan();
+    }, { passive: false });
+  }
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
+    document.addEventListener("DOMContentLoaded", function () {
+      bindClearButton();
+      boot();
+    });
   } else {
+    bindClearButton();
     boot();
   }
 })();

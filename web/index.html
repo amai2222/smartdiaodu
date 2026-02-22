@@ -19,6 +19,8 @@
     };
   </script>
   <link rel="stylesheet" href="index.css" />
+  <link rel="preload" href="setup.html" as="document" />
+  <link rel="preconnect" href="https://unpkg.com" crossorigin />
 </head>
 <body class="bg-[#0c0c0f] text-gray-100 min-h-screen font-sans antialiased">
   <div id="appShell" class="flex flex-col min-h-screen max-w-lg mx-auto">
@@ -84,13 +86,10 @@
         </div>
       </div>
 
-      <!-- 入口主操作：途经点、显示地图、继续接单 -->
+      <!-- 入口主操作：途经点、继续接单（地图用底部导航「地图」） -->
       <div id="entryActions" class="mt-6 flex flex-col gap-3">
         <button type="button" id="btnWaypoints" class="w-full py-3 rounded-xl border border-accent/60 text-accent font-medium text-center text-big hover:bg-accent/20">
           📍 途经点
-        </button>
-        <button type="button" id="btnShowMap" class="hidden w-full py-4 rounded-xl bg-accent hover:bg-blue-600 text-white font-medium text-center text-big">
-          🗺️ 显示地图
         </button>
         <button type="button" id="btnContinueMatch" class="hidden w-full py-4 rounded-xl border-2 border-success text-success font-medium text-big">
           💺 继续接单
@@ -228,6 +227,7 @@
     }
     addTap(navHome, showHome);
     addTap(navMap, showMap);
+    if (navSettings) navSettings.addEventListener("click", function () { this.classList.add("nav-tab--loading"); });
     var btnShowMap = document.getElementById("btnShowMap");
     if (btnShowMap) addTap(btnShowMap, showMap);
     window.addEventListener("message", function (e) {
