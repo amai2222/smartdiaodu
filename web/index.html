@@ -205,23 +205,8 @@
     if (!viewHome || !viewMap || !navHome || !navMap) return;
     function addTap(el, fn) {
       if (!el) return;
-      var touchHandled = false;
-      function run(e) {
-        touchHandled = true;
-        if (e) e.preventDefault();
-        fn();
-      }
-      el.addEventListener("touchstart", function (e) { run(e); }, { passive: false });
-      el.addEventListener("pointerdown", function (e) {
-        if (e.pointerType === "touch") run(e);
-      }, { passive: false });
-      el.addEventListener("touchend", function () {
-        setTimeout(function () { touchHandled = false; }, 350);
-      });
-      el.addEventListener("click", function (e) {
-        if (touchHandled) { e.preventDefault(); return; }
-        fn();
-      });
+      el.addEventListener("click", fn);
+      el.addEventListener("touchend", function (e) { e.preventDefault(); fn(); }, { passive: false });
     }
     function setActive(tab) {
       [navHome, navMap, navSettings].forEach(function (n) { if (n) n.classList.toggle("active", n === tab); });
@@ -238,6 +223,7 @@
     }
     var mapLoaded = false;
     function showMap() {
+      if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
       viewHome.classList.add("hidden");
       viewMap.classList.remove("hidden");
       if (viewSetup) viewSetup.classList.add("hidden");
@@ -246,14 +232,6 @@
       if (appHeader) appHeader.classList.add("app-header-hidden");
       if (appHeaderExtra) appHeaderExtra.classList.add("app-header-hidden");
       setActive(navMap);
-      if (mapFrame && !mapLoaded) {
-        mapLoaded = true;
-        mapFrame.src = "map.html";
-      } else if (mapFrame && mapFrame.contentWindow) {
-        var w = mapFrame.contentWindow;
-        setTimeout(function () { try { w.postMessage({ type: "smartdiaodu_map_visible" }, "*"); } catch (e) {} }, 150);
-        setTimeout(function () { try { w.postMessage({ type: "smartdiaodu_map_visible" }, "*"); } catch (e) {} }, 500);
-      }
     }
     var setupLoaded = false;
     function showSetup() {

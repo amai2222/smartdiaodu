@@ -2,20 +2,27 @@
  * 路线地图页样式（移动端全兼容：Safari/Chrome/微信/Firefox/Samsung 等）
  */
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* 与 dddaadc 一致：height: 100% 链 + min-height 100vh，保证 iframe 内 #map 能撑满（Safari 当时可打开） */
 html, body {
-  margin: 0; padding: 0;
-  height: 100%; width: 100%;
-  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
   overflow: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
 }
-/* 全机型：fixed 填满视口，避免 iframe/各内核 100% 高度链失效导致全黑 */
+/* 恢复 absolute + 四边 0 + 100% + min-height 300px（与当时可用的 map.css 一致） */
 #map {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  width: 100%; height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
   min-height: 300px;
   z-index: 0;
   background: #1a1a2e;
