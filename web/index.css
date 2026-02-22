@@ -116,6 +116,9 @@ input, select, button { font-size: inherit; }
   cursor: pointer;
   min-height: 44px;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 #bottomNav .nav-tab.active { color: var(--tw-color-accent, #3b82f6); border-top-color: var(--tw-color-accent, #3b82f6); }
 #bottomNav .nav-tab:not(.active) { color: #8b9199; border-top-color: transparent; }

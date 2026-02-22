@@ -123,4 +123,25 @@
       }, 200);
     }
   };
+
+  /** 移动端全兼容：父页切到地图、resize、标签页可见、iframe 延迟兜底时重绘地图，避免全黑（Safari/Chrome/微信/Firefox 等） */
+  function resizeMapOnce() {
+    if (M.bmap && typeof M.bmap.invalidateSize === "function") {
+      try { M.bmap.invalidateSize(); } catch (e) {}
+    }
+  }
+  window.addEventListener("resize", function () {
+    clearTimeout(M._resizeMapTimer);
+    M._resizeMapTimer = setTimeout(resizeMapOnce, 150);
+  });
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "smartdiaodu_map_visible") resizeMapOnce();
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") resizeMapOnce();
+  });
+  if (window !== window.top) {
+    setTimeout(resizeMapOnce, 800);
+    setTimeout(resizeMapOnce, 2500);
+  }
 })();

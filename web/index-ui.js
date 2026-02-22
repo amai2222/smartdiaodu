@@ -325,10 +325,14 @@
     function addTap(el, fn) {
       if (!el) return;
       var touchHandled = false;
-      el.addEventListener("touchstart", function (e) {
+      function run(e) {
         touchHandled = true;
-        e.preventDefault();
+        if (e) e.preventDefault();
         fn();
+      }
+      el.addEventListener("touchstart", function (e) { run(e); }, { passive: false });
+      el.addEventListener("pointerdown", function (e) {
+        if (e.pointerType === "touch") run(e);
       }, { passive: false });
       el.addEventListener("touchend", function () {
         setTimeout(function () { touchHandled = false; }, 350);
@@ -739,8 +743,23 @@
     }
     function addTap(el, fn) {
       if (!el) return;
-      el.addEventListener("click", fn);
-      el.addEventListener("touchend", function (e) { e.preventDefault(); fn(); }, { passive: false });
+      var touchHandled = false;
+      function run(e) {
+        touchHandled = true;
+        if (e) e.preventDefault();
+        fn();
+      }
+      el.addEventListener("touchstart", function (e) { run(e); }, { passive: false });
+      el.addEventListener("pointerdown", function (e) {
+        if (e.pointerType === "touch") run(e);
+      }, { passive: false });
+      el.addEventListener("touchend", function () {
+        setTimeout(function () { touchHandled = false; }, 350);
+      });
+      el.addEventListener("click", function (e) {
+        if (touchHandled) { e.preventDefault(); return; }
+        fn();
+      });
     }
     addTap(navHome, showHome);
     addTap(navMap, showMap);
