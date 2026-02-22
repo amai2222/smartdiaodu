@@ -5,7 +5,7 @@
 (function () {
   "use strict";
   var C = window.SmartDiaoduConsole;
-  if (!C) return;
+  if (!C) { window.__smartdiaodu_nav_fallback = true; return; }
 
   C.renderPassengerList = function () {
     var list = document.getElementById("passengerList");
@@ -263,11 +263,25 @@
       setActiveTab(navMap);
     }
 
-    navHome.addEventListener("click", showHome);
-    navMap.addEventListener("click", showMap);
+    function addTap(el, fn) {
+      if (!el) return;
+      el.addEventListener("click", fn);
+      el.addEventListener("touchend", function (e) {
+        e.preventDefault();
+        fn();
+      }, { passive: false });
+    }
+    addTap(navHome, showHome);
+    addTap(navMap, showMap);
 
     var btnShowMap = document.getElementById("btnShowMap");
-    if (btnShowMap) btnShowMap.addEventListener("click", showMap);
+    if (btnShowMap) addTap(btnShowMap, showMap);
+
+    if (navSettings) {
+      var overlay = document.getElementById("settingsPanelOverlay");
+      function openSettings() { if (overlay) overlay.classList.add("show"); }
+      addTap(navSettings, openSettings);
+    }
 
     window.addEventListener("message", function (e) {
       if (e.data && e.data.type === "smartdiaodu_map_back") showHome();
@@ -748,4 +762,60 @@
     }
   }
   checkAuthAndRun();
+})();
+
+(function () {
+  if (!window.__smartdiaodu_nav_fallback) return;
+  window.__smartdiaodu_nav_fallback = false;
+  function run() {
+    var viewHome = document.getElementById("viewHome");
+    var viewMap = document.getElementById("viewMap");
+    var mapFrame = document.getElementById("mapFrame");
+    var navHome = document.getElementById("navHome");
+    var navMap = document.getElementById("navMap");
+    var navSettings = document.getElementById("navSettings");
+    if (!viewHome || !viewMap || !navHome || !navMap) return;
+    var bottomNav = document.getElementById("bottomNav");
+    var appMain = document.getElementById("appMain");
+    function setActiveTab(tab) {
+      [navHome, navMap, navSettings].forEach(function (el) {
+        if (el) el.classList.toggle("active", el === tab);
+      });
+    }
+    function showHome() {
+      viewHome.classList.remove("hidden");
+      viewMap.classList.add("hidden");
+      if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
+      if (appMain) appMain.classList.remove("map-fullscreen");
+      setActiveTab(navHome);
+    }
+    var mapLoaded = false;
+    function showMap() {
+      if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
+      viewHome.classList.add("hidden");
+      viewMap.classList.remove("hidden");
+      if (bottomNav) bottomNav.classList.add("bottom-nav-hidden");
+      if (appMain) appMain.classList.add("map-fullscreen");
+      setActiveTab(navMap);
+    }
+    function addTap(el, fn) {
+      if (!el) return;
+      el.addEventListener("click", fn);
+      el.addEventListener("touchend", function (e) { e.preventDefault(); fn(); }, { passive: false });
+    }
+    addTap(navHome, showHome);
+    addTap(navMap, showMap);
+    var btnShowMap = document.getElementById("btnShowMap");
+    if (btnShowMap) addTap(btnShowMap, showMap);
+    if (navSettings) {
+      var overlay = document.getElementById("settingsPanelOverlay");
+      addTap(navSettings, function () { if (overlay) overlay.classList.add("show"); });
+    }
+    window.addEventListener("message", function (e) {
+      if (e.data && e.data.type === "smartdiaodu_map_back") showHome();
+    });
+    setActiveTab(navHome);
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run);
+  else run();
 })();
