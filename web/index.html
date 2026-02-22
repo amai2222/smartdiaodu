@@ -229,6 +229,11 @@
           <p class="text-sm text-muted">按时间排序，优先第 1 批找单。计划不删；当前批跑完后点「结束找单」即可进入下一批。</p>
         </div>
         <div class="mt-5 pt-4 border-t border-border">
+          <p class="text-muted text-sm mb-2">清空本次计划</p>
+          <button type="button" id="btnClearWaypointsAndPlan" class="w-full py-3 rounded-xl border border-danger/60 text-danger font-medium hover:bg-danger/20 mb-4">
+            清空途经
+          </button>
+          <p class="text-sm text-muted mb-4">从数据库取消本车所有已分配订单，并清空本地途经点与乘客列表，仅保留司机位置。</p>
           <p class="text-muted text-sm mb-3">绕路容忍度（分钟）</p>
           <div class="flex items-center gap-4">
             <button type="button" id="detourMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>

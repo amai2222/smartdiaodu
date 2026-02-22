@@ -97,6 +97,7 @@ input, select, button { font-size: inherit; }
 #bottomNav .nav-tab:not(.active) { color: #8b9199; border-top-color: transparent; }
 #bottomNav.bottom-nav-hidden { display: none !important; }
 #appMain.map-fullscreen { padding-bottom: 0 !important; }
+.app-header-hidden { display: none !important; }
 
 #editPassengerModal .edit-actions { display: flex; gap: 0.75rem; padding: 0 1.25rem 1rem; }
 #editPassengerModal .edit-actions button { flex: 1; padding: 0.75rem; border-radius: 0.75rem; font-size: 1rem; cursor: pointer; border: none; }

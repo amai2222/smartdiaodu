@@ -15,6 +15,12 @@
     if (nextIdx >= M.route_addresses.length) {
       navPanel.style.display = "none";
       allDonePanel.style.display = "block";
+      var aAllDone = document.getElementById("btnOpenNavAllDone");
+      if (aAllDone) {
+        var url = (M.route_addresses.length >= 2 && M.getNavUrlWithWaypoints) ? M.getNavUrlWithWaypoints() : "#";
+        aAllDone.href = url;
+        aAllDone.style.display = url === "#" ? "none" : "";
+      }
       return;
     }
     allDonePanel.style.display = "none";
@@ -168,16 +174,6 @@
 
   document.getElementById("btnArrived").onclick = M.markArrived;
 
-  (function () {
-    var backBtn = document.getElementById("btnBackToConsole");
-    if (backBtn && window !== window.top) {
-      backBtn.addEventListener("click", function (e) {
-        e.preventDefault();
-        try { window.parent.postMessage({ type: "smartdiaodu_map_back" }, "*"); } catch (err) {}
-      });
-    }
-  })();
-
   document.getElementById("btnCollapse").onclick = function () {
     document.body.classList.add("toolbar-hidden");
     document.getElementById("btnToggleUI").classList.add("show");
@@ -315,4 +311,18 @@
       }
     });
   })();
+})();
+
+/** 返回控制台：不依赖 M，在 iframe 内时点「返回」通知父页切回首页 */
+(function () {
+  var backBtn = document.getElementById("btnBackToConsole");
+  if (!backBtn) return;
+  function goBack(e) {
+    if (e) e.preventDefault();
+    try { window.parent.postMessage({ type: "smartdiaodu_map_back" }, "*"); } catch (err) {}
+  }
+  if (window !== window.top) {
+    backBtn.addEventListener("click", function (e) { e.preventDefault(); goBack(); });
+    backBtn.addEventListener("touchend", function (e) { e.preventDefault(); goBack(); }, { passive: false });
+  }
 })();
