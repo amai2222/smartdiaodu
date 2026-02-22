@@ -381,15 +381,16 @@
         }
 
         var mainPathArr = M.route_paths[M.routeAlternativeIndex] || M.route_paths[0];
+        var mainBdPath = [];
         if (mainPathArr && mainPathArr.length >= 2) {
-          var mainBdPath = [];
           for (var k = 0; k < mainPathArr.length; k++) {
             mainBdPath.push(new BPoint(mainPathArr[k][1], mainPathArr[k][0]));
           }
           M.addDirectionalPolyline(mainBdPath, ROUTE_GREEN, []);
         }
-
-        if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
+        var viewportPoints = bdPoints.slice();
+        for (var v = 0; v < mainBdPath.length; v++) viewportPoints.push(mainBdPath[v]);
+        if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(viewportPoints);
         if (M.updateNavPanel) M.updateNavPanel();
         if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
         if (M.bmap && typeof M.bmap.getZoom === "function") M.lastRedrawZoom = M.bmap.getZoom();
@@ -445,7 +446,7 @@
     function updateStatus() { setRouteInfoRemaining(addresses.length - 1); }
     function searchNextSegment() {
       if (segIndex >= bdPoints.length - 1) {
-        if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
+        if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(M.collectViewportPointsFromSegments ? M.collectViewportPointsFromSegments(bdPoints) : bdPoints);
         updateStatus();
         if (M.updateNavPanel) M.updateNavPanel();
         if (M.showRestrictionHintIfNeeded) M.showRestrictionHintIfNeeded();
@@ -522,12 +523,29 @@
         }
       } catch (e) {}
     }
-    if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
+    if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(M.collectViewportPointsFromSegments ? M.collectViewportPointsFromSegments(bdPoints) : bdPoints);
     if (M.updateNavPanel) M.updateNavPanel();
     if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
     if (M.bmap && typeof M.bmap.getZoom === "function") M.lastRedrawZoom = M.bmap.getZoom();
     var name = M.POLICY_NAMES[M.routePolicyKey] || M.routePolicyKey;
     document.getElementById("routeInfo").textContent = "已切换为「" + name + "」路线（浅灰绿）";
     if (M.showRestrictionHintIfNeeded) M.showRestrictionHintIfNeeded();
+  };
+
+  M.collectViewportPointsFromSegments = function (basePoints) {
+    var out = basePoints.slice();
+    if (!M.lastSegmentResults || !M.lastSegmentResults.length) return out;
+    for (var i = 0; i < M.lastSegmentResults.length; i++) {
+      var res = M.lastSegmentResults[i];
+      if (!res) continue;
+      var nPlans = M.getNumPlans(res), planIdx = nPlans ? (M.routeAlternativeIndex % nPlans) : 0;
+      var plan = res.getPlan && res.getPlan(planIdx);
+      if (!plan) plan = res.getPlan && res.getPlan(0);
+      if (!plan) continue;
+      var route = plan.getRoute && plan.getRoute(0);
+      var path = route && route.getPath && route.getPath();
+      if (path && path.length) for (var p = 0; p < path.length; p++) out.push(path[p]);
+    }
+    return out;
   };
 })();
