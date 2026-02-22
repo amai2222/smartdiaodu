@@ -184,29 +184,37 @@
   var btnArrived = document.getElementById("btnArrived");
   if (btnArrived) btnArrived.onclick = M.markArrived;
 
-  document.getElementById("btnCollapse").onclick = function () {
+  var btnCollapse = document.getElementById("btnCollapse");
+  if (btnCollapse) btnCollapse.onclick = function () {
     document.body.classList.add("toolbar-hidden");
-    document.getElementById("btnToggleUI").classList.add("show");
-    document.getElementById("routeStrategyPanel").classList.remove("show");
+    var t = document.getElementById("btnToggleUI");
+    if (t) t.classList.add("show");
+    var p = document.getElementById("routeStrategyPanel");
+    if (p) p.classList.remove("show");
   };
-  document.getElementById("btnToggleUI").onclick = function () {
+  var btnToggleUI = document.getElementById("btnToggleUI");
+  if (btnToggleUI) btnToggleUI.onclick = function () {
     document.body.classList.remove("toolbar-hidden");
-    document.getElementById("btnToggleUI").classList.remove("show");
-    document.getElementById("routeStrategyPanel").classList.remove("show");
-    M.updateNavPanel();
+    if (btnToggleUI) btnToggleUI.classList.remove("show");
+    var p = document.getElementById("routeStrategyPanel");
+    if (p) p.classList.remove("show");
+    if (M.updateNavPanel) M.updateNavPanel();
   };
 
-  document.getElementById("btnStrategy").onclick = function (e) {
+  var btnStrategy = document.getElementById("btnStrategy");
+  if (btnStrategy) btnStrategy.onclick = function (e) {
     e.stopPropagation();
     var otherPanel = document.getElementById("otherRoutesPanel");
     if (otherPanel) otherPanel.style.display = "none";
     var panel = document.getElementById("routeStrategyPanel");
-    panel.classList.toggle("show");
-    M.updateStrategyPanelActive();
+    if (panel) panel.classList.toggle("show");
+    if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
   };
 
   (function () {
-    var strategyBtns = document.getElementById("routeStrategyPanel").querySelectorAll("button[data-policy]");
+    var strategyPanel = document.getElementById("routeStrategyPanel");
+    if (!strategyPanel) return;
+    var strategyBtns = strategyPanel.querySelectorAll("button[data-policy]");
     for (var i = 0; i < strategyBtns.length; i++) {
       (function (btn) {
         btn.onclick = function () {
@@ -247,9 +255,11 @@
   })();
 
   document.addEventListener("click", function () {
-    document.getElementById("routeStrategyPanel").classList.remove("show");
+    var p = document.getElementById("routeStrategyPanel");
+    if (p) p.classList.remove("show");
   });
-  document.getElementById("routeStrategyPanel").addEventListener("click", function (e) {
+  var routeStrategyPanel = document.getElementById("routeStrategyPanel");
+  if (routeStrategyPanel) routeStrategyPanel.addEventListener("click", function (e) {
     e.stopPropagation();
   });
 
@@ -267,18 +277,22 @@
     }
   })();
 
-  document.getElementById("btnRefresh").onclick = function () {
-    document.getElementById("toolbarRouteDropdown").classList.remove("show");
+  var btnRefresh = document.getElementById("btnRefresh");
+  if (btnRefresh) btnRefresh.onclick = function () {
+    var dd = document.getElementById("toolbarRouteDropdown");
+    if (dd) dd.classList.remove("show");
     if (typeof localStorage !== "undefined") {
       localStorage.removeItem(M.STORAGE_MAP_STOP_INDEX);
       localStorage.removeItem(M.STORAGE_MAP_ROUTE_HASH);
     }
     M.currentStopIndex = 0;
-    M.loadAndDraw();
+    if (M.loadAndDraw) M.loadAndDraw();
   };
 
-  document.getElementById("btnRestore").onclick = function () {
-    document.getElementById("toolbarRouteDropdown").classList.remove("show");
+  var btnRestore = document.getElementById("btnRestore");
+  if (btnRestore) btnRestore.onclick = function () {
+    var dd = document.getElementById("toolbarRouteDropdown");
+    if (dd) dd.classList.remove("show");
     var statusEl = document.getElementById("routeInfo");
     statusEl.textContent = "加载中…";
     M.loadSavedRoute(function (data) {
