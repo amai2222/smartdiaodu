@@ -99,16 +99,22 @@ input, select, button { font-size: inherit; }
 /* 主内容区：相对定位以便地图视图绝对铺满 */
 #appMain { position: relative; }
 .app-view.hidden { display: none !important; }
-#viewMap.app-view { position: absolute; inset: 0; background: #0c0c0f; }
-#viewMap.app-view .w-full { height: 100%; }
+#viewMap.app-view { position: absolute; inset: 0; background: #0c0c0f; min-height: 50vh; }
+#viewMap.app-view .w-full { height: 100%; min-height: 50vh; }
 #viewSettings { overflow-y: auto; padding-bottom: 2rem; background: #0c0c0f; min-height: 100%; }
 #viewSettings .settings-panel { max-width: 100%; width: 100%; height: auto; min-height: 0; border-left: none; box-shadow: none; background: transparent; }
 #viewSettings .settings-panel-header { border-radius: 0; border-bottom-color: #2a2d35; }
 #viewSettings .settings-panel-body { padding: 1rem 1.25rem 2rem; }
 
-/* 底部导航栏（App 风格） */
+/* 底部导航栏（App 风格）：移动端可点区域与快速响应 */
 .z-1000 { z-index: 1000; }
-#bottomNav .nav-tab { transition: color 0.15s, border-color 0.15s; }
+#bottomNav .nav-tab {
+  transition: color 0.15s, border-color 0.15s;
+  touch-action: manipulation;
+  cursor: pointer;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+}
 #bottomNav .nav-tab.active { color: var(--tw-color-accent, #3b82f6); border-top-color: var(--tw-color-accent, #3b82f6); }
 #bottomNav .nav-tab:not(.active) { color: #8b9199; border-top-color: transparent; }
 #bottomNav .nav-tab--loading { opacity: 0.7; pointer-events: none; }

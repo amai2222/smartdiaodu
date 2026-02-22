@@ -205,8 +205,19 @@
     if (!viewHome || !viewMap || !navHome || !navMap) return;
     function addTap(el, fn) {
       if (!el) return;
-      el.addEventListener("click", fn);
-      el.addEventListener("touchend", function (e) { e.preventDefault(); fn(); }, { passive: false });
+      var touchHandled = false;
+      el.addEventListener("touchstart", function (e) {
+        touchHandled = true;
+        e.preventDefault();
+        fn();
+      }, { passive: false });
+      el.addEventListener("touchend", function () {
+        setTimeout(function () { touchHandled = false; }, 350);
+      });
+      el.addEventListener("click", function (e) {
+        if (touchHandled) { e.preventDefault(); return; }
+        fn();
+      });
     }
     function setActive(tab) {
       [navHome, navMap, navSettings].forEach(function (n) { if (n) n.classList.toggle("active", n === tab); });

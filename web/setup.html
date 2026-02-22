@@ -103,6 +103,8 @@
   <script>
   (function () {
     if (window === window.top) return;
+    var nav = document.getElementById("bottomNav");
+    if (nav) nav.style.display = "none";
     var home = document.getElementById("setupNavHome");
     var map = document.getElementById("setupNavMap");
     function send(type) {

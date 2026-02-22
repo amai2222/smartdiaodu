@@ -324,11 +324,19 @@
 
     function addTap(el, fn) {
       if (!el) return;
-      el.addEventListener("click", fn);
-      el.addEventListener("touchend", function (e) {
+      var touchHandled = false;
+      el.addEventListener("touchstart", function (e) {
+        touchHandled = true;
         e.preventDefault();
         fn();
       }, { passive: false });
+      el.addEventListener("touchend", function () {
+        setTimeout(function () { touchHandled = false; }, 350);
+      });
+      el.addEventListener("click", function (e) {
+        if (touchHandled) { e.preventDefault(); return; }
+        fn();
+      });
     }
     addTap(navHome, showHome);
     addTap(navMap, showMap);
