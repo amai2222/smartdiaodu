@@ -183,32 +183,46 @@
   var btnArrived = document.getElementById("btnArrived");
   if (btnArrived) btnArrived.onclick = M.markArrived;
 
+  function bindTap(el, fn) {
+    if (!el || !fn) return;
+    var touchHandled = false;
+    el.addEventListener("click", function (e) {
+      if (touchHandled) { touchHandled = false; e.preventDefault(); return; }
+      fn(e);
+    });
+    el.addEventListener("touchstart", function (e) {
+      touchHandled = true;
+      e.preventDefault();
+      fn(e);
+      setTimeout(function () { touchHandled = false; }, 400);
+    }, { passive: false });
+  }
   var btnCollapse = document.getElementById("btnCollapse");
-  if (btnCollapse) btnCollapse.onclick = function () {
+  if (btnCollapse) bindTap(btnCollapse, function () {
     document.body.classList.add("toolbar-hidden");
     var t = document.getElementById("btnToggleUI");
     if (t) t.classList.add("show");
     var p = document.getElementById("routeStrategyPanel");
     if (p) p.classList.remove("show");
-  };
+  });
   var btnToggleUI = document.getElementById("btnToggleUI");
-  if (btnToggleUI) btnToggleUI.onclick = function () {
+  if (btnToggleUI) bindTap(btnToggleUI, function () {
     document.body.classList.remove("toolbar-hidden");
     if (btnToggleUI) btnToggleUI.classList.remove("show");
     var p = document.getElementById("routeStrategyPanel");
     if (p) p.classList.remove("show");
     if (M.updateNavPanel) M.updateNavPanel();
-  };
+  });
 
   var btnStrategy = document.getElementById("btnStrategy");
-  if (btnStrategy) btnStrategy.onclick = function (e) {
-    e.stopPropagation();
+  if (btnStrategy) bindTap(btnStrategy, function (e) {
+    if (e) e.stopPropagation();
     var otherPanel = document.getElementById("otherRoutesPanel");
     if (otherPanel) otherPanel.style.display = "none";
     var panel = document.getElementById("routeStrategyPanel");
     if (panel) panel.classList.toggle("show");
     if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
-  };
+  });
 
   (function () {
     var strategyPanel = document.getElementById("routeStrategyPanel");
