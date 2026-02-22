@@ -687,6 +687,67 @@ def solve_pdp_route(
     return route_indices, total_time
 
 
+def solve_pdp_route_flexible(
+    matrix: List[List[int]],
+    pickup_delivery_pairs: List[Tuple[int, int]],
+) -> Tuple[Optional[List[int]], int]:
+    """
+    支持「仅送」的 PDP：pickup_delivery_pairs 中每对 (接客点, 送客点) 先接后送；
+    未出现在 pair 中的非起点节点仍会全部访问（通过 Disjunction 必选）。
+    节点编号与 matrix 一致：0=司机起点，其余为途经点。
+    返回：(最优路线节点索引列表, 总耗时秒数)；无解时 (None, 0)。
+    """
+    num_nodes = len(matrix)
+    if num_nodes <= 1:
+        return ([0] if num_nodes else [], 0)
+    manager = pywrapcp.RoutingIndexManager(num_nodes, 1, 0)
+    routing = pywrapcp.RoutingModel(manager)
+
+    def duration_callback(from_index: int, to_index: int) -> int:
+        from_node = manager.IndexToNode(from_index)
+        to_node = manager.IndexToNode(to_index)
+        if to_node == 0:
+            return 0
+        return matrix[from_node][to_node]
+
+    transit_callback_index = routing.RegisterTransitCallback(duration_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+    routing.AddDimension(transit_callback_index, 0, 300000, True, "Time")
+    time_dimension = routing.GetDimensionOrDie("Time")
+
+    # 所有非起点节点必访（含仅送点）
+    for node in range(1, num_nodes):
+        routing.AddDisjunction([manager.NodeToIndex(node)], 0)
+    for pickup_node, delivery_node in pickup_delivery_pairs:
+        pickup_idx = manager.NodeToIndex(pickup_node)
+        delivery_idx = manager.NodeToIndex(delivery_node)
+        routing.AddPickupAndDelivery(pickup_idx, delivery_idx)
+        routing.solver().Add(
+            routing.VehicleVar(pickup_idx) == routing.VehicleVar(delivery_idx)
+        )
+        routing.solver().Add(
+            time_dimension.CumulVar(pickup_idx)
+            <= time_dimension.CumulVar(delivery_idx)
+        )
+
+    search_params = pywrapcp.DefaultRoutingSearchParameters()
+    search_params.first_solution_strategy = (
+        routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION
+    )
+    solution = routing.SolveWithParameters(search_params)
+    if not solution:
+        return None, 0
+    index = routing.Start(0)
+    route_indices: List[int] = []
+    total_time = 0
+    while not routing.IsEnd(index):
+        route_indices.append(manager.IndexToNode(index))
+        prev_index = index
+        index = solution.Value(routing.NextVar(index))
+        total_time += routing.GetArcCostForVehicle(prev_index, index, 0)
+    return route_indices, total_time
+
+
 # ---------------------------------------------------------------------------
 # 四、外部依赖 - Bark 推送 (极速强提醒，突破专注模式)
 # ---------------------------------------------------------------------------
@@ -970,17 +1031,21 @@ async def reverse_geocode_endpoint(body: ReverseGeocodeRequest) -> dict:
 async def current_route_preview(req: dict) -> dict:
     """
     根据当前状态计算最优路线，返回途经点地址顺序及经纬度，供网页地图绘制。
-    请求体：{ "current_state": { "driver_loc", "pickups", "deliveries" } }, "tactics": 策略数字。
+    请求体：{ "current_state": { "driver_loc", "pickups", "deliveries", "waypoints" } }, "tactics": 策略数字。
     """
     try:
         state = req.get("current_state") or {}
         driver_loc = (state.get("driver_loc") or "").strip()
         pickups = state.get("pickups") or []
         deliveries = state.get("deliveries") or []
+        waypoints = state.get("waypoints") or []
         if isinstance(pickups, str):
             pickups = [s.strip() for s in pickups.split("\n") if s.strip()]
         if isinstance(deliveries, str):
             deliveries = [s.strip() for s in deliveries.split("\n") if s.strip()]
+        if not isinstance(waypoints, list):
+            waypoints = []
+        waypoints = [str(w).strip() for w in waypoints if (w or "").strip()]
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"请求体格式错误: {e}") from e
 
@@ -990,8 +1055,9 @@ async def current_route_preview(req: dict) -> dict:
         raise HTTPException(status_code=400, detail="driver_loc 不能为空")
     if len(pickups) != len(deliveries):
         raise HTTPException(status_code=400, detail="pickups 与 deliveries 数量须一致")
-
-    if not pickups:
+    n = len(deliveries)
+    m = len(waypoints)
+    if n == 0 and m == 0:
         try:
             coord_str = geocode_address(driver_loc)
             lat_s, lng_s = coord_str.split(",", 1)
@@ -1006,14 +1072,28 @@ async def current_route_preview(req: dict) -> dict:
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"地理编码失败: {e}") from e
 
-    addresses = [driver_loc] + list(pickups) + list(deliveries)
+    # 空 pickup 表示该乘客已上车，路线中排除该接客点；waypoints 为途经点（到达后前端删除）
+    effective_pickups = [p for p in pickups if (p or "").strip()]
+    k = len(effective_pickups)
+    addresses = [driver_loc] + list(effective_pickups) + list(deliveries) + list(waypoints)
     coords = geocode_addresses(addresses)
     matrix = get_duration_matrix(coords)
-    route_indices, total_time = solve_pdp_route(matrix, len(pickups))
+    # 配对：仅对「未上车」的乘客建立接客->送客约束
+    pickup_delivery_pairs: List[Tuple[int, int]] = []
+    for i in range(n):
+        if (pickups[i] or "").strip():
+            pickup_ord = sum(1 for j in range(i) if (pickups[j] or "").strip())
+            pickup_node = 1 + pickup_ord
+            delivery_node = 1 + k + i
+            pickup_delivery_pairs.append((pickup_node, delivery_node))
+    route_indices, total_time = solve_pdp_route_flexible(matrix, pickup_delivery_pairs)
     if not route_indices:
         raise HTTPException(status_code=422, detail="无法规划出符合逻辑的路线")
 
-    n_pairs = len(pickups)
+    # 节点 0=司机, 1..k=接客, 1+k..1+k+n-1=送客, 1+k+n..1+k+n+m-1=途经点
+    passengers_with_pickup = [i for i in range(n) if (pickups[i] or "").strip()]
+    pickup_node_to_passenger = {1 + j: passengers_with_pickup[j] for j in range(k)}
+
     route_addresses = [addresses[i] for i in route_indices]
     point_types = []
     point_labels = []
@@ -1021,12 +1101,15 @@ async def current_route_preview(req: dict) -> dict:
         if i == 0:
             point_types.append("driver")
             point_labels.append("司机")
-        elif 1 <= i <= n_pairs:
+        elif 1 <= i <= k:
             point_types.append("pickup")
-            point_labels.append(f"乘客{i}起点")
-        else:
+            point_labels.append(f"乘客{pickup_node_to_passenger[i] + 1}起点")
+        elif k + 1 <= i <= k + n:
             point_types.append("delivery")
-            point_labels.append(f"乘客{i - n_pairs}终点")
+            point_labels.append(f"乘客{i - k}终点")
+        else:
+            point_types.append("waypoint")
+            point_labels.append(f"途径点{i - k - n}")
     route_coords = []
     for i in route_indices:
         parts = coords[i].split(",", 1)

@@ -20,28 +20,29 @@
   </script>
   <link rel="stylesheet" href="index.css" />
 </head>
-<body class="bg-[#0c0c0f] text-gray-100 min-h-screen font-sans antialiased pb-8">
-  <div class="max-w-lg mx-auto px-4 pt-4">
-    <!-- 顶部状态栏 -->
-    <header class="flex items-center justify-between mb-4">
+<body class="bg-[#0c0c0f] text-gray-100 min-h-screen font-sans antialiased pb-safe">
+  <div class="max-w-lg mx-auto px-4 pt-safe min-h-screen flex flex-col">
+    <!-- 顶部状态栏（App 风格） -->
+    <header class="flex items-center justify-between py-3 mb-2 flex-shrink-0">
       <div class="flex items-center gap-2">
-        <span class="w-3 h-3 rounded-full bg-success animate-pulse" aria-hidden="true"></span>
-        <span class="text-console text-muted">AI 大脑在线</span>
+        <span class="w-2.5 h-2.5 rounded-full bg-success animate-pulse" aria-hidden="true"></span>
+        <span class="text-sm text-muted">AI 大脑在线</span>
       </div>
-      <div class="flex items-center gap-2">
-        <span class="text-console text-muted">剩余空座</span>
-        <select id="emptySeats" class="bg-panel border border-border rounded-lg px-3 py-2 text-big text-gray-100 focus:ring-2 focus:ring-accent">
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-muted">空座</span>
+        <select id="emptySeats" class="bg-panel border border-border rounded-xl px-3 py-2 text-base text-gray-100 focus:ring-2 focus:ring-accent focus:border-accent">
+          <option value="0">0</option>
           <option value="1">1</option>
           <option value="2" selected>2</option>
           <option value="3">3</option>
           <option value="4">4</option>
         </select>
-        <span class="text-lg">💺</span>
+        <button type="button" id="btnSettings" class="p-2 rounded-xl border border-border text-muted hover:text-gray-100 hover:border-accent/60 hover:bg-panel" title="设置" aria-label="设置">
+          <span class="text-xl" aria-hidden="true">⚙️</span>
+        </button>
       </div>
     </header>
-
-    <!-- 用户与退出（小字） -->
-    <div class="flex justify-end gap-2 mb-2">
+    <div class="flex justify-end items-center gap-2 mb-3">
       <span id="userName" class="text-sm text-muted"></span>
       <button type="button" id="btnLogout" class="text-sm text-muted hover:text-gray-100 underline">退出</button>
     </div>
@@ -51,10 +52,11 @@
       <h2 class="text-muted text-console font-medium mb-3 flex items-center gap-2">
         <span aria-hidden="true">📍</span> 我的位置
       </h2>
-      <div class="flex gap-3 items-stretch">
+      <div class="flex gap-2 items-stretch flex-wrap">
         <input type="text" id="driverLoc"
-          class="flex-1 bg-[#0c0c0f] border border-border rounded-xl px-4 py-4 text-big text-gray-100 placeholder-gray-500"
-          placeholder="点击右侧获取定位或直接输入地址" />
+          class="flex-1 min-w-0 bg-[#0c0c0f] border border-border rounded-xl px-4 py-4 text-big text-gray-100 placeholder-gray-500"
+          placeholder="输入或点🎤说地址、右侧刷新 GPS" />
+        <button type="button" id="driverLocVoiceBtn" class="voice-btn shrink-0 px-3 rounded-xl border border-border text-muted hover:text-accent hover:border-accent/60" title="语音输入我的位置">🎤</button>
         <button type="button" id="btnRefreshGps" class="btn-touch shrink-0 bg-accent hover:bg-blue-600 text-white font-medium rounded-xl px-4 flex items-center gap-2 shadow-lg">
           <span aria-hidden="true">🎯</span>
           <span class="hidden sm:inline">刷新 GPS</span>
@@ -63,12 +65,6 @@
       <p id="gpsStatus" class="text-sm text-muted mt-2"></p>
       <p class="text-sm text-muted mt-1">可手动输入或修改地址（如百度无法解析时），失焦后自动同步到数据库。</p>
 
-      <div class="mt-4">
-        <label for="driverPlate" class="block text-muted text-console font-medium mb-2">🚗 车牌（用于接单与路线规避限行）</label>
-        <input type="text" id="driverPlate" maxlength="16" placeholder="如 沪A12345"
-          class="w-full bg-[#0c0c0f] border border-border rounded-xl px-4 py-3 text-big text-gray-100 placeholder-gray-500" />
-        <p class="text-sm text-muted mt-1">绑定后搜寻订单与规划线路会按该车牌规避限行区域。</p>
-      </div>
       <div id="restrictionHintIndex" class="hidden mt-3 p-3 rounded-xl bg-amber-900/40 border border-amber-600/50 text-amber-200 text-sm" role="alert"></div>
 
       <div id="passengerCardSection" class="mt-5">
@@ -88,8 +84,11 @@
         </div>
       </div>
 
-      <!-- 入口主操作：按空座显示「显示地图」或「继续接单」 -->
+      <!-- 入口主操作：途经点、显示地图、继续接单 -->
       <div id="entryActions" class="mt-6 flex flex-col gap-3">
+        <button type="button" id="btnWaypoints" class="w-full py-3 rounded-xl border border-accent/60 text-accent font-medium text-center text-big hover:bg-accent/20">
+          📍 途经点
+        </button>
         <a id="btnShowMap" href="map.html" target="_blank" rel="noopener" class="hidden w-full py-4 rounded-xl bg-accent hover:bg-blue-600 text-white font-medium text-center text-big">
           🗺️ 显示地图
         </a>
@@ -109,15 +108,41 @@
       </div>
     </div>
 
+    <!-- 途经点弹窗：查看与添加途经点 -->
+    <div id="waypointsModalOverlay" aria-hidden="true">
+      <div id="waypointsModal" role="dialog" aria-labelledby="waypointsModalTitle">
+        <h3 id="waypointsModalTitle">途经点</h3>
+        <div id="waypointsModalContent"></div>
+        <div class="flex gap-2 mt-3 flex-wrap items-center">
+          <div class="input-with-voice flex-1 min-w-0 flex gap-1">
+            <input type="text" id="waypointAddrInput" placeholder="输入或语音说地址添加途经点" class="flex-1 px-3 py-2 rounded-lg bg-[#0c0c0f] border border-border text-console" />
+            <button type="button" id="waypointVoiceBtn" class="voice-btn shrink-0 px-3 py-2 rounded-lg border border-border text-muted hover:text-accent hover:border-accent/60" title="点击说话，语音输入地址">🎤</button>
+          </div>
+          <button type="button" id="waypointAddBtn" class="px-4 py-2 rounded-lg bg-accent text-white font-medium">添加</button>
+        </div>
+        <button type="button" id="waypointsModalClose" class="mt-3 w-full py-2 rounded-lg border border-border text-muted">关闭</button>
+      </div>
+    </div>
+
     <!-- 编辑乘客起终点弹窗：默认原地址，可修改后写回 order_pool -->
     <div id="editPassengerModalOverlay" aria-hidden="true">
       <div id="editPassengerModal" role="dialog" aria-labelledby="editPassengerModalTitle">
         <h3 id="editPassengerModalTitle">编辑乘客起终点</h3>
         <div class="edit-body">
+          <div class="flex items-center gap-2 mb-3">
+            <button type="button" id="editVoiceStartEndBtn" class="voice-start-end-btn px-3 py-2 rounded-lg border border-accent/60 text-accent text-sm font-medium hover:bg-accent/20" title="说：乘客x起点：xxx，终点：xxx">🎤 一句说清起终点</button>
+            <span class="text-muted text-xs">说：乘客x起点：xxx，终点：xxx</span>
+          </div>
           <label for="editPickup">接 / 起点</label>
-          <input type="text" id="editPickup" placeholder="接客地址" />
+          <div class="input-with-voice flex gap-1 mb-2">
+            <input type="text" id="editPickup" placeholder="接客地址（可点🎤语音输入）" class="flex-1" />
+            <button type="button" id="editPickupVoiceBtn" class="voice-btn shrink-0" title="语音输入">🎤</button>
+          </div>
           <label for="editDelivery">送 / 终点</label>
-          <input type="text" id="editDelivery" placeholder="送达地址" />
+          <div class="input-with-voice flex gap-1">
+            <input type="text" id="editDelivery" placeholder="送达地址（可点🎤语音输入）" class="flex-1" />
+            <button type="button" id="editDeliveryVoiceBtn" class="voice-btn shrink-0" title="语音输入">🎤</button>
+          </div>
         </div>
         <div class="edit-actions">
           <button type="button" id="editPassengerModalCancel">取消</button>
@@ -126,53 +151,66 @@
       </div>
     </div>
 
-    <!-- ========== 区块二：AI 调度模式控制台 ========== -->
-    <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">
-      <h2 class="text-muted text-console font-medium mb-4 flex items-center gap-2">
-        <span aria-hidden="true">🧠</span> 调度模式
-      </h2>
-      <div class="grid grid-cols-1 gap-3">
-        <button type="button" data-mode="mode1" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-          <span class="text-2xl">📅</span>
-          <span class="text-big font-medium">下次计划</span>
-        </button>
-        <button type="button" data-mode="mode2" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-          <span class="text-2xl">🚗</span>
-          <span class="text-big font-medium">半路吸尘器</span>
-        </button>
-        <button type="button" data-mode="mode3" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-          <span class="text-2xl">🔄</span>
-          <span class="text-big font-medium">附近接力</span>
-        </button>
-        <button type="button" data-mode="pause" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-          <span class="text-2xl">⏸</span>
-          <span class="text-big font-medium">停止接单</span>
-        </button>
-      </div>
-
-      <!-- 下次计划展开：多批次（晚回程、次日出发、次日回程…探子/调度按每条找单） -->
-      <div id="planPanel" class="mt-4 p-4 rounded-xl bg-[#0c0c0f] border border-border hidden">
-        <div id="planList" class="space-y-4 mb-4"></div>
-        <button type="button" id="btnAddPlan" class="w-full py-3 rounded-xl border border-dashed border-border text-muted font-medium mb-3">＋ 添加下一批计划</button>
-        <p class="text-sm text-muted">按时间排序，优先第 1 批找单。计划不删；当前批跑完后点「结束找单」即可进入下一批，历史计划保留。</p>
-      </div>
-
-      <!-- 参数微调 -->
-      <div class="mt-5 pt-4 border-t border-border">
-        <p class="text-muted text-sm mb-3">绕路容忍度（分钟）</p>
-        <div class="flex items-center gap-4">
-          <button type="button" id="detourMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
-          <span id="detourVal" class="text-big font-semibold min-w-[3rem] text-center">15</span>
-          <button type="button" id="detourPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
+    <!-- 设置面板（点击顶部 ⚙️ 打开）：调度模式 + 绕路/高收益参数 -->
+    <div id="settingsPanelOverlay" class="settings-overlay" aria-hidden="true">
+      <div id="settingsPanel" class="settings-panel" role="dialog" aria-labelledby="settingsPanelTitle">
+        <div class="settings-panel-header">
+          <h2 id="settingsPanelTitle" class="text-lg font-medium text-gray-100">设置</h2>
+          <button type="button" id="settingsPanelClose" class="p-2 rounded-xl border border-border text-muted hover:text-gray-100 hover:bg-panel" aria-label="关闭">✕</button>
         </div>
-        <p class="text-muted text-sm mt-4 mb-3">高收益门槛（元）</p>
-        <div class="flex items-center gap-4">
-          <button type="button" id="profitMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
-          <span id="profitVal" class="text-big font-semibold min-w-[3rem] text-center">100</span>
-          <button type="button" id="profitPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
+        <div class="settings-panel-body">
+          <div class="mb-5">
+            <label for="driverPlate" class="block text-muted text-sm font-medium mb-2">🚗 车牌（用于接单与路线规避限行）</label>
+            <input type="text" id="driverPlate" maxlength="16" placeholder="如 沪A12345"
+              class="w-full bg-[#0c0c0f] border border-border rounded-xl px-4 py-3 text-big text-gray-100 placeholder-gray-500" />
+            <p class="text-sm text-muted mt-1">绑定后搜寻订单与规划线路会按该车牌规避限行区域。</p>
+          </div>
+
+          <h3 class="text-muted text-sm font-medium mb-3 flex items-center gap-2">
+            <span aria-hidden="true">🧠</span> 调度模式
+          </h3>
+          <div class="grid grid-cols-1 gap-3">
+            <button type="button" data-mode="mode1" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+              <span class="text-2xl">📅</span>
+              <span class="text-big font-medium">下次计划</span>
+            </button>
+            <button type="button" data-mode="mode2" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+              <span class="text-2xl">🚗</span>
+              <span class="text-big font-medium">半路吸尘器</span>
+            </button>
+            <button type="button" data-mode="mode3" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+              <span class="text-2xl">🔄</span>
+              <span class="text-big font-medium">附近接力</span>
+            </button>
+            <button type="button" data-mode="pause" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+              <span class="text-2xl">⏸</span>
+              <span class="text-big font-medium">停止接单</span>
+            </button>
+          </div>
+
+          <div id="planPanel" class="mt-4 p-4 rounded-xl bg-[#0c0c0f] border border-border hidden">
+            <div id="planList" class="space-y-4 mb-4"></div>
+            <button type="button" id="btnAddPlan" class="w-full py-3 rounded-xl border border-dashed border-border text-muted font-medium mb-3">＋ 添加下一批计划</button>
+            <p class="text-sm text-muted">按时间排序，优先第 1 批找单。计划不删；当前批跑完后点「结束找单」即可进入下一批。</p>
+          </div>
+
+          <div class="mt-5 pt-4 border-t border-border">
+            <p class="text-muted text-sm mb-3">绕路容忍度（分钟）</p>
+            <div class="flex items-center gap-4">
+              <button type="button" id="detourMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
+              <span id="detourVal" class="text-big font-semibold min-w-[3rem] text-center">15</span>
+              <button type="button" id="detourPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
+            </div>
+            <p class="text-muted text-sm mt-4 mb-3">高收益门槛（元）</p>
+            <div class="flex items-center gap-4">
+              <button type="button" id="profitMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
+              <span id="profitVal" class="text-big font-semibold min-w-[3rem] text-center">100</span>
+              <button type="button" id="profitPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
+            </div>
+          </div>
         </div>
       </div>
-    </section>
+    </div>
 
     <!-- ========== 区块三：战利品展示区 ========== -->
     <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">

@@ -74,6 +74,37 @@
     }
   };
 
+  /** 用当前 localStorage 状态重新请求路线并重绘（切回地图页时与控制台保持一致，如乘客全下车后路线会清空） */
+  M.refreshRouteFromStorage = function () {
+    var base = M.getApiBase();
+    var statusEl = document.getElementById("routeInfo");
+    if (!base) return;
+    var state = M.getCurrentState();
+    var driverLoc = (state && state.driver_loc) ? String(state.driver_loc).trim() : "";
+    if (!driverLoc) {
+      if (statusEl) statusEl.textContent = "请先在控制台设置当前位置后点「更新路线」";
+      M.initMap();
+      return;
+    }
+    var tacticsMap = { "DEFAULT": 0, "LEAST_TIME": 13, "LEAST_DISTANCE": 12, "AVOID_CONGESTION": 5, "LEAST_FEE": 6, "AVOID_HIGHWAY": 3 };
+    var currentTactics = tacticsMap[M.routePolicyKey || "DEFAULT"] || 0;
+    if (statusEl) statusEl.textContent = "同步路线中…";
+    fetch(base + "/current_route_preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current_state: state, tactics: currentTactics })
+    })
+    .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); }); return r.json(); })
+    .then(function (data) {
+      M.applyRouteData(data);
+      M.saveRouteSnapshot(data);
+      if (statusEl) statusEl.textContent = "共 " + M.route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟（已与控制台同步）";
+    })
+    .catch(function () {
+      if (statusEl) statusEl.textContent = "同步路线失败，请点「更新路线」重试";
+    });
+  };
+
   M.loadAndDraw = function () {
     var base = M.getApiBase();
     var statusEl = document.getElementById("routeInfo");
@@ -259,6 +290,19 @@
           M.loadAndDraw();
         }
       });
+    });
+  })();
+
+  /** 切回地图页时用控制台最新状态刷新路线（如乘客全下车后不再显示旧站点）；仅从「隐藏」切回时刷新，避免首屏重复请求 */
+  (function () {
+    var hadBeenHidden = false;
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "hidden") {
+        hadBeenHidden = true;
+      } else if (document.visibilityState === "visible" && hadBeenHidden && M.getApiBase()) {
+        hadBeenHidden = false;
+        M.refreshRouteFromStorage();
+      }
     });
   })();
 })();

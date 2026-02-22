@@ -34,15 +34,22 @@
   M.zoomRedrawTimer = null;
   M.lastRedrawZoom = null;
 
+  /** 供路线 API 使用：从 localStorage 取完整起终点与途经点，再按 onboard 置空已上车乘客的 pickup */
   M.getCurrentState = function () {
     var driver_loc = (typeof localStorage !== "undefined" && localStorage.getItem(M.STORAGE_DRIVER_LOC)) || "";
-    var pickups = [], deliveries = [];
+    var pickups = [], deliveries = [], waypoints = [];
+    var onboard = [];
     try {
       var p = localStorage.getItem(M.STORAGE_PICKUPS), d = localStorage.getItem(M.STORAGE_DELIVERIES);
       if (p) pickups = JSON.parse(p);
       if (d) deliveries = JSON.parse(d);
+      var so = localStorage.getItem(M.STORAGE_ONBOARD);
+      if (so) onboard = JSON.parse(so);
+      var sw = localStorage.getItem(M.STORAGE_WAYPOINTS);
+      if (sw) waypoints = JSON.parse(sw);
     } catch (e) {}
-    return { driver_loc: driver_loc || "", pickups: pickups, deliveries: deliveries };
+    pickups = pickups.map(function (pu, i) { return (onboard[i] ? "" : (pu || "")); });
+    return { driver_loc: driver_loc || "", pickups: pickups, deliveries: deliveries, waypoints: waypoints };
   };
 
   M.loadStateFromSupabase = function (cb) {

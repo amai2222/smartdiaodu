@@ -10,6 +10,8 @@
   M.STORAGE_DRIVER_LOC = "smartdiaodu_driver_loc";
   M.STORAGE_PICKUPS = "smartdiaodu_pickups";
   M.STORAGE_DELIVERIES = "smartdiaodu_deliveries";
+  M.STORAGE_ONBOARD = "smartdiaodu_onboard";
+  M.STORAGE_WAYPOINTS = "smartdiaodu_waypoints";
   M.STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
   M.STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
   M.STORAGE_DRIVER_ID = "smartdiaodu_driver_id";

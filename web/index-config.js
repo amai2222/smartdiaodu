@@ -14,6 +14,8 @@
   C.STORAGE_DRIVER_LOC = "smartdiaodu_driver_loc";
   C.STORAGE_PICKUPS = "smartdiaodu_pickups";
   C.STORAGE_DELIVERIES = "smartdiaodu_deliveries";
+  C.STORAGE_ONBOARD = "smartdiaodu_onboard";
+  C.STORAGE_WAYPOINTS = "smartdiaodu_waypoints";
   C.STORAGE_DRIVER_ID = "smartdiaodu_driver_id";
   C.DEFAULT_DRIVER_ID = "a0000001-0000-4000-8000-000000000001";
 

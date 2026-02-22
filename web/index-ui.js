@@ -12,8 +12,9 @@
     var hint = document.getElementById("noPassengersHint");
     if (!list) return;
     list.innerHTML = "";
+    var waypoints = C.waypoints || [];
     var len = C.passengerRows.length > 0 ? C.passengerRows.length : C.pickups.length;
-    if (len === 0) {
+    if (len === 0 && waypoints.length === 0) {
       if (hint) hint.classList.remove("hidden");
       return;
     }
@@ -28,9 +29,22 @@
         var shortD = d.length > 12 ? d.slice(0, 12) + "…" : d;
         var li = document.createElement("li");
         li.className = "flex items-center justify-between gap-3 p-3 rounded-xl bg-[#0c0c0f] border border-border";
-        li.innerHTML = "<span class=\"text-console flex-1 min-w-0\"><strong>" + (i + 1) + "号客</strong> " + shortP + " → " + shortD + "</span>" +
+        var isOnboard = !!(row && row.onboard);
+        li.innerHTML = "<span class=\"text-console flex-1 min-w-0\"><strong>" + (i + 1) + "号客</strong>" + (isOnboard ? " <span class=\"text-muted text-sm\">(已上车)</span> " : " ") + shortP + " → " + shortD + "</span>" +
+          (isOnboard ? "" : "<button type=\"button\" class=\"onboard-passenger shrink-0 px-3 py-2 rounded-lg border border-accent/60 text-accent font-medium\" data-idx=\"" + i + "\">上车</button>") +
           "<button type=\"button\" class=\"edit-passenger shrink-0 px-3 py-2 rounded-lg border border-border text-muted hover:text-gray-100 font-medium\" data-idx=\"" + i + "\">编辑</button>" +
           "<button type=\"button\" class=\"drop-passenger shrink-0 px-3 py-2 rounded-lg bg-danger/20 text-danger font-medium\" data-idx=\"" + i + "\" data-order-id=\"" + (orderId || "") + "\" data-delivery=\"" + (d || "").replace(/"/g, "&quot;") + "\">✖️ 下车</button>";
+        if (!isOnboard) {
+          li.querySelector(".onboard-passenger").onclick = function () {
+            var ix = parseInt(this.getAttribute("data-idx"), 10);
+            var r = C.passengerRows[ix];
+            if (!r) return;
+            r.onboard = true;
+            C.applyPassengerRows();
+            C.renderPassengerList();
+            C.saveStateToStorage();
+          };
+        }
         li.querySelector(".edit-passenger").onclick = function () {
           var ix = parseInt(this.getAttribute("data-idx"), 10);
           var r = C.passengerRows[ix];
@@ -56,6 +70,25 @@
         };
         list.appendChild(li);
       })(idx);
+    }
+    for (var w = 0; w < waypoints.length; w++) {
+      (function (wi) {
+        var addr = waypoints[wi] || "";
+        var shortAddr = addr.length > 14 ? addr.slice(0, 14) + "…" : addr;
+        var li = document.createElement("li");
+        li.className = "flex items-center justify-between gap-3 p-3 rounded-xl bg-[#0c0c0f] border border-border";
+        li.innerHTML = "<span class=\"text-console flex-1 min-w-0\"><strong>途径点</strong> " + shortAddr + "</span>" +
+          "<button type=\"button\" class=\"arrive-waypoint shrink-0 px-3 py-2 rounded-lg border border-accent/60 text-accent font-medium\" data-widx=\"" + wi + "\">到达</button>";
+        li.querySelector(".arrive-waypoint").onclick = function () {
+          var ix = parseInt(this.getAttribute("data-widx"), 10);
+          if (C.waypoints && ix >= 0 && ix < C.waypoints.length) {
+            C.waypoints.splice(ix, 1);
+            C.saveStateToStorage();
+            C.renderPassengerList();
+          }
+        };
+        list.appendChild(li);
+      })(w);
     }
   };
 
@@ -107,14 +140,22 @@
     })();
     var content = document.getElementById("planModalContent");
     if (!content) return;
-    if (list.length === 0) {
-      content.innerHTML = "<p class=\"text-muted text-console\">暂无乘客，当前无计划站点。</p>";
+    var waypoints = C.waypoints || [];
+    if (list.length === 0 && waypoints.length === 0) {
+      content.innerHTML = "<p class=\"text-muted text-console\">暂无乘客与途经点，当前无计划站点。</p>";
     } else {
-      content.innerHTML = list.map(function (row, i) {
+      var html = list.map(function (row, i) {
         var pickup = (row.pickup || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         var delivery = (row.delivery || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         return "<div class=\"plan-item\"><div class=\"label\">乘客 " + (i + 1) + " · 起点</div><div class=\"addr\">" + pickup + "</div><div class=\"label mt-2\">终点</div><div class=\"addr\">" + delivery + "</div></div>";
       }).join("");
+      if (waypoints.length > 0) {
+        html += waypoints.map(function (addr, i) {
+          var a = (addr || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          return "<div class=\"plan-item\"><div class=\"label\">途径点 " + (i + 1) + "</div><div class=\"addr\">" + a + "</div></div>";
+        }).join("");
+      }
+      content.innerHTML = html;
     }
     document.getElementById("planModalOverlay").classList.add("show");
   }
@@ -128,6 +169,63 @@
   document.getElementById("planModalOverlay").addEventListener("click", function (e) {
     if (e.target === document.getElementById("planModalOverlay")) closePlanModal();
   });
+
+  function openWaypointsModal() {
+    var content = document.getElementById("waypointsModalContent");
+    var waypoints = C.waypoints || [];
+    if (!content) return;
+    if (waypoints.length === 0) {
+      content.innerHTML = "<p class=\"text-muted text-console\">暂无途经点，可在下方输入地址添加。</p>";
+    } else {
+      content.innerHTML = waypoints.map(function (addr, i) {
+        var a = (addr || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return "<div class=\"waypoint-item\">途径点：" + a + "</div>";
+      }).join("");
+    }
+    var input = document.getElementById("waypointAddrInput");
+    if (input) input.value = "";
+    document.getElementById("waypointsModalOverlay").classList.add("show");
+    if (input) setTimeout(function () { input.focus(); }, 100);
+  }
+  function closeWaypointsModal() {
+    document.getElementById("waypointsModalOverlay").classList.remove("show");
+  }
+  var btnWaypoints = document.getElementById("btnWaypoints");
+  if (btnWaypoints) btnWaypoints.addEventListener("click", openWaypointsModal);
+  document.getElementById("waypointsModalClose").addEventListener("click", closeWaypointsModal);
+  document.getElementById("waypointsModalOverlay").addEventListener("click", function (e) {
+    if (e.target === document.getElementById("waypointsModalOverlay")) closeWaypointsModal();
+  });
+  var waypointAddBtn = document.getElementById("waypointAddBtn");
+  var waypointAddrInput = document.getElementById("waypointAddrInput");
+  if (waypointAddBtn && waypointAddrInput) {
+    waypointAddBtn.addEventListener("click", function () {
+      var addr = (waypointAddrInput.value || "").trim();
+      if (!addr) return;
+      C.waypoints = C.waypoints || [];
+      C.waypoints.push(addr);
+      C.saveStateToStorage();
+      openWaypointsModal();
+      if (C.renderPassengerList) C.renderPassengerList();
+    });
+    waypointAddrInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") waypointAddBtn.click();
+    });
+  }
+
+  (function setupSettingsPanel() {
+    var overlay = document.getElementById("settingsPanelOverlay");
+    var btn = document.getElementById("btnSettings");
+    var closeBtn = document.getElementById("settingsPanelClose");
+    if (!overlay || !btn) return;
+    function openSettings() { overlay.classList.add("show"); overlay.setAttribute("aria-hidden", "false"); }
+    function closeSettings() { overlay.classList.remove("show"); overlay.setAttribute("aria-hidden", "true"); }
+    btn.addEventListener("click", openSettings);
+    if (closeBtn) closeBtn.addEventListener("click", closeSettings);
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) closeSettings();
+    });
+  })();
 
   function closeEditPassengerModal() {
     C.editingPassengerIdx = -1;
@@ -163,6 +261,122 @@
     }
     closeEditPassengerModal();
   });
+
+  /** 语音输入：为输入框绑定麦克风按钮，使用浏览器语音识别（中文），开车时免打字 */
+  (function setupVoiceInput() {
+    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var voiceBtnIds = ["driverLocVoiceBtn", "waypointVoiceBtn", "editPickupVoiceBtn", "editDeliveryVoiceBtn", "editVoiceStartEndBtn"];
+    if (!SpeechRecognition) {
+      voiceBtnIds.forEach(function (id) { var b = document.getElementById(id); if (b) b.style.display = "none"; });
+      return;
+    }
+    var recognition = new SpeechRecognition();
+    recognition.lang = "zh-CN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    /** 从「乘客x起点：xxx，终点：xxx」或「起点：xxx，终点：xxx」中解析出起点、终点 */
+    function parseStartEnd(text) {
+      var s = (text || "").trim();
+      var pickup = "", delivery = "";
+      var iEnd = s.indexOf("终点");
+      if (iEnd !== -1) {
+        delivery = s.slice(iEnd + 2).replace(/^[：:\s，,]+/, "").trim();
+        var beforeEnd = s.slice(0, iEnd).trim();
+        var iStart = beforeEnd.indexOf("起点");
+        if (iStart !== -1) {
+          pickup = beforeEnd.slice(iStart + 2).replace(/^[：:\s]+/, "").replace(/[，,]\s*$/, "").trim();
+        } else {
+          pickup = beforeEnd.replace(/^乘客\d*[：:\s]*/, "").trim();
+        }
+      } else {
+        var iStart = s.indexOf("起点");
+        if (iStart !== -1) {
+          pickup = s.slice(iStart + 2).replace(/^[：:\s]+/, "").trim();
+        } else {
+          pickup = s.replace(/^乘客\d*[：:\s]*/, "").trim();
+        }
+      }
+      return { pickup: pickup, delivery: delivery };
+    }
+
+    function bindVoice(inputEl, btnEl) {
+      if (!inputEl || !btnEl) return;
+      var originalTitle = btnEl.getAttribute("title") || "语音输入";
+      btnEl.addEventListener("click", function () {
+        if (btnEl.classList.contains("listening")) {
+          try { recognition.abort(); } catch (e) {}
+          btnEl.classList.remove("listening");
+          btnEl.textContent = "🎤";
+          btnEl.setAttribute("title", originalTitle);
+          return;
+        }
+        recognition.onresult = function (e) {
+          var text = (e.results[0] && e.results[0][0]) ? e.results[0][0].transcript : "";
+          if (text && inputEl) inputEl.value = text;
+        };
+        recognition.onend = recognition.onerror = function () {
+          btnEl.classList.remove("listening");
+          btnEl.textContent = "🎤";
+          btnEl.setAttribute("title", originalTitle);
+        };
+        try {
+          recognition.start();
+          btnEl.classList.add("listening");
+          btnEl.textContent = "…";
+          btnEl.setAttribute("title", "正在听… 再说一次可停止");
+        } catch (err) {
+          btnEl.setAttribute("title", "请允许麦克风权限或重试");
+        }
+      });
+    }
+
+    function bindVoiceStartEnd(pickupEl, deliveryEl, btnEl) {
+      if (!pickupEl || !deliveryEl || !btnEl) return;
+      var originalTitle = btnEl.getAttribute("title") || "";
+      var originalText = btnEl.textContent || "";
+      btnEl.addEventListener("click", function () {
+        if (btnEl.classList.contains("listening")) {
+          try { recognition.abort(); } catch (e) {}
+          btnEl.classList.remove("listening");
+          btnEl.textContent = originalText;
+          btnEl.setAttribute("title", originalTitle);
+          return;
+        }
+        recognition.onresult = function (e) {
+          var text = (e.results[0] && e.results[0][0]) ? e.results[0][0].transcript : "";
+          if (text) {
+            var parsed = parseStartEnd(text);
+            if (parsed.pickup) pickupEl.value = parsed.pickup;
+            if (parsed.delivery) deliveryEl.value = parsed.delivery;
+          }
+        };
+        recognition.onend = recognition.onerror = function () {
+          btnEl.classList.remove("listening");
+          btnEl.textContent = originalText;
+          btnEl.setAttribute("title", originalTitle);
+        };
+        try {
+          recognition.start();
+          btnEl.classList.add("listening");
+          btnEl.textContent = "… 正在听";
+          btnEl.setAttribute("title", "说：乘客x起点：xxx，终点：xxx");
+        } catch (err) {
+          btnEl.setAttribute("title", "请允许麦克风权限或重试");
+        }
+      });
+    }
+
+    bindVoice(document.getElementById("driverLoc"), document.getElementById("driverLocVoiceBtn"));
+    bindVoice(document.getElementById("waypointAddrInput"), document.getElementById("waypointVoiceBtn"));
+    bindVoice(document.getElementById("editPickup"), document.getElementById("editPickupVoiceBtn"));
+    bindVoice(document.getElementById("editDelivery"), document.getElementById("editDeliveryVoiceBtn"));
+    bindVoiceStartEnd(
+      document.getElementById("editPickup"),
+      document.getElementById("editDelivery"),
+      document.getElementById("editVoiceStartEndBtn")
+    );
+  })();
 
   function refreshMode() {
     var base = C.getApiBase();
@@ -325,7 +539,7 @@
                 })
                 .then(function () { C.loadFromDb(); });
             }
-            C.passengerRows.push({ id: null, pickup: row.pickup || "", delivery: row.delivery || "" });
+            C.passengerRows.push({ id: null, pickup: row.pickup || "", delivery: row.delivery || "", onboard: false });
             C.applyPassengerRows();
             C.renderPassengerList();
             C.saveStateToStorage();
@@ -333,7 +547,7 @@
       } else {
         C.pickups.push(row.pickup || "");
         C.deliveries.push(row.delivery || "");
-        C.passengerRows.push({ id: null, pickup: row.pickup || "", delivery: row.delivery || "" });
+        C.passengerRows.push({ id: null, pickup: row.pickup || "", delivery: row.delivery || "", onboard: false });
         C.renderPassengerList();
         C.saveStateToStorage();
       }
@@ -390,7 +604,16 @@
       if (sup) sup.from("drivers").update({ plate_number: val || null }).eq("id", C.getDriverId()).then(function () {});
     });
     var seatsEl = document.getElementById("emptySeats");
-    if (seatsEl) seatsEl.addEventListener("change", function () { C.updateEntryActions(); });
+    if (seatsEl) {
+      seatsEl.addEventListener("change", function () {
+        C.updateEntryActions();
+        var sup = C.getSupabaseClient();
+        if (sup) {
+          var v = Math.max(0, Math.min(4, parseInt(seatsEl.value, 10) || 0));
+          sup.from("driver_state").update({ empty_seats: v }).eq("driver_id", C.getDriverId()).then(function () {});
+        }
+      });
+    }
     document.getElementById("planPanel").classList.add("hidden");
     (function () {
       var header = document.getElementById("passengerSectionHeader");

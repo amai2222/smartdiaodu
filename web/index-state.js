@@ -10,12 +10,14 @@
   C.pickups = [];
   C.deliveries = [];
   C.passengerRows = [];
+  C.waypoints = [];
   C.editingPassengerIdx = -1;
   C.driverPlateNumber = "";
 
+  /** 同步完整起终点到 C.pickups/C.deliveries（供当前计划与持久化）；路线规划用 getCurrentState 中的「有效」列表排除已上车接客点 */
   C.applyPassengerRows = function () {
-    C.pickups = C.passengerRows.map(function (r) { return r.pickup; });
-    C.deliveries = C.passengerRows.map(function (r) { return r.delivery; });
+    C.pickups = C.passengerRows.map(function (r) { return r.pickup || ""; });
+    C.deliveries = C.passengerRows.map(function (r) { return r.delivery || ""; });
   };
 
   C.saveStateToStorage = function () {
@@ -24,17 +26,25 @@
     if (loc) localStorage.setItem(C.STORAGE_DRIVER_LOC, loc.value.trim());
     localStorage.setItem(C.STORAGE_PICKUPS, JSON.stringify(C.pickups));
     localStorage.setItem(C.STORAGE_DELIVERIES, JSON.stringify(C.deliveries));
+    try {
+      localStorage.setItem(C.STORAGE_ONBOARD, JSON.stringify(C.passengerRows.map(function (r) { return !!r.onboard; })));
+      localStorage.setItem(C.STORAGE_WAYPOINTS, JSON.stringify(C.waypoints || []));
+    } catch (e) {}
   };
 
+  /** 供地图/路线 API 使用：已上车乘客的 pickup 置空，仅路线规划排除该接客点；当前计划仍用 passengerRows 完整起终点 */
   C.getCurrentState = function () {
     var plateEl = document.getElementById("driverPlate");
     var plate = (plateEl && plateEl.value.trim()) || C.driverPlateNumber || "";
     var locEl = document.getElementById("driverLoc");
     var driver_loc = (locEl && locEl.value.trim()) || "";
+    var pickups = C.passengerRows.map(function (r) { return r.onboard ? "" : (r.pickup || ""); });
+    var deliveries = C.passengerRows.map(function (r) { return r.delivery || ""; });
     var out = {
       driver_loc: driver_loc,
-      pickups: C.pickups.slice(),
-      deliveries: C.deliveries.slice()
+      pickups: pickups,
+      deliveries: deliveries,
+      waypoints: (C.waypoints || []).slice()
     };
     if (plate) out.plate_number = plate;
     return out;
@@ -136,7 +146,10 @@
         var p = localStorage.getItem(C.STORAGE_PICKUPS), d = localStorage.getItem(C.STORAGE_DELIVERIES);
         if (p) C.pickups = JSON.parse(p);
         if (d) C.deliveries = JSON.parse(d);
-        C.passengerRows = C.pickups.map(function (pu, i) { return { id: null, pickup: pu, delivery: C.deliveries[i] || "" }; });
+        var ob = [];
+        try { var so = localStorage.getItem(C.STORAGE_ONBOARD); if (so) ob = JSON.parse(so); } catch (e2) {}
+        C.passengerRows = C.pickups.map(function (pu, i) { return { id: null, pickup: pu, delivery: (C.deliveries && C.deliveries[i]) || "", onboard: !!ob[i] }; });
+        try { var sw = localStorage.getItem(C.STORAGE_WAYPOINTS); if (sw) C.waypoints = JSON.parse(sw); } catch (e3) {}
         C.applyPassengerRows();
       } catch (e) {}
       var statusEl = document.getElementById("gpsStatus");
@@ -165,18 +178,15 @@
       })
       .then(function (r) {
         if (r.data && Array.isArray(r.data)) {
-          C.passengerRows = r.data.map(function (o) { return { id: o.id, pickup: o.pickup || "", delivery: o.delivery || "" }; });
+          C.passengerRows = r.data.map(function (o) { return { id: o.id, pickup: o.pickup || "", delivery: o.delivery || "", onboard: false }; });
         } else {
           C.passengerRows = [];
         }
         C.applyPassengerRows();
+        try { var sw = localStorage.getItem(C.STORAGE_WAYPOINTS); if (sw) C.waypoints = JSON.parse(sw); } catch (e2) {}
         if (C.renderPassengerList) C.renderPassengerList();
         C.saveStateToStorage();
-        var emptySeats = Math.max(0, Math.min(4, 4 - C.passengerRows.length));
-        var seatsEl = document.getElementById("emptySeats");
-        if (seatsEl) seatsEl.value = String(emptySeats);
-        var sup2 = C.getSupabaseClient();
-        if (sup2) sup2.from("driver_state").update({ empty_seats: emptySeats }).eq("driver_id", C.getDriverId()).then(function () {});
+        /* 剩余空座以数据库 driver_state.empty_seats 为准，不再用乘客数覆盖；数据库可为 0，下拉已支持 0 的显示 */
         return sup.from("drivers").select("name, plate_number").eq("id", driverId).maybeSingle()
           .then(function (rr) {
             if (rr && rr.data) {
