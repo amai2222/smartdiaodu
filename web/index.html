@@ -54,11 +54,11 @@
       <h2 class="driver-loc-card__title text-muted font-medium mb-2 flex items-center gap-2">
         <span aria-hidden="true">📍</span> 我的位置
       </h2>
-      <input type="text" id="driverLoc"
+      <input type="text" id="driverLoc" readonly
         class="driver-loc-card__input w-full bg-[#0c0c0f] border border-border rounded-xl px-3 py-2.5 text-gray-100 placeholder-gray-500"
-        placeholder="输入或下方语音/刷新 GPS" />
+        placeholder="地址" />
       <div class="flex gap-2 items-center flex-wrap mt-2">
-        <button type="button" id="driverLocVoiceBtn" class="voice-btn shrink-0 px-3 py-2 rounded-xl border border-border text-muted hover:text-accent hover:border-accent/60" title="语音输入我的位置">🎤</button>
+        <button type="button" id="btnEditDriverLoc" class="btn-touch shrink-0 px-3 py-2 rounded-xl border border-border text-muted hover:text-accent hover:border-accent/60 font-medium" title="编辑我的位置">✏️ 编辑</button>
         <button type="button" id="btnRefreshGps" class="btn-touch shrink-0 bg-accent hover:bg-blue-600 text-white font-medium rounded-xl px-3 py-2 flex items-center gap-1.5">
           <span aria-hidden="true">🎯</span>
           <span>刷新 GPS</span>
@@ -68,6 +68,24 @@
       <p id="gpsStatus" class="driver-loc-card__status text-muted mt-1.5"></p>
 
       <div id="restrictionHintIndex" class="hidden mt-3 p-3 rounded-xl bg-amber-900/40 border border-amber-600/50 text-amber-200 text-sm" role="alert"></div>
+
+    <!-- 编辑我的位置弹窗：输入框 + 麦克风（点击使用，再次点击取消监听）+ 保留并写库 -->
+    <div id="driverLocEditModalOverlay" class="driver-loc-edit-overlay fixed inset-0 bg-black/60 z-[2000] items-center justify-center p-4" aria-hidden="true" style="display: none;">
+      <div id="driverLocEditModal" class="bg-panel border border-border rounded-xl max-w-md w-full shadow-xl" role="dialog" aria-labelledby="driverLocEditModalTitle">
+        <h3 id="driverLocEditModalTitle" class="text-console text-muted font-medium px-5 pt-4 pb-2 border-b border-border">编辑我的位置</h3>
+        <div class="p-5">
+          <label for="driverLocEditInput" class="block text-muted text-sm mb-2">地址</label>
+          <div class="flex gap-2 items-center mb-4">
+            <input type="text" id="driverLocEditInput" placeholder="输入或点🎤语音输入" class="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-[#0c0c0f] border border-border text-gray-100 placeholder-gray-500" />
+            <button type="button" id="driverLocEditVoiceBtn" class="voice-btn shrink-0 px-3 py-2.5 rounded-xl border border-border text-muted hover:text-accent hover:border-accent/60" title="语音输入">🎤</button>
+          </div>
+          <div class="flex gap-3">
+            <button type="button" id="driverLocEditCancel" class="flex-1 py-2.5 rounded-xl border border-border text-muted font-medium">取消</button>
+            <button type="button" id="driverLocEditSave" class="flex-1 py-2.5 rounded-xl bg-accent text-white font-medium">保留并写库</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
       <div id="passengerCardSection" class="mt-5">
         <div id="passengerSectionHeader" class="flex items-center justify-between mb-3 flex-wrap gap-2 cursor-pointer select-none" role="button" tabindex="0" aria-expanded="false" aria-controls="passengerSectionBody" title="点击展开/收起车上乘客">

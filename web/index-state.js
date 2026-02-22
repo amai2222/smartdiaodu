@@ -14,6 +14,7 @@
   C.editingPassengerIdx = -1;
   C.driverPlateNumber = "";
   C._driverLocVoiceFirstClick = true;
+  C._driverLocEditVoiceFirstClick = true;
 
   /** 同步完整起终点到 C.pickups/C.deliveries（供当前计划与持久化）；路线规划用 getCurrentState 中的「有效」列表排除已上车接客点 */
   C.applyPassengerRows = function () {
@@ -149,6 +150,9 @@
         C.passengerRows = C.pickups.map(function (pu, i) { return { id: null, pickup: pu, delivery: (C.deliveries && C.deliveries[i]) || "", onboard: !!ob[i] }; });
         try { var sw = localStorage.getItem(C.STORAGE_WAYPOINTS); if (sw) C.waypoints = JSON.parse(sw); } catch (e3) {}
         C.applyPassengerRows();
+        var locFromStorage = localStorage.getItem(C.STORAGE_DRIVER_LOC);
+        var locEl = document.getElementById("driverLoc");
+        if (locEl && locFromStorage !== null) locEl.value = locFromStorage;
       } catch (e) {}
       var statusEl = document.getElementById("gpsStatus");
       if (statusEl) statusEl.innerHTML = "未连接数据库（" + (why.length ? why.join("、") : "未知") + "）。请部署 config.js 或检查登录后 <button type=\"button\" id=\"btnReloadDb\" class=\"underline text-accent\">重新加载</button>";
@@ -170,7 +174,10 @@
       .then(function (r) {
         var locEl = document.getElementById("driverLoc");
         var seatsEl = document.getElementById("emptySeats");
-        if (r.data && locEl) locEl.value = r.data.current_loc || "";
+        if (locEl) {
+          var dbLoc = (r.data && r.data.current_loc) ? String(r.data.current_loc).trim() : "";
+          locEl.value = dbLoc || (localStorage.getItem(C.STORAGE_DRIVER_LOC) || "");
+        }
         if (r.data && seatsEl) seatsEl.value = String(Math.max(0, Math.min(4, r.data.empty_seats || 0)));
         return sup.from("order_pool").select("id, pickup, delivery").eq("assigned_driver_id", driverId).eq("status", "assigned");
       })

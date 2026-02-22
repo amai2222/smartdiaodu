@@ -263,6 +263,41 @@
   document.getElementById("waypointsModalOverlay").addEventListener("click", function (e) {
     if (e.target === document.getElementById("waypointsModalOverlay")) closeWaypointsModal();
   });
+
+  (function setupDriverLocEditModal() {
+    var overlay = document.getElementById("driverLocEditModalOverlay");
+    var input = document.getElementById("driverLocEditInput");
+    var mainInput = document.getElementById("driverLoc");
+    var btnEdit = document.getElementById("btnEditDriverLoc");
+    var btnCancel = document.getElementById("driverLocEditCancel");
+    var btnSave = document.getElementById("driverLocEditSave");
+    if (!overlay || !input || !mainInput) return;
+    function openDriverLocEdit() {
+      input.value = mainInput.value || "";
+      C._driverLocEditVoiceFirstClick = true;
+      overlay.classList.add("show");
+      setTimeout(function () { input.focus(); }, 100);
+    }
+    function closeDriverLocEdit() {
+      overlay.classList.remove("show");
+    }
+    function saveDriverLocEdit() {
+      var val = (input.value || "").trim();
+      mainInput.value = val;
+      C.saveStateToStorage();
+      var sup = C.getSupabaseClient();
+      if (sup && val) sup.from("driver_state").update({ current_loc: val }).eq("driver_id", C.getDriverId()).then(function () {});
+      if (C.updateRestrictionHint) C.updateRestrictionHint();
+      closeDriverLocEdit();
+    }
+    if (btnEdit) btnEdit.addEventListener("click", openDriverLocEdit);
+    if (btnCancel) btnCancel.addEventListener("click", closeDriverLocEdit);
+    if (btnSave) btnSave.addEventListener("click", saveDriverLocEdit);
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) closeDriverLocEdit();
+    });
+  })();
+
   var waypointAddBtn = document.getElementById("waypointAddBtn");
   var waypointAddrInput = document.getElementById("waypointAddrInput");
   if (waypointAddBtn && waypointAddrInput) {
@@ -379,7 +414,7 @@
    * iOS Safari：必须在用户手势内延迟 start()，且每次新建实例，否则点击无反应。 */
   (function setupVoiceInput() {
     var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    var voiceBtnIds = ["driverLocVoiceBtn", "waypointVoiceBtn", "editPickupVoiceBtn", "editDeliveryVoiceBtn", "editVoiceStartEndBtn"];
+    var voiceBtnIds = ["driverLocEditVoiceBtn", "waypointVoiceBtn", "editPickupVoiceBtn", "editDeliveryVoiceBtn", "editVoiceStartEndBtn"];
     if (!SpeechRecognition) {
       voiceBtnIds.forEach(function (id) { var b = document.getElementById(id); if (b) b.style.display = "none"; });
       return;
@@ -436,8 +471,8 @@
           btnEl.setAttribute("title", originalTitle);
           return;
         }
-        if (btnEl.id === "driverLocVoiceBtn" && C._driverLocVoiceFirstClick) {
-          C._driverLocVoiceFirstClick = false;
+        if (btnEl.id === "driverLocEditVoiceBtn" && C._driverLocEditVoiceFirstClick) {
+          C._driverLocEditVoiceFirstClick = false;
           inputEl.value = "";
         }
         if (btnEl.id === "editPickupVoiceBtn" && C._editPickupVoiceFirstClick) {
@@ -519,7 +554,7 @@
       if (isIOS) btnEl.addEventListener("touchend", function (e) { e.preventDefault(); onTap(); }, { passive: false });
     }
 
-    bindVoice(document.getElementById("driverLoc"), document.getElementById("driverLocVoiceBtn"));
+    bindVoice(document.getElementById("driverLocEditInput"), document.getElementById("driverLocEditVoiceBtn"));
     bindVoice(document.getElementById("waypointAddrInput"), document.getElementById("waypointVoiceBtn"));
     bindVoice(document.getElementById("editPickup"), document.getElementById("editPickupVoiceBtn"));
     bindVoice(document.getElementById("editDelivery"), document.getElementById("editDeliveryVoiceBtn"));

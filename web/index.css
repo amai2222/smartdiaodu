@@ -83,6 +83,8 @@ input, select, button { font-size: inherit; }
 @keyframes voice-pulse { 50% { opacity: 0.7; } }
 .voice-btn { min-width: 48px; min-height: 48px; }
 
+.driver-loc-edit-overlay.show { display: flex !important; }
+
 /* 我的位置卡片：整体缩小字体，更紧凑美观 */
 .driver-loc-card { font-size: 0.9375rem; }
 .driver-loc-card__title { font-size: 0.9rem; }
