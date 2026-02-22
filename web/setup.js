@@ -223,14 +223,38 @@
 
   function init() {
     try {
-      if (typeof localStorage === "undefined" || !localStorage.getItem(C.STORAGE_TOKEN)) {
+      if (typeof localStorage === "undefined") {
         window.location.replace("login.html");
         return;
       }
+      if (localStorage.getItem(C.STORAGE_TOKEN)) {
+        go();
+        return;
+      }
+      var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
+      if (!url || !anon || !window.supabase) {
+        window.location.replace("login.html");
+        return;
+      }
+      var sup = C.getSupabaseClient();
+      if (!sup) {
+        window.location.replace("login.html");
+        return;
+      }
+      sup.auth.getSession()
+        .then(function (r) {
+          if (r.data && r.data.session) go();
+          else window.location.replace("login.html");
+        })
+        .catch(function () {
+          C.loadAppConfig(function () { go(); });
+        });
     } catch (e) {
-      window.location.replace("login.html");
-      return;
+      C.loadAppConfig(function () { go(); });
     }
+  }
+
+  function go() {
     C.loadAppConfig(function () {
       var sup = C.getSupabaseClient();
       var driverId = C.getDriverId();

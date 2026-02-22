@@ -314,7 +314,7 @@
   })();
 })();
 
-/** 返回控制台：不依赖 M，在 iframe 内时「返回」「返回控制台」立即通知父页切回首页（touchstart 防 300ms 延迟） */
+/** 返回控制台：不依赖 M，在 iframe 内时「返回」「返回控制台」立即通知父页切回首页。touchstart 即发 postMessage，避免 iOS 上 touchend/click 不触发导致无反应。 */
 (function () {
   if (window === window.top) return;
   function postBack() {
@@ -322,9 +322,15 @@
   }
   function bindBackLink(el) {
     if (!el) return;
-    el.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
-    el.addEventListener("touchend", function (e) { e.preventDefault(); postBack(); }, { passive: false });
-    el.addEventListener("click", function (e) { e.preventDefault(); postBack(); });
+    el.addEventListener("touchstart", function (e) {
+      e.preventDefault();
+      postBack();
+    }, { passive: false });
+    el.addEventListener("touchend", function (e) { e.preventDefault(); }, { passive: false });
+    el.addEventListener("click", function (e) {
+      e.preventDefault();
+      postBack();
+    });
   }
   bindBackLink(document.getElementById("btnBackToConsole"));
   bindBackLink(document.getElementById("btnBackToConsoleFromAllDone"));
