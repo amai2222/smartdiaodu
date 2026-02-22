@@ -168,6 +168,16 @@
 
   document.getElementById("btnArrived").onclick = M.markArrived;
 
+  (function () {
+    var backBtn = document.getElementById("btnBackToConsole");
+    if (backBtn && window !== window.top) {
+      backBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        try { window.parent.postMessage({ type: "smartdiaodu_map_back" }, "*"); } catch (err) {}
+      });
+    }
+  })();
+
   document.getElementById("btnCollapse").onclick = function () {
     document.body.classList.add("toolbar-hidden");
     document.getElementById("btnToggleUI").classList.add("show");

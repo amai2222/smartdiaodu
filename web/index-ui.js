@@ -215,16 +215,65 @@
 
   (function setupSettingsPanel() {
     var overlay = document.getElementById("settingsPanelOverlay");
-    var btn = document.getElementById("btnSettings");
+    var btn = document.getElementById("btnSettings") || document.getElementById("navSettings");
     var closeBtn = document.getElementById("settingsPanelClose");
-    if (!overlay || !btn) return;
+    if (!overlay) return;
     function openSettings() { overlay.classList.add("show"); overlay.setAttribute("aria-hidden", "false"); }
     function closeSettings() { overlay.classList.remove("show"); overlay.setAttribute("aria-hidden", "true"); }
-    btn.addEventListener("click", openSettings);
+    if (btn) btn.addEventListener("click", openSettings);
     if (closeBtn) closeBtn.addEventListener("click", closeSettings);
     overlay.addEventListener("click", function (e) {
       if (e.target === overlay) closeSettings();
     });
+  })();
+
+  (function setupBottomNav() {
+    var viewHome = document.getElementById("viewHome");
+    var viewMap = document.getElementById("viewMap");
+    var mapFrame = document.getElementById("mapFrame");
+    var navHome = document.getElementById("navHome");
+    var navMap = document.getElementById("navMap");
+    var navSettings = document.getElementById("navSettings");
+    if (!viewHome || !viewMap || !navHome || !navMap) return;
+
+    function setActiveTab(tab) {
+      [navHome, navMap, navSettings].forEach(function (el) {
+        if (el) el.classList.toggle("active", el === tab);
+      });
+    }
+
+    var bottomNav = document.getElementById("bottomNav");
+    var appMain = document.getElementById("appMain");
+
+    function showHome() {
+      viewHome.classList.remove("hidden");
+      viewMap.classList.add("hidden");
+      if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
+      if (appMain) appMain.classList.remove("map-fullscreen");
+      setActiveTab(navHome);
+    }
+
+    var mapLoaded = false;
+    function showMap() {
+      if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
+      viewHome.classList.add("hidden");
+      viewMap.classList.remove("hidden");
+      if (bottomNav) bottomNav.classList.add("bottom-nav-hidden");
+      if (appMain) appMain.classList.add("map-fullscreen");
+      setActiveTab(navMap);
+    }
+
+    navHome.addEventListener("click", showHome);
+    navMap.addEventListener("click", showMap);
+
+    var btnShowMap = document.getElementById("btnShowMap");
+    if (btnShowMap) btnShowMap.addEventListener("click", showMap);
+
+    window.addEventListener("message", function (e) {
+      if (e.data && e.data.type === "smartdiaodu_map_back") showHome();
+    });
+
+    setActiveTab(navHome);
   })();
 
   function closeEditPassengerModal() {
@@ -262,7 +311,8 @@
     closeEditPassengerModal();
   });
 
-  /** 语音输入：为输入框绑定麦克风按钮，使用浏览器语音识别（中文），开车时免打字 */
+  /** 语音输入：为输入框绑定麦克风按钮，使用浏览器语音识别（中文），开车时免打字。
+   * iOS Safari：必须在用户手势内延迟 start()，且每次新建实例，否则点击无反应。 */
   (function setupVoiceInput() {
     var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     var voiceBtnIds = ["driverLocVoiceBtn", "waypointVoiceBtn", "editPickupVoiceBtn", "editDeliveryVoiceBtn", "editVoiceStartEndBtn"];
@@ -270,10 +320,7 @@
       voiceBtnIds.forEach(function (id) { var b = document.getElementById(id); if (b) b.style.display = "none"; });
       return;
     }
-    var recognition = new SpeechRecognition();
-    recognition.lang = "zh-CN";
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
     /** 从「乘客x起点：xxx，终点：xxx」或「起点：xxx，终点：xxx」中解析出起点、终点 */
     function parseStartEnd(text) {
@@ -300,50 +347,80 @@
       return { pickup: pickup, delivery: delivery };
     }
 
+    function runStart(recognition, btnEl, state) {
+      try {
+        recognition.start();
+        btnEl.classList.add("listening");
+        btnEl.textContent = state.listeningText || "…";
+        btnEl.setAttribute("title", state.listeningTitle || "正在听… 再说一次可停止");
+      } catch (err) {
+        btnEl.setAttribute("title", "请允许麦克风权限或重试");
+      }
+    }
+
     function bindVoice(inputEl, btnEl) {
       if (!inputEl || !btnEl) return;
       var originalTitle = btnEl.getAttribute("title") || "语音输入";
-      btnEl.addEventListener("click", function () {
+      var currentRecognition = null;
+      var voiceJustStarted = false;
+      function onTap() {
         if (btnEl.classList.contains("listening")) {
-          try { recognition.abort(); } catch (e) {}
+          if (voiceJustStarted) return;
+          try { if (currentRecognition) currentRecognition.abort(); } catch (e) {}
+          currentRecognition = null;
           btnEl.classList.remove("listening");
           btnEl.textContent = "🎤";
           btnEl.setAttribute("title", originalTitle);
           return;
         }
-        recognition.onresult = function (e) {
+        var rec = isIOS ? new SpeechRecognition() : (currentRecognition || new SpeechRecognition());
+        if (!isIOS) currentRecognition = rec;
+        rec.lang = "zh-CN";
+        rec.continuous = false;
+        rec.interimResults = false;
+        rec.onresult = function (e) {
           var text = (e.results[0] && e.results[0][0]) ? e.results[0][0].transcript : "";
           if (text && inputEl) inputEl.value = text;
         };
-        recognition.onend = recognition.onerror = function () {
+        rec.onend = rec.onerror = function () {
+          voiceJustStarted = false;
           btnEl.classList.remove("listening");
           btnEl.textContent = "🎤";
           btnEl.setAttribute("title", originalTitle);
         };
-        try {
-          recognition.start();
-          btnEl.classList.add("listening");
-          btnEl.textContent = "…";
-          btnEl.setAttribute("title", "正在听… 再说一次可停止");
-        } catch (err) {
-          btnEl.setAttribute("title", "请允许麦克风权限或重试");
+        if (isIOS) {
+          voiceJustStarted = true;
+          setTimeout(function () { runStart(rec, btnEl, { listeningText: "…", listeningTitle: "正在听… 再说一次可停止" }); }, 0);
+        } else {
+          runStart(rec, btnEl, { listeningText: "…", listeningTitle: "正在听… 再说一次可停止" });
         }
-      });
+      }
+      btnEl.addEventListener("click", onTap);
+      if (isIOS) btnEl.addEventListener("touchend", function (e) { e.preventDefault(); onTap(); }, { passive: false });
     }
 
     function bindVoiceStartEnd(pickupEl, deliveryEl, btnEl) {
       if (!pickupEl || !deliveryEl || !btnEl) return;
       var originalTitle = btnEl.getAttribute("title") || "";
       var originalText = btnEl.textContent || "";
-      btnEl.addEventListener("click", function () {
+      var currentRecognition = null;
+      var voiceJustStarted = false;
+      function onTap() {
         if (btnEl.classList.contains("listening")) {
-          try { recognition.abort(); } catch (e) {}
+          if (voiceJustStarted) return;
+          try { if (currentRecognition) currentRecognition.abort(); } catch (e) {}
+          currentRecognition = null;
           btnEl.classList.remove("listening");
           btnEl.textContent = originalText;
           btnEl.setAttribute("title", originalTitle);
           return;
         }
-        recognition.onresult = function (e) {
+        var rec = isIOS ? new SpeechRecognition() : (currentRecognition || new SpeechRecognition());
+        if (!isIOS) currentRecognition = rec;
+        rec.lang = "zh-CN";
+        rec.continuous = false;
+        rec.interimResults = false;
+        rec.onresult = function (e) {
           var text = (e.results[0] && e.results[0][0]) ? e.results[0][0].transcript : "";
           if (text) {
             var parsed = parseStartEnd(text);
@@ -351,20 +428,21 @@
             if (parsed.delivery) deliveryEl.value = parsed.delivery;
           }
         };
-        recognition.onend = recognition.onerror = function () {
+        rec.onend = rec.onerror = function () {
+          voiceJustStarted = false;
           btnEl.classList.remove("listening");
           btnEl.textContent = originalText;
           btnEl.setAttribute("title", originalTitle);
         };
-        try {
-          recognition.start();
-          btnEl.classList.add("listening");
-          btnEl.textContent = "… 正在听";
-          btnEl.setAttribute("title", "说：乘客x起点：xxx，终点：xxx");
-        } catch (err) {
-          btnEl.setAttribute("title", "请允许麦克风权限或重试");
+        if (isIOS) {
+          voiceJustStarted = true;
+          setTimeout(function () { runStart(rec, btnEl, { listeningText: "… 正在听", listeningTitle: "说：乘客x起点：xxx，终点：xxx" }); }, 0);
+        } else {
+          runStart(rec, btnEl, { listeningText: "… 正在听", listeningTitle: "说：乘客x起点：xxx，终点：xxx" });
         }
-      });
+      }
+      btnEl.addEventListener("click", onTap);
+      if (isIOS) btnEl.addEventListener("touchend", function (e) { e.preventDefault(); onTap(); }, { passive: false });
     }
 
     bindVoice(document.getElementById("driverLoc"), document.getElementById("driverLocVoiceBtn"));

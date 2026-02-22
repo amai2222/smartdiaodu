@@ -20,33 +20,33 @@
   </script>
   <link rel="stylesheet" href="index.css" />
 </head>
-<body class="bg-[#0c0c0f] text-gray-100 min-h-screen font-sans antialiased pb-safe">
-  <div class="max-w-lg mx-auto px-4 pt-safe min-h-screen flex flex-col">
-    <!-- 顶部状态栏（App 风格） -->
-    <header class="flex items-center justify-between py-3 mb-2 flex-shrink-0">
+<body class="bg-[#0c0c0f] text-gray-100 min-h-screen font-sans antialiased">
+  <div id="appShell" class="flex flex-col min-h-screen max-w-lg mx-auto">
+    <!-- 顶部状态栏（仅首页显示） -->
+    <header id="appHeader" class="flex items-center justify-between py-3 px-4 flex-shrink-0 border-b border-border">
       <div class="flex items-center gap-2">
         <span class="w-2.5 h-2.5 rounded-full bg-success animate-pulse" aria-hidden="true"></span>
         <span class="text-sm text-muted">AI 大脑在线</span>
       </div>
       <div class="flex items-center gap-3">
         <span class="text-sm text-muted">空座</span>
-        <select id="emptySeats" class="bg-panel border border-border rounded-xl px-3 py-2 text-base text-gray-100 focus:ring-2 focus:ring-accent focus:border-accent">
+        <select id="emptySeats" class="bg-panel border border-border rounded-xl px-3 py-2 text-base text-gray-100 focus:ring-2 focus:ring-accent">
           <option value="0">0</option>
           <option value="1">1</option>
           <option value="2" selected>2</option>
           <option value="3">3</option>
           <option value="4">4</option>
         </select>
-        <button type="button" id="btnSettings" class="p-2 rounded-xl border border-border text-muted hover:text-gray-100 hover:border-accent/60 hover:bg-panel" title="设置" aria-label="设置">
-          <span class="text-xl" aria-hidden="true">⚙️</span>
-        </button>
       </div>
     </header>
-    <div class="flex justify-end items-center gap-2 mb-3">
+    <div id="appHeaderExtra" class="flex justify-end items-center gap-2 px-4 py-1 border-b border-border/50">
       <span id="userName" class="text-sm text-muted"></span>
       <button type="button" id="btnLogout" class="text-sm text-muted hover:text-gray-100 underline">退出</button>
     </div>
 
+    <!-- 主内容区：首页 / 地图 切换 -->
+    <main id="appMain" class="flex-1 overflow-auto pb-20">
+      <div id="viewHome" class="app-view px-4 pt-2">
     <!-- ========== 区块一：实时雷达与我的车厢 ========== -->
     <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">
       <h2 class="text-muted text-console font-medium mb-3 flex items-center gap-2">
@@ -89,9 +89,9 @@
         <button type="button" id="btnWaypoints" class="w-full py-3 rounded-xl border border-accent/60 text-accent font-medium text-center text-big hover:bg-accent/20">
           📍 途经点
         </button>
-        <a id="btnShowMap" href="map.html" target="_blank" rel="noopener" class="hidden w-full py-4 rounded-xl bg-accent hover:bg-blue-600 text-white font-medium text-center text-big">
+        <button type="button" id="btnShowMap" class="hidden w-full py-4 rounded-xl bg-accent hover:bg-blue-600 text-white font-medium text-center text-big">
           🗺️ 显示地图
-        </a>
+        </button>
         <button type="button" id="btnContinueMatch" class="hidden w-full py-4 rounded-xl border-2 border-success text-success font-medium text-big">
           💺 继续接单
         </button>
@@ -151,67 +151,6 @@
       </div>
     </div>
 
-    <!-- 设置面板（点击顶部 ⚙️ 打开）：调度模式 + 绕路/高收益参数 -->
-    <div id="settingsPanelOverlay" class="settings-overlay" aria-hidden="true">
-      <div id="settingsPanel" class="settings-panel" role="dialog" aria-labelledby="settingsPanelTitle">
-        <div class="settings-panel-header">
-          <h2 id="settingsPanelTitle" class="text-lg font-medium text-gray-100">设置</h2>
-          <button type="button" id="settingsPanelClose" class="p-2 rounded-xl border border-border text-muted hover:text-gray-100 hover:bg-panel" aria-label="关闭">✕</button>
-        </div>
-        <div class="settings-panel-body">
-          <div class="mb-5">
-            <label for="driverPlate" class="block text-muted text-sm font-medium mb-2">🚗 车牌（用于接单与路线规避限行）</label>
-            <input type="text" id="driverPlate" maxlength="16" placeholder="如 沪A12345"
-              class="w-full bg-[#0c0c0f] border border-border rounded-xl px-4 py-3 text-big text-gray-100 placeholder-gray-500" />
-            <p class="text-sm text-muted mt-1">绑定后搜寻订单与规划线路会按该车牌规避限行区域。</p>
-          </div>
-
-          <h3 class="text-muted text-sm font-medium mb-3 flex items-center gap-2">
-            <span aria-hidden="true">🧠</span> 调度模式
-          </h3>
-          <div class="grid grid-cols-1 gap-3">
-            <button type="button" data-mode="mode1" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-              <span class="text-2xl">📅</span>
-              <span class="text-big font-medium">下次计划</span>
-            </button>
-            <button type="button" data-mode="mode2" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-              <span class="text-2xl">🚗</span>
-              <span class="text-big font-medium">半路吸尘器</span>
-            </button>
-            <button type="button" data-mode="mode3" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-              <span class="text-2xl">🔄</span>
-              <span class="text-big font-medium">附近接力</span>
-            </button>
-            <button type="button" data-mode="pause" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-              <span class="text-2xl">⏸</span>
-              <span class="text-big font-medium">停止接单</span>
-            </button>
-          </div>
-
-          <div id="planPanel" class="mt-4 p-4 rounded-xl bg-[#0c0c0f] border border-border hidden">
-            <div id="planList" class="space-y-4 mb-4"></div>
-            <button type="button" id="btnAddPlan" class="w-full py-3 rounded-xl border border-dashed border-border text-muted font-medium mb-3">＋ 添加下一批计划</button>
-            <p class="text-sm text-muted">按时间排序，优先第 1 批找单。计划不删；当前批跑完后点「结束找单」即可进入下一批。</p>
-          </div>
-
-          <div class="mt-5 pt-4 border-t border-border">
-            <p class="text-muted text-sm mb-3">绕路容忍度（分钟）</p>
-            <div class="flex items-center gap-4">
-              <button type="button" id="detourMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
-              <span id="detourVal" class="text-big font-semibold min-w-[3rem] text-center">15</span>
-              <button type="button" id="detourPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
-            </div>
-            <p class="text-muted text-sm mt-4 mb-3">高收益门槛（元）</p>
-            <div class="flex items-center gap-4">
-              <button type="button" id="profitMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
-              <span id="profitVal" class="text-big font-semibold min-w-[3rem] text-center">100</span>
-              <button type="button" id="profitPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- ========== 区块三：战利品展示区 ========== -->
     <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">
       <h2 class="text-muted text-console font-medium mb-3 flex items-center gap-2">
@@ -223,14 +162,86 @@
       </ul>
     </section>
 
-    <!-- 全屏地图（单独标签页） -->
-    <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">
-      <h2 class="text-muted text-console font-medium mb-3">🗺️ 路线地图</h2>
-      <a href="map.html" target="_blank" rel="noopener" class="block w-full py-4 rounded-xl bg-accent hover:bg-blue-600 text-white font-medium text-center text-big">
-        打开全屏地图
-      </a>
-      <p class="text-sm text-muted mt-2">在新标签页全屏显示司机起点与乘客起终点路线，数据与当前「我的位置」「车上乘客」同步。</p>
-    </section>
+      </div>
+      <!-- 地图视图：本页内嵌 map.html -->
+      <div id="viewMap" class="app-view hidden">
+        <iframe id="mapFrame" src="about:blank" class="w-full h-full border-0 block" title="路线地图"></iframe>
+      </div>
+    </main>
+
+    <!-- 底部导航栏（App 风格） -->
+    <nav id="bottomNav" class="fixed bottom-0 left-0 right-0 max-w-lg mx-auto flex items-stretch bg-panel border-t border-border z-1000 pb-safe">
+      <button type="button" id="navHome" class="nav-tab active flex-1 py-3 flex flex-col items-center gap-1 border-t-2 bg-panel">
+        <span class="text-lg">🏠</span>
+        <span class="text-xs font-medium">首页</span>
+      </button>
+      <button type="button" id="navMap" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel">
+        <span class="text-lg">🗺️</span>
+        <span class="text-xs font-medium">地图</span>
+      </button>
+      <button type="button" id="navSettings" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel">
+        <span class="text-lg">⚙️</span>
+        <span class="text-xs font-medium">设置</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- 设置面板：挂到 body 下，避免移动端 fixed 被父容器影响导致内容露在首页 -->
+  <div id="settingsPanelOverlay" class="settings-overlay" aria-hidden="true">
+    <div id="settingsPanel" class="settings-panel" role="dialog" aria-labelledby="settingsPanelTitle">
+      <div class="settings-panel-header">
+        <h2 id="settingsPanelTitle" class="text-lg font-medium text-gray-100">设置</h2>
+        <button type="button" id="settingsPanelClose" class="p-2 rounded-xl border border-border text-muted hover:text-gray-100 hover:bg-panel" aria-label="关闭">✕</button>
+      </div>
+      <div class="settings-panel-body">
+        <div class="mb-5">
+          <label for="driverPlate" class="block text-muted text-sm font-medium mb-2">🚗 车牌（用于接单与路线规避限行）</label>
+          <input type="text" id="driverPlate" maxlength="16" placeholder="如 沪A12345"
+            class="w-full bg-[#0c0c0f] border border-border rounded-xl px-4 py-3 text-big text-gray-100 placeholder-gray-500" />
+          <p class="text-sm text-muted mt-1">绑定后搜寻订单与规划线路会按该车牌规避限行区域。</p>
+        </div>
+        <h3 class="text-muted text-sm font-medium mb-3 flex items-center gap-2">
+          <span aria-hidden="true">🧠</span> 调度模式
+        </h3>
+        <div class="grid grid-cols-1 gap-3">
+          <button type="button" data-mode="mode1" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+            <span class="text-2xl">📅</span>
+            <span class="text-big font-medium">下次计划</span>
+          </button>
+          <button type="button" data-mode="mode2" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+            <span class="text-2xl">🚗</span>
+            <span class="text-big font-medium">半路吸尘器</span>
+          </button>
+          <button type="button" data-mode="mode3" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+            <span class="text-2xl">🔄</span>
+            <span class="text-big font-medium">附近接力</span>
+          </button>
+          <button type="button" data-mode="pause" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+            <span class="text-2xl">⏸</span>
+            <span class="text-big font-medium">停止接单</span>
+          </button>
+        </div>
+        <div id="planPanel" class="mt-4 p-4 rounded-xl bg-[#0c0c0f] border border-border hidden">
+          <div id="planList" class="space-y-4 mb-4"></div>
+          <button type="button" id="btnAddPlan" class="w-full py-3 rounded-xl border border-dashed border-border text-muted font-medium mb-3">＋ 添加下一批计划</button>
+          <p class="text-sm text-muted">按时间排序，优先第 1 批找单。计划不删；当前批跑完后点「结束找单」即可进入下一批。</p>
+        </div>
+        <div class="mt-5 pt-4 border-t border-border">
+          <p class="text-muted text-sm mb-3">绕路容忍度（分钟）</p>
+          <div class="flex items-center gap-4">
+            <button type="button" id="detourMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
+            <span id="detourVal" class="text-big font-semibold min-w-[3rem] text-center">15</span>
+            <button type="button" id="detourPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
+          </div>
+          <p class="text-muted text-sm mt-4 mb-3">高收益门槛（元）</p>
+          <div class="flex items-center gap-4">
+            <button type="button" id="profitMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
+            <span id="profitVal" class="text-big font-semibold min-w-[3rem] text-center">100</span>
+            <button type="button" id="profitPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>

@@ -9,15 +9,25 @@ input, select, button { font-size: inherit; }
 .pt-safe { padding-top: env(safe-area-inset-top, 0.75rem); }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 2rem); }
 
-/* 设置面板：从右侧滑入的 App 设置页 */
-.settings-overlay {
-  position: fixed; inset: 0; z-index: 2000;
+/* 设置面板：从右侧滑入，未打开时完全隐藏不占位（移动端避免内容露在首页） */
+#settingsPanelOverlay.settings-overlay {
+  position: fixed !important;
+  top: 0; right: 0; bottom: 0; left: 0;
+  z-index: 2000;
   background: rgba(0,0,0,0.5);
-  display: none; align-items: stretch; justify-content: flex-end;
-  opacity: 0; transition: opacity 0.2s ease;
+  display: none !important;
+  align-items: stretch;
+  justify-content: flex-end;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
-.settings-overlay.show {
-  display: flex; opacity: 1;
+#settingsPanelOverlay.settings-overlay.show {
+  display: flex !important;
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
 }
 .settings-panel {
   width: 100%; max-width: 28rem; height: 100%;
@@ -71,6 +81,21 @@ input, select, button { font-size: inherit; }
 #editPassengerModal .edit-body .voice-btn.listening { color: #ef4444; border-color: #ef4444; animation: voice-pulse 0.8s ease-in-out infinite; }
 @keyframes voice-pulse { 50% { opacity: 0.7; } }
 .voice-btn { min-width: 48px; min-height: 48px; }
+
+/* 主内容区：相对定位以便地图视图绝对铺满 */
+#appMain { position: relative; }
+.app-view.hidden { display: none !important; }
+#viewMap.app-view { position: absolute; inset: 0; background: #0c0c0f; }
+#viewMap.app-view .w-full { height: 100%; }
+
+/* 底部导航栏（App 风格） */
+.z-1000 { z-index: 1000; }
+#bottomNav .nav-tab { transition: color 0.15s, border-color 0.15s; }
+#bottomNav .nav-tab.active { color: var(--tw-color-accent, #3b82f6); border-top-color: var(--tw-color-accent, #3b82f6); }
+#bottomNav .nav-tab:not(.active) { color: #8b9199; border-top-color: transparent; }
+#bottomNav.bottom-nav-hidden { display: none !important; }
+#appMain.map-fullscreen { padding-bottom: 0 !important; }
+
 #editPassengerModal .edit-actions { display: flex; gap: 0.75rem; padding: 0 1.25rem 1rem; }
 #editPassengerModal .edit-actions button { flex: 1; padding: 0.75rem; border-radius: 0.75rem; font-size: 1rem; cursor: pointer; border: none; }
 #editPassengerModalCancel { background: #2a2d35; color: #e6edf3; }
