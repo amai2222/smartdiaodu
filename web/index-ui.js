@@ -279,6 +279,8 @@
     }
 
     function showSettings() {
+      var overlay = document.getElementById("settingsPanelOverlay");
+      if (overlay) overlay.classList.remove("show");
       viewHome.classList.add("hidden");
       viewMap.classList.add("hidden");
       if (viewSettings) viewSettings.classList.remove("hidden");
@@ -628,39 +630,43 @@
     saveProfit(v);
   };
 
-  (function () {
-    var btn = document.getElementById("btnClearWaypointsAndPlan");
-    if (!btn) return;
-    btn.onclick = function () {
-      if (!confirm("确定清空本车本次计划？将取消数据库内本车所有已分配订单，并清空本地途经点与乘客列表，仅保留司机位置。")) return;
-      var sup = C.getSupabaseClient();
-      var driverId = C.getDriverId();
-      function done() {
-        C.passengerRows = [];
-        C.pickups = [];
-        C.deliveries = [];
-        C.waypoints = [];
-        C.applyPassengerRows();
-        C.saveStateToStorage();
-        if (C.renderPassengerList) C.renderPassengerList();
-        if (C.updateEntryActions) C.updateEntryActions();
-        var statusEl = document.getElementById("gpsStatus");
-        if (statusEl) statusEl.textContent = "已清空途经与计划，仅保留司机位置。";
-      }
-      if (sup && driverId) {
-        sup.from("order_pool").update({ assigned_driver_id: null, status: "pending_match" }).eq("assigned_driver_id", driverId).eq("status", "assigned")
-          .then(function () { return sup.from("driver_state").update({ empty_seats: 4 }).eq("driver_id", driverId); })
-          .then(function () { done(); })
-          .catch(function (e) {
-            done();
-            var statusEl = document.getElementById("gpsStatus");
-            if (statusEl) statusEl.textContent = "本地已清空；数据库操作失败: " + (e.message || "").slice(0, 40);
-          });
-      } else {
-        done();
-      }
-    };
-  })();
+  function runClearWaypointsAndPlan() {
+    if (!confirm("确定清空本车本次计划？将取消数据库内本车所有已分配订单，并清空本地途经点与乘客列表，仅保留司机位置。")) return;
+    var sup = C.getSupabaseClient();
+    var driverId = C.getDriverId();
+    function done() {
+      C.passengerRows = [];
+      C.pickups = [];
+      C.deliveries = [];
+      C.waypoints = [];
+      C.applyPassengerRows();
+      C.saveStateToStorage();
+      if (C.renderPassengerList) C.renderPassengerList();
+      if (C.updateEntryActions) C.updateEntryActions();
+      var statusEl = document.getElementById("gpsStatus");
+      if (statusEl) statusEl.textContent = "已清空途经与计划，仅保留司机位置。";
+    }
+    if (sup && driverId) {
+      sup.from("order_pool").update({ assigned_driver_id: null, status: "pending_match" }).eq("assigned_driver_id", driverId).eq("status", "assigned")
+        .then(function () { return sup.from("driver_state").update({ empty_seats: 4 }).eq("driver_id", driverId); })
+        .then(function () { done(); })
+        .catch(function (e) {
+          done();
+          var statusEl = document.getElementById("gpsStatus");
+          if (statusEl) statusEl.textContent = "本地已清空；数据库操作失败: " + (e.message || "").slice(0, 40);
+        });
+    } else {
+      done();
+    }
+  }
+  document.body.addEventListener("click", function (e) {
+    var t = e.target.id === "btnClearWaypointsAndPlan" ? e.target : (e.target.closest && e.target.closest("#btnClearWaypointsAndPlan"));
+    if (t) { e.preventDefault(); runClearWaypointsAndPlan(); }
+  });
+  document.body.addEventListener("touchend", function (e) {
+    var t = e.target.id === "btnClearWaypointsAndPlan" ? e.target : (e.target.closest && e.target.closest("#btnClearWaypointsAndPlan"));
+    if (t) { e.preventDefault(); runClearWaypointsAndPlan(); }
+  }, { passive: false });
 
   function addPushEvent(row) {
     var list = document.getElementById("pushEventsList");
@@ -872,6 +878,8 @@
       setActiveTab(navMap);
     }
     function showSettings() {
+      var overlay = document.getElementById("settingsPanelOverlay");
+      if (overlay) overlay.classList.remove("show");
       viewHome.classList.add("hidden");
       viewMap.classList.add("hidden");
       if (viewSettings) viewSettings.classList.remove("hidden");

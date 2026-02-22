@@ -349,11 +349,14 @@
     }
 
     if (bdPoints.length === 1) {
+      var statusEl = document.getElementById("routeInfo");
+      if (statusEl) statusEl.textContent = "司机位置";
       if (!preserveViewport) {
         M.bmap.setCenter && M.bmap.setCenter(bdPoints[0]);
         M.bmap.setZoom && M.bmap.setZoom(14);
       }
       M.addMarkersWithNS(bdPoints, fromIndex, addresses, labels, types, NS);
+      if (M.updateNavPanel) M.updateNavPanel();
       if (M.showRestrictionHintIfNeeded) M.showRestrictionHintIfNeeded();
       if (M.updateStrategyPanelActive) M.updateStrategyPanelActive();
       if (M.bmap && typeof M.bmap.getZoom === "function") M.lastRedrawZoom = M.bmap.getZoom();

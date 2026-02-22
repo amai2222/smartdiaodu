@@ -104,7 +104,7 @@
     .then(function (data) {
       M.applyRouteData(data);
       M.saveRouteSnapshot(data);
-      if (statusEl) statusEl.textContent = "共 " + M.route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟（已与控制台同步）";
+      if (statusEl) statusEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已与控制台同步）" : "共 " + M.route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟（已与控制台同步）";
     })
     .catch(function () {
       if (statusEl) statusEl.textContent = "同步路线失败，请点「更新路线」重试";
@@ -153,7 +153,8 @@
       .then(function (data) {
         M.applyRouteData(data);
         M.saveRouteSnapshot(data);
-        document.getElementById("routeInfo").textContent = "共 " + M.route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟（已入库）";
+        var routeInfoEl = document.getElementById("routeInfo");
+        if (routeInfoEl) routeInfoEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已入库）" : "共 " + M.route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟（已入库）";
       })
       .catch(function (e) {
         document.getElementById("navPanel").style.display = "none";
@@ -313,16 +314,18 @@
   })();
 })();
 
-/** 返回控制台：不依赖 M，在 iframe 内时点「返回」通知父页切回首页 */
+/** 返回控制台：不依赖 M，在 iframe 内时「返回」「返回控制台」立即通知父页切回首页（touchstart 防 300ms 延迟） */
 (function () {
-  var backBtn = document.getElementById("btnBackToConsole");
-  if (!backBtn) return;
-  function goBack(e) {
-    if (e) e.preventDefault();
+  if (window === window.top) return;
+  function postBack() {
     try { window.parent.postMessage({ type: "smartdiaodu_map_back" }, "*"); } catch (err) {}
   }
-  if (window !== window.top) {
-    backBtn.addEventListener("click", function (e) { e.preventDefault(); goBack(); });
-    backBtn.addEventListener("touchend", function (e) { e.preventDefault(); goBack(); }, { passive: false });
+  function bindBackLink(el) {
+    if (!el) return;
+    el.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
+    el.addEventListener("touchend", function (e) { e.preventDefault(); postBack(); }, { passive: false });
+    el.addEventListener("click", function (e) { e.preventDefault(); postBack(); });
   }
+  bindBackLink(document.getElementById("btnBackToConsole"));
+  bindBackLink(document.getElementById("btnBackToConsoleFromAllDone"));
 })();

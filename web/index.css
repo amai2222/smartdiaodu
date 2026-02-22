@@ -87,8 +87,10 @@ input, select, button { font-size: inherit; }
 .app-view.hidden { display: none !important; }
 #viewMap.app-view { position: absolute; inset: 0; background: #0c0c0f; }
 #viewMap.app-view .w-full { height: 100%; }
-#viewSettings { overflow-y: auto; padding-bottom: 2rem; }
-#viewSettings .settings-panel { max-width: 100%; height: auto; min-height: 0; border-left: none; box-shadow: none; }
+#viewSettings { overflow-y: auto; padding-bottom: 2rem; background: #0c0c0f; min-height: 100%; }
+#viewSettings .settings-panel { max-width: 100%; width: 100%; height: auto; min-height: 0; border-left: none; box-shadow: none; background: transparent; }
+#viewSettings .settings-panel-header { border-radius: 0; border-bottom-color: #2a2d35; }
+#viewSettings .settings-panel-body { padding: 1rem 1.25rem 2rem; }
 
 /* 底部导航栏（App 风格） */
 .z-1000 { z-index: 1000; }
