@@ -7,38 +7,30 @@
   var M = window.SmartDiaoduMap;
   if (!M) return;
 
-  /** iOS Safari 下 iframe 内 height:100% 失效导致黑屏，用 JS 按视口强制设置 #map 宽高，实现真正自适应屏幕 */
-  function getViewportSize() {
-    var w = window;
-    if (w.visualViewport && typeof w.visualViewport.width === "number" && typeof w.visualViewport.height === "number") {
-      return { w: w.visualViewport.width, h: w.visualViewport.height };
+  /** 专门对付 Safari iframe 高度 Bug：innerHeight 是 iframe 内唯一靠谱的可见高度，强制注入 #map */
+  function fixSafariIframeHeight() {
+    var mapEl = document.getElementById("map");
+    if (mapEl) {
+      mapEl.style.height = window.innerHeight + "px";
     }
-    return { w: w.innerWidth || document.documentElement.clientWidth || 0, h: w.innerHeight || document.documentElement.clientHeight || 0 };
   }
-  function setMapContainerSize() {
-    var el = document.getElementById("map");
-    if (!el) return;
-    var size = getViewportSize();
-    if (size.h > 0) el.style.height = size.h + "px";
-    if (size.w > 0) el.style.width = size.w + "px";
-  }
-  setMapContainerSize();
+  fixSafariIframeHeight();
   window.addEventListener("resize", function () {
-    setMapContainerSize();
+    fixSafariIframeHeight();
     if (M.bmap && typeof M.bmap.invalidateSize === "function") {
       clearTimeout(M._resizeMapT);
       M._resizeMapT = setTimeout(function () { try { M.bmap.invalidateSize(); } catch (e) {} }, 100);
     }
   });
   window.addEventListener("orientationchange", function () {
-    setTimeout(setMapContainerSize, 100);
+    setTimeout(fixSafariIframeHeight, 100);
     setTimeout(function () {
       if (M.bmap && typeof M.bmap.invalidateSize === "function") try { M.bmap.invalidateSize(); } catch (e) {}
     }, 300);
   });
   if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", setMapContainerSize);
-    window.visualViewport.addEventListener("scroll", setMapContainerSize);
+    window.visualViewport.addEventListener("resize", fixSafariIframeHeight);
+    window.visualViewport.addEventListener("scroll", fixSafariIframeHeight);
   }
 
   M.destroyMap = function () {
@@ -119,7 +111,7 @@
 
   M.initBaiduMap = function () {
     if (M.bmap) return;
-    setMapContainerSize();
+    fixSafariIframeHeight();
     var container = document.getElementById("map");
     if (!container) return;
     if (M.useBMapGL && window.BMapGL && typeof window.BMapGL.Map === "function") {
@@ -160,14 +152,14 @@
   };
 
   if (window !== window.top) {
-    setTimeout(setMapContainerSize, 50);
-    setTimeout(setMapContainerSize, 200);
+    setTimeout(fixSafariIframeHeight, 50);
+    setTimeout(fixSafariIframeHeight, 200);
     setTimeout(function () {
-      setMapContainerSize();
+      fixSafariIframeHeight();
       if (M.bmap && typeof M.bmap.invalidateSize === "function") try { M.bmap.invalidateSize(); } catch (e) {}
     }, 500);
     setTimeout(function () {
-      setMapContainerSize();
+      fixSafariIframeHeight();
       if (M.bmap && typeof M.bmap.invalidateSize === "function") try { M.bmap.invalidateSize(); } catch (e) {}
     }, 1500);
   }
