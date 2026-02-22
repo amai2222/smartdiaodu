@@ -87,6 +87,8 @@ input, select, button { font-size: inherit; }
 .app-view.hidden { display: none !important; }
 #viewMap.app-view { position: absolute; inset: 0; background: #0c0c0f; }
 #viewMap.app-view .w-full { height: 100%; }
+#viewSettings { overflow-y: auto; padding-bottom: 2rem; }
+#viewSettings .settings-panel { max-width: 100%; height: auto; min-height: 0; border-left: none; box-shadow: none; }
 
 /* 底部导航栏（App 风格） */
 .z-1000 { z-index: 1000; }

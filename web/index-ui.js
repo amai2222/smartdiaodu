@@ -215,7 +215,7 @@
 
   (function setupSettingsPanel() {
     var overlay = document.getElementById("settingsPanelOverlay");
-    var btn = document.getElementById("btnSettings") || document.getElementById("navSettings");
+    var btn = document.getElementById("btnSettings");
     var closeBtn = document.getElementById("settingsPanelClose");
     if (!overlay) return;
     function openSettings() { overlay.classList.add("show"); overlay.setAttribute("aria-hidden", "false"); }
@@ -230,11 +230,18 @@
   (function setupBottomNav() {
     var viewHome = document.getElementById("viewHome");
     var viewMap = document.getElementById("viewMap");
+    var viewSettings = document.getElementById("viewSettings");
     var mapFrame = document.getElementById("mapFrame");
     var navHome = document.getElementById("navHome");
     var navMap = document.getElementById("navMap");
     var navSettings = document.getElementById("navSettings");
     if (!viewHome || !viewMap || !navHome || !navMap) return;
+
+    var settingsPanel = document.getElementById("settingsPanel");
+    if (viewSettings && settingsPanel && settingsPanel.parentNode) {
+      settingsPanel.parentNode.removeChild(settingsPanel);
+      viewSettings.appendChild(settingsPanel);
+    }
 
     function setActiveTab(tab) {
       [navHome, navMap, navSettings].forEach(function (el) {
@@ -248,6 +255,7 @@
     function showHome() {
       viewHome.classList.remove("hidden");
       viewMap.classList.add("hidden");
+      if (viewSettings) viewSettings.classList.add("hidden");
       if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
       if (appMain) appMain.classList.remove("map-fullscreen");
       setActiveTab(navHome);
@@ -258,9 +266,19 @@
       if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
       viewHome.classList.add("hidden");
       viewMap.classList.remove("hidden");
+      if (viewSettings) viewSettings.classList.add("hidden");
       if (bottomNav) bottomNav.classList.add("bottom-nav-hidden");
       if (appMain) appMain.classList.add("map-fullscreen");
       setActiveTab(navMap);
+    }
+
+    function showSettings() {
+      viewHome.classList.add("hidden");
+      viewMap.classList.add("hidden");
+      if (viewSettings) viewSettings.classList.remove("hidden");
+      if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
+      if (appMain) appMain.classList.remove("map-fullscreen");
+      setActiveTab(navSettings);
     }
 
     function addTap(el, fn) {
@@ -277,11 +295,10 @@
     var btnShowMap = document.getElementById("btnShowMap");
     if (btnShowMap) addTap(btnShowMap, showMap);
 
-    if (navSettings) {
-      var overlay = document.getElementById("settingsPanelOverlay");
-      function openSettings() { if (overlay) overlay.classList.add("show"); }
-      addTap(navSettings, openSettings);
-    }
+    if (navSettings) addTap(navSettings, showSettings);
+
+    var settingsPanelClose = document.getElementById("settingsPanelClose");
+    if (settingsPanelClose) addTap(settingsPanelClose, showHome);
 
     window.addEventListener("message", function (e) {
       if (e.data && e.data.type === "smartdiaodu_map_back") showHome();
@@ -770,11 +787,17 @@
   function run() {
     var viewHome = document.getElementById("viewHome");
     var viewMap = document.getElementById("viewMap");
+    var viewSettings = document.getElementById("viewSettings");
     var mapFrame = document.getElementById("mapFrame");
     var navHome = document.getElementById("navHome");
     var navMap = document.getElementById("navMap");
     var navSettings = document.getElementById("navSettings");
     if (!viewHome || !viewMap || !navHome || !navMap) return;
+    var settingsPanel = document.getElementById("settingsPanel");
+    if (viewSettings && settingsPanel && settingsPanel.parentNode) {
+      settingsPanel.parentNode.removeChild(settingsPanel);
+      viewSettings.appendChild(settingsPanel);
+    }
     var bottomNav = document.getElementById("bottomNav");
     var appMain = document.getElementById("appMain");
     function setActiveTab(tab) {
@@ -785,6 +808,7 @@
     function showHome() {
       viewHome.classList.remove("hidden");
       viewMap.classList.add("hidden");
+      if (viewSettings) viewSettings.classList.add("hidden");
       if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
       if (appMain) appMain.classList.remove("map-fullscreen");
       setActiveTab(navHome);
@@ -794,9 +818,18 @@
       if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
       viewHome.classList.add("hidden");
       viewMap.classList.remove("hidden");
+      if (viewSettings) viewSettings.classList.add("hidden");
       if (bottomNav) bottomNav.classList.add("bottom-nav-hidden");
       if (appMain) appMain.classList.add("map-fullscreen");
       setActiveTab(navMap);
+    }
+    function showSettings() {
+      viewHome.classList.add("hidden");
+      viewMap.classList.add("hidden");
+      if (viewSettings) viewSettings.classList.remove("hidden");
+      if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
+      if (appMain) appMain.classList.remove("map-fullscreen");
+      setActiveTab(navSettings);
     }
     function addTap(el, fn) {
       if (!el) return;
@@ -807,10 +840,9 @@
     addTap(navMap, showMap);
     var btnShowMap = document.getElementById("btnShowMap");
     if (btnShowMap) addTap(btnShowMap, showMap);
-    if (navSettings) {
-      var overlay = document.getElementById("settingsPanelOverlay");
-      addTap(navSettings, function () { if (overlay) overlay.classList.add("show"); });
-    }
+    if (navSettings) addTap(navSettings, showSettings);
+    var settingsPanelClose = document.getElementById("settingsPanelClose");
+    if (settingsPanelClose) addTap(settingsPanelClose, showHome);
     window.addEventListener("message", function (e) {
       if (e.data && e.data.type === "smartdiaodu_map_back") showHome();
     });
