@@ -28,16 +28,16 @@
         var escP = (p || "").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         var escD = (d || "").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         var li = document.createElement("li");
-        li.className = "flex flex-col gap-2 p-3 rounded-xl bg-[#0c0c0f] border border-border";
+        li.className = "passenger-card p-3 rounded-xl bg-[#0c0c0f] border border-border";
         var isOnboard = !!(row && row.onboard);
         li.innerHTML =
-          "<div class=\"flex items-center justify-between gap-2\">" +
+          "<div class=\"passenger-card__row passenger-card__header flex items-center justify-between gap-2\">" +
             "<strong class=\"text-console\">" + (i + 1) + "号客</strong>" +
             (isOnboard ? "<span class=\"text-muted text-sm\">(已上车)</span>" : "") +
           "</div>" +
-          "<div class=\"text-sm text-gray-300 break-words\"><span class=\"text-muted\">起点</span> " + escP + "</div>" +
-          "<div class=\"text-sm text-gray-300 break-words\"><span class=\"text-muted\">终点</span> " + escD + "</div>" +
-          "<div class=\"flex flex-wrap gap-2 pt-1\">" +
+          "<div class=\"passenger-card__row text-sm text-gray-300 break-words\"><span class=\"text-muted\">起点</span> " + escP + "</div>" +
+          "<div class=\"passenger-card__row text-sm text-gray-300 break-words\"><span class=\"text-muted\">终点</span> " + escD + "</div>" +
+          "<div class=\"passenger-card__row passenger-card__actions flex flex-wrap gap-2 pt-1\">" +
             (isOnboard ? "" : "<button type=\"button\" class=\"onboard-passenger px-3 py-2 rounded-lg border border-accent/60 text-accent text-sm font-medium\" data-idx=\"" + i + "\">上车</button>") +
             "<button type=\"button\" class=\"edit-passenger px-3 py-2 rounded-lg border border-border text-muted hover:text-gray-100 text-sm font-medium\" data-idx=\"" + i + "\">编辑</button>" +
             "<button type=\"button\" class=\"drop-passenger px-3 py-2 rounded-lg bg-danger/20 text-danger text-sm font-medium\" data-idx=\"" + i + "\" data-order-id=\"" + (orderId || "") + "\" data-delivery=\"" + (d || "").replace(/"/g, "&quot;") + "\">✖️ 下车</button>" +

@@ -91,6 +91,11 @@ input, select, button { font-size: inherit; }
 #driverLocCard .voice-btn { min-width: 44px; min-height: 44px; font-size: 1rem; }
 #driverLocCard .btn-touch { font-size: 0.875rem; }
 
+/* 乘客卡片：强制四行展示（1.号客 2.起点 3.终点 4.操作按钮） */
+.passenger-card { display: flex; flex-direction: column; gap: 0.5rem; }
+.passenger-card__row { display: block; width: 100%; box-sizing: border-box; }
+.passenger-card__actions { margin-top: 0.25rem; }
+
 /* 主内容区：相对定位以便地图视图绝对铺满 */
 #appMain { position: relative; }
 .app-view.hidden { display: none !important; }
