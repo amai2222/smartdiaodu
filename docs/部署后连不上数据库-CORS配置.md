@@ -52,12 +52,13 @@
 
 ---
 
-## 6. 登录页控制台常见无关报错（不影响登录）
+## 6. 控制台常见无关报错（均非本站代码，可安全忽略）
 
 | 控制台报错 | 原因 | 处理 |
 |------------|------|------|
-| **webextension.js**：`Cannot read properties of null (reading '1')` | **浏览器扩展**注入的脚本报错，不是本站代码。 | 用**无痕/隐私模式**或暂时禁用扩展后再试；可忽略。 |
-| **GET static.cloudflareinsights.com/beacon.min.js**：`net::ERR_ADDRESS_INVALID` | 站点部署在 **Cloudflare Pages** 时，CF 会自动注入统计脚本；你本机网络/DNS 无法访问该域名时会报错。 | **不影响登录**，可忽略。若想去掉该请求：Cloudflare Dashboard → 你的 Pages 项目 → **Settings** → 关闭 **Web Analytics** / **Browser Insights**。 |
+| **webextension.js**：`Cannot read properties of null (reading '1')` | **浏览器扩展**（如 Cursor、广告拦截等）注入的脚本报错，不是本站代码。 | 用**无痕/隐私模式**或暂时禁用扩展后再试；可忽略。 |
+| **GET static.cloudflareinsights.com/beacon.min.js**：`net::ERR_ADDRESS_INVALID` | 站点部署在 **Cloudflare Pages** 时，CF 会自动注入统计脚本；本机网络/DNS 无法访问该域名时会报错。 | 不影响功能，可忽略。若想去掉：Cloudflare Dashboard → 你的 Pages 项目 → **Settings** → 关闭 **Web Analytics** / **Browser Insights**。 |
+| **GET dlswbr.baidu.com/heicha/...** 或 **api.map.baidu.com getscript**：`net::ERR_ADDRESS_INVALID` | **百度地图 JS API** 内部会请求其子域脚本；本机网络/DNS 无法解析或访问时会出现。 | 不影响功能可忽略。若地图能正常显示，无需处理；若地图空白，检查网络与百度 AK 白名单。 |
 
 ---
 
