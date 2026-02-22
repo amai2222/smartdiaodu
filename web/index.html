@@ -48,22 +48,22 @@
     <main id="appMain" class="flex-1 overflow-auto pb-20">
       <div id="viewHome" class="app-view px-4 pt-2">
     <!-- ========== 区块一：实时雷达与我的车厢 ========== -->
-    <section class="bg-panel border border-border rounded-2xl p-5 mb-5 shadow-xl">
-      <h2 class="text-muted text-console font-medium mb-3 flex items-center gap-2">
+    <section id="driverLocCard" class="driver-loc-card bg-panel border border-border rounded-2xl p-4 mb-5 shadow-xl">
+      <h2 class="driver-loc-card__title text-muted font-medium mb-2 flex items-center gap-2">
         <span aria-hidden="true">📍</span> 我的位置
       </h2>
-      <div class="flex gap-2 items-stretch flex-wrap">
-        <input type="text" id="driverLoc"
-          class="flex-1 min-w-0 bg-[#0c0c0f] border border-border rounded-xl px-4 py-4 text-big text-gray-100 placeholder-gray-500"
-          placeholder="输入或点🎤说地址、右侧刷新 GPS" />
-        <button type="button" id="driverLocVoiceBtn" class="voice-btn shrink-0 px-3 rounded-xl border border-border text-muted hover:text-accent hover:border-accent/60" title="语音输入我的位置">🎤</button>
-        <button type="button" id="btnRefreshGps" class="btn-touch shrink-0 bg-accent hover:bg-blue-600 text-white font-medium rounded-xl px-4 flex items-center gap-2 shadow-lg">
+      <input type="text" id="driverLoc"
+        class="driver-loc-card__input w-full bg-[#0c0c0f] border border-border rounded-xl px-3 py-2.5 text-gray-100 placeholder-gray-500"
+        placeholder="输入或下方语音/刷新 GPS" />
+      <div class="flex gap-2 items-center flex-wrap mt-2">
+        <button type="button" id="driverLocVoiceBtn" class="voice-btn shrink-0 px-3 py-2 rounded-xl border border-border text-muted hover:text-accent hover:border-accent/60" title="语音输入我的位置">🎤</button>
+        <button type="button" id="btnRefreshGps" class="btn-touch shrink-0 bg-accent hover:bg-blue-600 text-white font-medium rounded-xl px-3 py-2 flex items-center gap-1.5">
           <span aria-hidden="true">🎯</span>
-          <span class="hidden sm:inline">刷新 GPS</span>
+          <span>刷新 GPS</span>
         </button>
-        </div>
-      <p id="gpsStatus" class="text-sm text-muted mt-2"></p>
-      <p class="text-sm text-muted mt-1">可手动输入或修改地址（如百度无法解析时），失焦后自动同步到数据库。</p>
+        <button type="button" id="btnShareLoc" class="btn-touch shrink-0 px-3 py-2 rounded-xl border border-border text-muted hover:text-accent hover:border-accent/60 font-medium flex items-center gap-1.5" title="分享当前地址和 GPS">📤 分享</button>
+      </div>
+      <p id="gpsStatus" class="driver-loc-card__status text-muted mt-1.5"></p>
 
       <div id="restrictionHintIndex" class="hidden mt-3 p-3 rounded-xl bg-amber-900/40 border border-amber-600/50 text-amber-200 text-sm" role="alert"></div>
 
@@ -113,12 +113,10 @@
       <div id="waypointsModal" role="dialog" aria-labelledby="waypointsModalTitle">
         <h3 id="waypointsModalTitle">途经点</h3>
         <div id="waypointsModalContent"></div>
-        <div class="flex gap-2 mt-3 flex-wrap items-center">
-          <div class="input-with-voice flex-1 min-w-0 flex gap-1">
-            <input type="text" id="waypointAddrInput" placeholder="输入或语音说地址添加途经点" class="flex-1 px-3 py-2 rounded-lg bg-[#0c0c0f] border border-border text-console" />
-            <button type="button" id="waypointVoiceBtn" class="voice-btn shrink-0 px-3 py-2 rounded-lg border border-border text-muted hover:text-accent hover:border-accent/60" title="点击说话，语音输入地址">🎤</button>
-          </div>
-          <button type="button" id="waypointAddBtn" class="px-4 py-2 rounded-lg bg-accent text-white font-medium">添加</button>
+        <div class="waypoint-add-row flex gap-2 mt-3 flex-wrap items-center">
+          <input type="text" id="waypointAddrInput" placeholder="输入或语音说地址添加途经点" class="flex-1 min-w-0 px-3 py-2 rounded-lg bg-[#0c0c0f] border border-border text-console" />
+          <button type="button" id="waypointVoiceBtn" class="voice-btn shrink-0 px-3 py-2 rounded-lg border border-border text-muted hover:text-accent hover:border-accent/60" title="点击说话，语音输入地址；监听中再点取消">🎤</button>
+          <button type="button" id="waypointAddBtn" class="shrink-0 px-4 py-2 rounded-lg bg-accent text-white font-medium">添加</button>
         </div>
         <button type="button" id="waypointsModalClose" class="mt-3 w-full py-2 rounded-lg border border-border text-muted">关闭</button>
       </div>
@@ -236,6 +234,7 @@
       if (e.data && e.data.type === "smartdiaodu_map_back") showHome();
     });
     setActive(navHome);
+    if (location.hash === "#map") showMap();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", setupNav);
   else setupNav();

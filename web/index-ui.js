@@ -25,17 +25,26 @@
         var p = row ? row.pickup : (C.pickups[i] || "");
         var d = row ? row.delivery : (C.deliveries[i] || "");
         var orderId = row && row.id ? row.id : "";
-        var shortP = p.length > 12 ? p.slice(0, 12) + "…" : p;
-        var shortD = d.length > 12 ? d.slice(0, 12) + "…" : d;
+        var escP = (p || "").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        var escD = (d || "").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         var li = document.createElement("li");
-        li.className = "flex items-center justify-between gap-3 p-3 rounded-xl bg-[#0c0c0f] border border-border";
+        li.className = "flex flex-col gap-2 p-3 rounded-xl bg-[#0c0c0f] border border-border";
         var isOnboard = !!(row && row.onboard);
-        li.innerHTML = "<span class=\"text-console flex-1 min-w-0\"><strong>" + (i + 1) + "号客</strong>" + (isOnboard ? " <span class=\"text-muted text-sm\">(已上车)</span> " : " ") + shortP + " → " + shortD + "</span>" +
-          (isOnboard ? "" : "<button type=\"button\" class=\"onboard-passenger shrink-0 px-3 py-2 rounded-lg border border-accent/60 text-accent font-medium\" data-idx=\"" + i + "\">上车</button>") +
-          "<button type=\"button\" class=\"edit-passenger shrink-0 px-3 py-2 rounded-lg border border-border text-muted hover:text-gray-100 font-medium\" data-idx=\"" + i + "\">编辑</button>" +
-          "<button type=\"button\" class=\"drop-passenger shrink-0 px-3 py-2 rounded-lg bg-danger/20 text-danger font-medium\" data-idx=\"" + i + "\" data-order-id=\"" + (orderId || "") + "\" data-delivery=\"" + (d || "").replace(/"/g, "&quot;") + "\">✖️ 下车</button>";
+        li.innerHTML =
+          "<div class=\"flex items-center justify-between gap-2\">" +
+            "<strong class=\"text-console\">" + (i + 1) + "号客</strong>" +
+            (isOnboard ? "<span class=\"text-muted text-sm\">(已上车)</span>" : "") +
+          "</div>" +
+          "<div class=\"text-sm text-gray-300 break-words\"><span class=\"text-muted\">起点</span> " + escP + "</div>" +
+          "<div class=\"text-sm text-gray-300 break-words\"><span class=\"text-muted\">终点</span> " + escD + "</div>" +
+          "<div class=\"flex flex-wrap gap-2 pt-1\">" +
+            (isOnboard ? "" : "<button type=\"button\" class=\"onboard-passenger px-3 py-2 rounded-lg border border-accent/60 text-accent text-sm font-medium\" data-idx=\"" + i + "\">上车</button>") +
+            "<button type=\"button\" class=\"edit-passenger px-3 py-2 rounded-lg border border-border text-muted hover:text-gray-100 text-sm font-medium\" data-idx=\"" + i + "\">编辑</button>" +
+            "<button type=\"button\" class=\"drop-passenger px-3 py-2 rounded-lg bg-danger/20 text-danger text-sm font-medium\" data-idx=\"" + i + "\" data-order-id=\"" + (orderId || "") + "\" data-delivery=\"" + (d || "").replace(/"/g, "&quot;") + "\">✖️ 下车</button>" +
+          "</div>";
         if (!isOnboard) {
-          li.querySelector(".onboard-passenger").onclick = function () {
+          var onboardBtn = li.querySelector(".onboard-passenger");
+          if (onboardBtn) onboardBtn.onclick = function () {
             var ix = parseInt(this.getAttribute("data-idx"), 10);
             var r = C.passengerRows[ix];
             if (!r) return;
@@ -52,6 +61,8 @@
           C.editingPassengerIdx = ix;
           document.getElementById("editPickup").value = r.pickup || "";
           document.getElementById("editDelivery").value = r.delivery || "";
+          C._editPickupVoiceFirstClick = true;
+          C._editDeliveryVoiceFirstClick = true;
           document.getElementById("editPassengerModalOverlay").classList.add("show");
         };
         li.querySelector(".drop-passenger").onclick = function () {
@@ -125,6 +136,50 @@
         });
       },
       function () { status.textContent = "定位失败，请允许位置权限"; }
+    );
+  };
+
+  document.getElementById("btnShareLoc").onclick = function () {
+    var input = document.getElementById("driverLoc");
+    var statusEl = document.getElementById("gpsStatus");
+    var addr = (input && input.value) ? input.value.trim() : "";
+    function doShare(gpsText) {
+      var text = "地址：" + (addr || "（未填写）") + (gpsText ? "\nGPS：" + gpsText : "");
+      if (navigator.share && navigator.canShare && navigator.canShare({ text: text })) {
+        navigator.share({ title: "我的位置", text: text }).then(function () {
+          if (statusEl) statusEl.textContent = "已分享";
+        }).catch(function () {
+          copyFallback(text, statusEl);
+        });
+      } else {
+        copyFallback(text, statusEl);
+      }
+    }
+    function copyFallback(text, statusEl) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          if (statusEl) statusEl.textContent = "已复制到剪贴板，可粘贴到其他 App";
+        }).catch(function () {
+          if (statusEl) statusEl.textContent = "复制失败，请手动复制";
+        });
+      } else {
+        if (statusEl) statusEl.textContent = text.length > 30 ? "已复制（见下方）" : "请手动复制";
+      }
+    }
+    if (!navigator.geolocation) {
+      doShare("");
+      return;
+    }
+    if (statusEl) statusEl.textContent = "获取坐标中…";
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        var gpsText = pos.coords.latitude.toFixed(5) + ", " + pos.coords.longitude.toFixed(5);
+        doShare(gpsText);
+      },
+      function () {
+        doShare("");
+        if (statusEl) statusEl.textContent = "地址已分享，GPS 获取失败";
+      }
     );
   };
 
@@ -365,13 +420,20 @@
       var voiceJustStarted = false;
       function onTap() {
         if (btnEl.classList.contains("listening")) {
-          if (voiceJustStarted) return;
           try { if (currentRecognition) currentRecognition.abort(); } catch (e) {}
           currentRecognition = null;
           btnEl.classList.remove("listening");
           btnEl.textContent = "🎤";
           btnEl.setAttribute("title", originalTitle);
           return;
+        }
+        if (btnEl.id === "editPickupVoiceBtn" && C._editPickupVoiceFirstClick) {
+          C._editPickupVoiceFirstClick = false;
+          inputEl.value = "";
+        }
+        if (btnEl.id === "editDeliveryVoiceBtn" && C._editDeliveryVoiceFirstClick) {
+          C._editDeliveryVoiceFirstClick = false;
+          inputEl.value = "";
         }
         var rec = isIOS ? new SpeechRecognition() : (currentRecognition || new SpeechRecognition());
         if (!isIOS) currentRecognition = rec;
@@ -407,7 +469,6 @@
       var voiceJustStarted = false;
       function onTap() {
         if (btnEl.classList.contains("listening")) {
-          if (voiceJustStarted) return;
           try { if (currentRecognition) currentRecognition.abort(); } catch (e) {}
           currentRecognition = null;
           btnEl.classList.remove("listening");

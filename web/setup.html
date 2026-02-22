@@ -21,13 +21,12 @@
   <link rel="stylesheet" href="index.css" />
 </head>
 <body class="bg-[#0c0c0f] text-gray-100 min-h-screen font-sans antialiased pb-safe">
-  <div class="max-w-lg mx-auto px-4 pt-safe pb-8">
-    <header class="flex items-center justify-between py-4 border-b border-border">
-      <a href="index.html" class="text-accent font-medium">← 返回</a>
+  <div class="max-w-lg mx-auto flex flex-col min-h-screen">
+    <header class="flex items-center justify-center py-4 px-4 border-b border-border flex-shrink-0">
       <h1 class="text-lg font-medium text-gray-100">设置</h1>
-      <span class="w-12"></span>
     </header>
 
+    <main class="flex-1 overflow-auto px-4 pb-20">
     <div class="mt-6">
       <div class="mb-5">
         <label for="driverPlate" class="block text-muted text-sm font-medium mb-2">🚗 车牌（用于接单与路线规避限行）</label>
@@ -82,6 +81,23 @@
       </div>
     </div>
     <p id="setupStatus" class="mt-4 text-sm text-muted"></p>
+    </main>
+
+    <!-- 底部导航栏（与首页一致） -->
+    <nav id="bottomNav" class="fixed bottom-0 left-0 right-0 max-w-lg mx-auto flex items-stretch bg-panel border-t border-border z-1000 pb-safe">
+      <a href="index.html" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100 no-underline">
+        <span class="text-lg">🏠</span>
+        <span class="text-xs font-medium">首页</span>
+      </a>
+      <a href="index.html#map" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100 no-underline">
+        <span class="text-lg">🗺️</span>
+        <span class="text-xs font-medium">地图</span>
+      </a>
+      <span class="nav-tab active flex-1 py-3 flex flex-col items-center gap-1 border-t-2 bg-panel cursor-default">
+        <span class="text-lg">⚙️</span>
+        <span class="text-xs font-medium">设置</span>
+      </span>
+    </nav>
   </div>
 
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>

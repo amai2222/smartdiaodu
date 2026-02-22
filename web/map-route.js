@@ -182,14 +182,32 @@
     }
     return outSegments.length ? outSegments : [pathBd];
   }
-  /** 箭头沿线的间距（像素），与百度导航一致：按像素密度显示，缩放时密度不变 */
-  function getArrowRepeatPixels() {
-    if (!M.bmap || typeof M.bmap.getZoom !== "function") return 24;
+  /** 直线段箭头间距（像素），约疏 3 倍 */
+  function getArrowRepeatPixelsStraight() {
+    if (!M.bmap || typeof M.bmap.getZoom !== "function") return 78;
     var z = M.bmap.getZoom();
-    if (z <= 10) return 32;
-    if (z <= 13) return 26;
-    if (z <= 16) return 22;
-    return 20;
+    if (z <= 10) return 108;
+    if (z <= 13) return 90;
+    if (z <= 16) return 84;
+    return 78;
+  }
+  /** 弯道箭头间距（像素），约疏 3 倍 */
+  function getArrowRepeatPixelsCurve() {
+    if (!M.bmap || typeof M.bmap.getZoom !== "function") return 126;
+    var z = M.bmap.getZoom();
+    if (z <= 10) return 156;
+    if (z <= 13) return 138;
+    if (z <= 16) return 132;
+    return 126;
+  }
+
+  /** 判断路段是否偏弯：路径长/直线距离 > 阈值则视为弯道 */
+  function isCurvedSegment(segBd) {
+    if (!segBd || segBd.length < 2) return false;
+    var pathLen = pathLengthMeters(segBd);
+    var straightLen = pathLengthMeters([segBd[0], segBd[segBd.length - 1]]);
+    if (straightLen <= 0) return true;
+    return pathLen / straightLen > 1.12;
   }
 
   M.addDirectionalPolyline = function (pathBd, strokeColor, excludeRanges) {
@@ -202,7 +220,6 @@
       if (window.BMap.Symbol && window.BMap.IconSequence && SymbolShape != null) {
         var lineFull = new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0.95 });
         M.bmap.addOverlay(lineFull);
-        var arrowPx = getArrowRepeatPixels();
         var sy = new window.BMap.Symbol(SymbolShape, {
           scale: 0.9,
           strokeColor: "#ffffff",
@@ -210,13 +227,21 @@
           strokeWeight: 1,
           fillOpacity: 1
         });
-        var icons = new window.BMap.IconSequence(sy, "0", String(arrowPx));
         var arrowSegments = pathSegmentForArrows(pathBd, 0.08, 0.92, excludeRanges || []);
         for (var si = 0; si < arrowSegments.length; si++) {
-          if (arrowSegments[si].length >= 2) {
-            var lineArrows = new window.BMap.Polyline(arrowSegments[si], { strokeColor: "transparent", strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0, icons: [icons] });
-            M.bmap.addOverlay(lineArrows);
+          var seg = arrowSegments[si];
+          if (seg.length < 2) continue;
+          var segBd = [];
+          for (var pi = 0; pi < seg.length; pi++) {
+            var pt = seg[pi];
+            var lng = pt.lng != null ? pt.lng : (typeof pt.getLng === "function" ? pt.getLng() : null);
+            var lat = pt.lat != null ? pt.lat : (typeof pt.getLat === "function" ? pt.getLat() : null);
+            if (lng != null && lat != null) segBd.push({ lng: lng, lat: lat });
           }
+          var arrowPx = (segBd.length >= 2 && isCurvedSegment(segBd)) ? getArrowRepeatPixelsCurve() : getArrowRepeatPixelsStraight();
+          var icons = new window.BMap.IconSequence(sy, "0", String(arrowPx));
+          var lineArrows = new window.BMap.Polyline(seg, { strokeColor: "transparent", strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0, icons: [icons] });
+          M.bmap.addOverlay(lineArrows);
         }
         return;
       }
@@ -224,13 +249,14 @@
     M.bmap.addOverlay(new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0.95 }));
   };
 
-  /** 仅当路段长度 ≥ 该值（米）时才显示路名，短路段不显示以优先保证箭头清晰 */
-  var MIN_SEGMENT_METERS_FOR_ROAD_NAME = 800;
+  /** 仅当路段在屏幕上的像素长度 ≥ 该值时才显示路名（随缩放变化），优先保证箭头清晰 */
+  var MIN_SEGMENT_PIXELS_FOR_ROAD_NAME = 80;
 
   M.addRoadNameLabelsFromSteps = function (route_steps, BPoint) {
     if (!M.bmap || !route_steps || !route_steps.length || !BPoint || typeof window.BMap.Label === "undefined") return;
     var roadNameRe = /高速|国道|省道|大道|快速路|环路|线|路$/;
     var maxFontPx = Math.min(12, ROUTE_STROKE_WEIGHT);
+    var metersPerPixel = getMetersPerPixel();
     for (var i = 0; i < route_steps.length; i++) {
       var step = route_steps[i];
       var name = (step.road_name || "").trim();
@@ -239,8 +265,9 @@
       if (!path || path.length < 2) continue;
       var segBd = [];
       for (var sj = 0; sj < path.length; sj++) segBd.push({ lng: path[sj][1], lat: path[sj][0] });
-      var segLen = pathLengthMeters(segBd);
-      if (segLen < MIN_SEGMENT_METERS_FOR_ROAD_NAME) continue;
+      var segLenMeters = pathLengthMeters(segBd);
+      var segLenPixels = metersPerPixel > 0 ? segLenMeters / metersPerPixel : 0;
+      if (segLenPixels < MIN_SEGMENT_PIXELS_FOR_ROAD_NAME) continue;
       var midIdx = Math.floor(path.length / 2);
       var p = path[midIdx];
       if (!p || p[0] == null || p[1] == null) continue;
@@ -264,6 +291,7 @@
     if (!M.bmap || !route || typeof route.getNumSteps !== "function") return;
     try {
       var maxFontPx = Math.min(12, ROUTE_STROKE_WEIGHT);
+      var metersPerPixel = getMetersPerPixel();
       var n = route.getNumSteps();
       for (var i = 0; i < n; i++) {
         var step = route.getStep && route.getStep(i);
@@ -282,8 +310,9 @@
           if (lng != null && lat != null) segBd.push({ lng: lng, lat: lat });
         }
         if (segBd.length < 2) continue;
-        var segLen = pathLengthMeters(segBd);
-        if (segLen < MIN_SEGMENT_METERS_FOR_ROAD_NAME) continue;
+        var segLenMeters = pathLengthMeters(segBd);
+        var segLenPixels = metersPerPixel > 0 ? segLenMeters / metersPerPixel : 0;
+        if (segLenPixels < MIN_SEGMENT_PIXELS_FOR_ROAD_NAME) continue;
         var mid = path[Math.floor(path.length / 2)];
         if (!mid) continue;
         var label = new window.BMap.Label(name, { offset: new window.BMap.Size(0, 0), position: mid, enableMassClear: true });
@@ -347,33 +376,7 @@
           for (var k = 0; k < mainPathArr.length; k++) {
             mainBdPath.push(new BPoint(mainPathArr[k][1], mainPathArr[k][0]));
           }
-          var excludeRanges = [];
-          if (M.routeAlternativeIndex === 0 && M.route_steps && M.route_steps.length > 0) {
-            var totalLen = pathLengthMeters(mainBdPath);
-            if (totalLen > 0) {
-              var roadNameRe = /高速|国道|省道|大道|快速路|环路|线|路$/;
-              var acc = 0;
-              for (var si = 0; si < M.route_steps.length; si++) {
-                var step = M.route_steps[si];
-                var segBd = [];
-                if (step.path) for (var sj = 0; sj < step.path.length; sj++) segBd.push(new BPoint(step.path[sj][1], step.path[sj][0]));
-                var segLen = segBd.length >= 2 ? pathLengthMeters(segBd) : 0;
-                var name = (step.road_name || "").trim();
-                if (name && name !== "无名路" && roadNameRe.test(name)) {
-                  var s = Math.max(0, Math.min(1, acc / totalLen));
-                  var e = Math.max(0, Math.min(1, (acc + segLen) / totalLen));
-                  if (e > s) {
-                    var midFrac = (s + e) * 0.5;
-                    var labelSpan = 0.025;
-                    excludeRanges.push({ start: Math.max(0, midFrac - labelSpan), end: Math.min(1, midFrac + labelSpan) });
-                  }
-                }
-                acc += segLen;
-              }
-            }
-            M.addRoadNameLabelsFromSteps(M.route_steps, BPoint);
-          }
-          M.addDirectionalPolyline(mainBdPath, ROUTE_GREEN, excludeRanges);
+          M.addDirectionalPolyline(mainBdPath, ROUTE_GREEN, []);
         }
 
         if (!preserveViewport && M.bmap.setViewport) M.bmap.setViewport(bdPoints);
@@ -462,7 +465,6 @@
               if (path && path.length > 0) {
                 var lineColor = (M.routeAlternativeIndex === 0 ? ROUTE_GREEN : ROUTE_ALTERNATIVE_COLOR);
                 M.addDirectionalPolyline(path, lineColor);
-                M.addRoadNameLabels(route);
                 segIndex++;
                 searchNextSegment();
                 return;
@@ -507,7 +509,6 @@
         if (path && path.length > 0) {
           var lineColor = (M.routeAlternativeIndex === 0 ? ROUTE_GREEN : ROUTE_ALTERNATIVE_COLOR);
           M.addDirectionalPolyline(path, lineColor);
-          M.addRoadNameLabels(route);
         }
       } catch (e) {}
     }
