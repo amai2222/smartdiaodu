@@ -213,35 +213,14 @@
     });
   }
 
-  (function setupSettingsPanel() {
-    var overlay = document.getElementById("settingsPanelOverlay");
-    var btn = document.getElementById("btnSettings");
-    var closeBtn = document.getElementById("settingsPanelClose");
-    if (!overlay) return;
-    function openSettings() { overlay.classList.add("show"); overlay.setAttribute("aria-hidden", "false"); }
-    function closeSettings() { overlay.classList.remove("show"); overlay.setAttribute("aria-hidden", "true"); }
-    if (btn) btn.addEventListener("click", openSettings);
-    if (closeBtn) closeBtn.addEventListener("click", closeSettings);
-    overlay.addEventListener("click", function (e) {
-      if (e.target === overlay) closeSettings();
-    });
-  })();
-
   (function setupBottomNav() {
     var viewHome = document.getElementById("viewHome");
     var viewMap = document.getElementById("viewMap");
-    var viewSettings = document.getElementById("viewSettings");
     var mapFrame = document.getElementById("mapFrame");
     var navHome = document.getElementById("navHome");
     var navMap = document.getElementById("navMap");
     var navSettings = document.getElementById("navSettings");
     if (!viewHome || !viewMap || !navHome || !navMap) return;
-
-    var settingsPanel = document.getElementById("settingsPanel");
-    if (viewSettings && settingsPanel && settingsPanel.parentNode) {
-      settingsPanel.parentNode.removeChild(settingsPanel);
-      viewSettings.appendChild(settingsPanel);
-    }
 
     function setActiveTab(tab) {
       [navHome, navMap, navSettings].forEach(function (el) {
@@ -257,7 +236,6 @@
     function showHome() {
       viewHome.classList.remove("hidden");
       viewMap.classList.add("hidden");
-      if (viewSettings) viewSettings.classList.add("hidden");
       if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
       if (appMain) appMain.classList.remove("map-fullscreen");
       if (appHeader) appHeader.classList.remove("app-header-hidden");
@@ -270,25 +248,11 @@
       if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
       viewHome.classList.add("hidden");
       viewMap.classList.remove("hidden");
-      if (viewSettings) viewSettings.classList.add("hidden");
       if (bottomNav) bottomNav.classList.add("bottom-nav-hidden");
       if (appMain) appMain.classList.add("map-fullscreen");
       if (appHeader) appHeader.classList.add("app-header-hidden");
       if (appHeaderExtra) appHeaderExtra.classList.add("app-header-hidden");
       setActiveTab(navMap);
-    }
-
-    function showSettings() {
-      var overlay = document.getElementById("settingsPanelOverlay");
-      if (overlay) overlay.classList.remove("show");
-      viewHome.classList.add("hidden");
-      viewMap.classList.add("hidden");
-      if (viewSettings) viewSettings.classList.remove("hidden");
-      if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
-      if (appMain) appMain.classList.remove("map-fullscreen");
-      if (appHeader) appHeader.classList.remove("app-header-hidden");
-      if (appHeaderExtra) appHeaderExtra.classList.remove("app-header-hidden");
-      setActiveTab(navSettings);
     }
 
     function addTap(el, fn) {
@@ -304,11 +268,6 @@
 
     var btnShowMap = document.getElementById("btnShowMap");
     if (btnShowMap) addTap(btnShowMap, showMap);
-
-    if (navSettings) addTap(navSettings, showSettings);
-
-    var settingsPanelClose = document.getElementById("settingsPanelClose");
-    if (settingsPanelClose) addTap(settingsPanelClose, showHome);
 
     window.addEventListener("message", function (e) {
       if (e.data && e.data.type === "smartdiaodu_map_back") showHome();
@@ -497,177 +456,6 @@
     );
   })();
 
-  function refreshMode() {
-    var base = C.getApiBase();
-    if (!base) return;
-    fetch(base + "/driver_mode").then(function (r) { return r.json(); }).then(function (d) {
-      var mode = d.mode || "mode2";
-      document.querySelectorAll(".mode-btn").forEach(function (btn) {
-        btn.classList.remove("border-accent", "bg-accent/20");
-        if (btn.getAttribute("data-mode") === mode) btn.classList.add("border-accent", "bg-accent/20");
-      });
-      var planPanel = document.getElementById("planPanel");
-      if (planPanel) planPanel.classList.toggle("hidden", mode !== "mode1");
-      if (mode === "mode1") loadPlannedTrip();
-    });
-  }
-  function loadPlannedTrip() {
-    var base = C.getApiBase();
-    if (!base) return;
-    fetch(base + "/planned_trip").then(function (r) { return r.json(); }).then(function (d) {
-      var plans = d.plans || [];
-      var list = document.getElementById("planList");
-      if (!list) return;
-      list.innerHTML = "";
-      plans.forEach(function (p, idx) {
-        var completed = p.completed === true;
-        var card = document.createElement("div");
-        card.className = "p-4 rounded-xl bg-panel border border-border" + (completed ? " opacity-75" : "");
-        card.setAttribute("data-index", String(idx));
-        var header = "第 " + (idx + 1) + " 批";
-        if (idx === 0 && !completed) header += "（优先找单）";
-        if (completed) header += " · 已结束找单";
-        card.innerHTML =
-          "<div class=\"text-muted text-sm font-medium mb-2\">" + header + "</div>" +
-          "<label class=\"block text-muted text-xs mb-1\">出发时间</label>" +
-          "<input type=\"text\" class=\"plan-time w-full bg-[#0c0c0f] border border-border rounded-lg px-3 py-2 text-console mb-2\" placeholder=\"06:00 或 2025-02-22 06:00\" value=\"" + (p.departure_time || "").replace(/"/g, "&quot;") + "\" " + (completed ? "readonly" : "") + " />" +
-          "<label class=\"block text-muted text-xs mb-1\">出发地</label>" +
-          "<input type=\"text\" class=\"plan-origin w-full bg-[#0c0c0f] border border-border rounded-lg px-3 py-2 text-console mb-2\" placeholder=\"如东荣生花苑\" value=\"" + (p.origin || "").replace(/"/g, "&quot;") + "\" " + (completed ? "readonly" : "") + " />" +
-          "<label class=\"block text-muted text-xs mb-1\">目的地</label>" +
-          "<input type=\"text\" class=\"plan-dest w-full bg-[#0c0c0f] border border-border rounded-lg px-3 py-2 text-console mb-3\" placeholder=\"上海\" value=\"" + (p.destination || "").replace(/"/g, "&quot;") + "\" " + (completed ? "readonly" : "") + " />" +
-          "<div class=\"flex gap-2\">" +
-          (completed ? "" : "<button type=\"button\" class=\"plan-save px-3 py-2 rounded-lg bg-accent text-white text-sm\">保存</button><button type=\"button\" class=\"plan-complete px-3 py-2 rounded-lg border border-muted text-muted text-sm\">结束找单</button>") +
-          "</div>";
-        if (!completed) {
-          card.querySelector(".plan-save").onclick = function () { savePlanAt(idx); };
-          card.querySelector(".plan-complete").onclick = function () { completePlanAt(idx); };
-        }
-        list.appendChild(card);
-      });
-    });
-  }
-  function completePlanAt(idx) {
-    var base = C.getApiBase();
-    if (!base) return;
-    if (!confirm("本批找单任务结束？计划保留，下一批将自动接上。")) return;
-    fetch(base + "/planned_trip/complete?index=" + idx, { method: "POST" })
-      .then(function () { document.getElementById("gpsStatus").textContent = "已结束找单，下一批接上"; loadPlannedTrip(); });
-  }
-  function savePlanAt(idx) {
-    var base = C.getApiBase();
-    if (!base) return;
-    var card = document.querySelector("#planList [data-index=\"" + idx + "\"]");
-    if (!card) return;
-    var body = {
-      index: idx,
-      origin: (card.querySelector(".plan-origin").value || "").trim() || "如东荣生花苑",
-      destination: (card.querySelector(".plan-dest").value || "").trim() || "上海",
-      departure_time: (card.querySelector(".plan-time").value || "").trim() || "06:00",
-      time_window_minutes: 30,
-      min_orders: 2,
-      max_orders: 4
-    };
-    fetch(base + "/planned_trip", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-      .then(function () { document.getElementById("gpsStatus").textContent = "第 " + (idx + 1) + " 批计划已保存"; loadPlannedTrip(); });
-  }
-  document.getElementById("btnAddPlan").onclick = function () {
-    var base = C.getApiBase();
-    if (!base) return;
-    var body = { origin: "如东荣生花苑", destination: "上海", departure_time: "06:00", time_window_minutes: 30, min_orders: 2, max_orders: 4 };
-    fetch(base + "/planned_trip", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-      .then(function () { document.getElementById("gpsStatus").textContent = "已添加一批，请填写时间与地点后保存"; loadPlannedTrip(); });
-  };
-  document.querySelectorAll(".mode-btn").forEach(function (btn) {
-    btn.onclick = function () {
-      var mode = this.getAttribute("data-mode");
-      var base = C.getApiBase();
-      if (!base) return;
-      fetch(base + "/driver_mode", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: mode }) })
-        .then(function () { refreshMode(); });
-    };
-  });
-
-  function loadConfig() {
-    var base = C.getApiBase();
-    if (!base) return;
-    fetch(base + "/driver_mode_config").then(function (r) { return r.json(); }).then(function (c) {
-      document.getElementById("detourVal").textContent = c.mode2_detour_max != null ? c.mode2_detour_max : 15;
-      document.getElementById("profitVal").textContent = c.mode2_high_profit_threshold != null ? c.mode2_high_profit_threshold : 100;
-    });
-  }
-  function saveDetour(v) {
-    var base = C.getApiBase();
-    if (!base) return;
-    fetch(base + "/driver_mode_config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode2_detour_max: v }) });
-  }
-  function saveProfit(v) {
-    var base = C.getApiBase();
-    if (!base) return;
-    fetch(base + "/driver_mode_config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode2_high_profit_threshold: v }) });
-  }
-  document.getElementById("detourMinus").onclick = function () {
-    var el = document.getElementById("detourVal");
-    var v = Math.max(0, parseInt(el.textContent, 10) - 5);
-    el.textContent = v;
-    saveDetour(v);
-  };
-  document.getElementById("detourPlus").onclick = function () {
-    var el = document.getElementById("detourVal");
-    var v = parseInt(el.textContent, 10) + 5;
-    el.textContent = v;
-    saveDetour(v);
-  };
-  document.getElementById("profitMinus").onclick = function () {
-    var el = document.getElementById("profitVal");
-    var v = Math.max(0, parseInt(el.textContent, 10) - 10);
-    el.textContent = v;
-    saveProfit(v);
-  };
-  document.getElementById("profitPlus").onclick = function () {
-    var el = document.getElementById("profitVal");
-    var v = parseInt(el.textContent, 10) + 10;
-    el.textContent = v;
-    saveProfit(v);
-  };
-
-  function runClearWaypointsAndPlan() {
-    if (!confirm("确定清空本车本次计划？将取消数据库内本车所有已分配订单，并清空本地途经点与乘客列表，仅保留司机位置。")) return;
-    var sup = C.getSupabaseClient();
-    var driverId = C.getDriverId();
-    function done() {
-      C.passengerRows = [];
-      C.pickups = [];
-      C.deliveries = [];
-      C.waypoints = [];
-      C.applyPassengerRows();
-      C.saveStateToStorage();
-      if (C.renderPassengerList) C.renderPassengerList();
-      if (C.updateEntryActions) C.updateEntryActions();
-      var statusEl = document.getElementById("gpsStatus");
-      if (statusEl) statusEl.textContent = "已清空途经与计划，仅保留司机位置。";
-    }
-    if (sup && driverId) {
-      sup.from("order_pool").update({ assigned_driver_id: null, status: "pending_match" }).eq("assigned_driver_id", driverId).eq("status", "assigned")
-        .then(function () { return sup.from("driver_state").update({ empty_seats: 4 }).eq("driver_id", driverId); })
-        .then(function () { done(); })
-        .catch(function (e) {
-          done();
-          var statusEl = document.getElementById("gpsStatus");
-          if (statusEl) statusEl.textContent = "本地已清空；数据库操作失败: " + (e.message || "").slice(0, 40);
-        });
-    } else {
-      done();
-    }
-  }
-  document.body.addEventListener("click", function (e) {
-    var t = e.target.id === "btnClearWaypointsAndPlan" ? e.target : (e.target.closest && e.target.closest("#btnClearWaypointsAndPlan"));
-    if (t) { e.preventDefault(); runClearWaypointsAndPlan(); }
-  });
-  document.body.addEventListener("touchend", function (e) {
-    var t = e.target.id === "btnClearWaypointsAndPlan" ? e.target : (e.target.closest && e.target.closest("#btnClearWaypointsAndPlan"));
-    if (t) { e.preventDefault(); runClearWaypointsAndPlan(); }
-  }, { passive: false });
-
   function addPushEvent(row) {
     var list = document.getElementById("pushEventsList");
     if (!list) return;
@@ -753,13 +541,6 @@
         if (sup && locEl.value.trim()) sup.from("driver_state").update({ current_loc: locEl.value.trim() }).eq("driver_id", C.getDriverId()).then(function () {});
       });
     }
-    var plateEl = document.getElementById("driverPlate");
-    if (plateEl) plateEl.addEventListener("blur", function () {
-      var val = (plateEl.value || "").trim();
-      C.driverPlateNumber = val;
-      var sup = C.getSupabaseClient();
-      if (sup) sup.from("drivers").update({ plate_number: val || null }).eq("id", C.getDriverId()).then(function () {});
-    });
     var seatsEl = document.getElementById("emptySeats");
     if (seatsEl) {
       seatsEl.addEventListener("change", function () {
@@ -771,7 +552,6 @@
         }
       });
     }
-    document.getElementById("planPanel").classList.add("hidden");
     (function () {
       var header = document.getElementById("passengerSectionHeader");
       var body = document.getElementById("passengerSectionBody");
@@ -789,9 +569,6 @@
     C.loadFromDb(function () {
       C.renderPassengerList();
       C.updateEntryActions();
-      refreshMode();
-      loadConfig();
-      refreshMode();
       C.saveStateToStorage();
     });
   }
@@ -835,17 +612,11 @@
   function run() {
     var viewHome = document.getElementById("viewHome");
     var viewMap = document.getElementById("viewMap");
-    var viewSettings = document.getElementById("viewSettings");
     var mapFrame = document.getElementById("mapFrame");
     var navHome = document.getElementById("navHome");
     var navMap = document.getElementById("navMap");
     var navSettings = document.getElementById("navSettings");
     if (!viewHome || !viewMap || !navHome || !navMap) return;
-    var settingsPanel = document.getElementById("settingsPanel");
-    if (viewSettings && settingsPanel && settingsPanel.parentNode) {
-      settingsPanel.parentNode.removeChild(settingsPanel);
-      viewSettings.appendChild(settingsPanel);
-    }
     var bottomNav = document.getElementById("bottomNav");
     var appMain = document.getElementById("appMain");
     var appHeader = document.getElementById("appHeader");
@@ -858,7 +629,6 @@
     function showHome() {
       viewHome.classList.remove("hidden");
       viewMap.classList.add("hidden");
-      if (viewSettings) viewSettings.classList.add("hidden");
       if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
       if (appMain) appMain.classList.remove("map-fullscreen");
       if (appHeader) appHeader.classList.remove("app-header-hidden");
@@ -870,24 +640,11 @@
       if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
       viewHome.classList.add("hidden");
       viewMap.classList.remove("hidden");
-      if (viewSettings) viewSettings.classList.add("hidden");
       if (bottomNav) bottomNav.classList.add("bottom-nav-hidden");
       if (appMain) appMain.classList.add("map-fullscreen");
       if (appHeader) appHeader.classList.add("app-header-hidden");
       if (appHeaderExtra) appHeaderExtra.classList.add("app-header-hidden");
       setActiveTab(navMap);
-    }
-    function showSettings() {
-      var overlay = document.getElementById("settingsPanelOverlay");
-      if (overlay) overlay.classList.remove("show");
-      viewHome.classList.add("hidden");
-      viewMap.classList.add("hidden");
-      if (viewSettings) viewSettings.classList.remove("hidden");
-      if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
-      if (appMain) appMain.classList.remove("map-fullscreen");
-      if (appHeader) appHeader.classList.remove("app-header-hidden");
-      if (appHeaderExtra) appHeaderExtra.classList.remove("app-header-hidden");
-      setActiveTab(navSettings);
     }
     function addTap(el, fn) {
       if (!el) return;
@@ -898,9 +655,6 @@
     addTap(navMap, showMap);
     var btnShowMap = document.getElementById("btnShowMap");
     if (btnShowMap) addTap(btnShowMap, showMap);
-    if (navSettings) addTap(navSettings, showSettings);
-    var settingsPanelClose = document.getElementById("settingsPanelClose");
-    if (settingsPanelClose) addTap(settingsPanelClose, showHome);
     window.addEventListener("message", function (e) {
       if (e.data && e.data.type === "smartdiaodu_map_back") showHome();
     });

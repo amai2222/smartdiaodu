@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c0c0f" />
+  <title>设置 · 顺风车调度</title>
+  <script src="config.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: { panel: '#14151a', border: '#2a2d35', muted: '#8b9199', accent: '#3b82f6', success: '#22c55e', danger: '#ef4444' },
+          fontSize: { 'console': ['1.125rem', { lineHeight: '1.5' }], 'big': ['1.35rem', { lineHeight: '1.4' }] },
+        },
+      },
+    };
+  </script>
+  <link rel="stylesheet" href="index.css" />
+</head>
+<body class="bg-[#0c0c0f] text-gray-100 min-h-screen font-sans antialiased pb-safe">
+  <div class="max-w-lg mx-auto px-4 pt-safe pb-8">
+    <header class="flex items-center justify-between py-4 border-b border-border">
+      <a href="index.html" class="text-accent font-medium">← 返回</a>
+      <h1 class="text-lg font-medium text-gray-100">设置</h1>
+      <span class="w-12"></span>
+    </header>
+
+    <div class="mt-6">
+      <div class="mb-5">
+        <label for="driverPlate" class="block text-muted text-sm font-medium mb-2">🚗 车牌（用于接单与路线规避限行）</label>
+        <input type="text" id="driverPlate" maxlength="16" placeholder="如 沪A12345"
+          class="w-full bg-panel border border-border rounded-xl px-4 py-3 text-big text-gray-100 placeholder-gray-500" />
+        <p class="text-sm text-muted mt-1">绑定后搜寻订单与规划线路会按该车牌规避限行区域。</p>
+      </div>
+      <h3 class="text-muted text-sm font-medium mb-3 flex items-center gap-2">
+        <span aria-hidden="true">🧠</span> 调度模式
+      </h3>
+      <div class="grid grid-cols-1 gap-3">
+        <button type="button" data-mode="mode1" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+          <span class="text-2xl">📅</span>
+          <span class="text-big font-medium">下次计划</span>
+        </button>
+        <button type="button" data-mode="mode2" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+          <span class="text-2xl">🚗</span>
+          <span class="text-big font-medium">半路吸尘器</span>
+        </button>
+        <button type="button" data-mode="mode3" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+          <span class="text-2xl">🔄</span>
+          <span class="text-big font-medium">附近接力</span>
+        </button>
+        <button type="button" data-mode="pause" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
+          <span class="text-2xl">⏸</span>
+          <span class="text-big font-medium">停止接单</span>
+        </button>
+      </div>
+      <div id="planPanel" class="mt-4 p-4 rounded-xl bg-[#0c0c0f] border border-border hidden">
+        <div id="planList" class="space-y-4 mb-4"></div>
+        <button type="button" id="btnAddPlan" class="w-full py-3 rounded-xl border border-dashed border-border text-muted font-medium mb-3">＋ 添加下一批计划</button>
+        <p class="text-sm text-muted">按时间排序，优先第 1 批找单。计划不删；当前批跑完后点「结束找单」即可进入下一批。</p>
+      </div>
+      <div class="mt-5 pt-4 border-t border-border">
+        <p class="text-muted text-sm mb-2">清空本次计划</p>
+        <button type="button" id="btnClearWaypointsAndPlan" class="w-full py-3 rounded-xl border border-danger/60 text-danger font-medium hover:bg-danger/20 mb-4">
+          清空途经
+        </button>
+        <p class="text-sm text-muted mb-4">从数据库取消本车所有已分配订单，并清空本地途经点与乘客列表，仅保留司机位置。</p>
+        <p class="text-muted text-sm mb-3">绕路容忍度（分钟）</p>
+        <div class="flex items-center gap-4">
+          <button type="button" id="detourMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
+          <span id="detourVal" class="text-big font-semibold min-w-[3rem] text-center">15</span>
+          <button type="button" id="detourPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
+        </div>
+        <p class="text-muted text-sm mt-4 mb-3">高收益门槛（元）</p>
+        <div class="flex items-center gap-4">
+          <button type="button" id="profitMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
+          <span id="profitVal" class="text-big font-semibold min-w-[3rem] text-center">100</span>
+          <button type="button" id="profitPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
+        </div>
+      </div>
+    </div>
+    <p id="setupStatus" class="mt-4 text-sm text-muted"></p>
+  </div>
+
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="index-config.js"></script>
+  <script src="index-state.js"></script>
+  <script src="setup.js"></script>
+</body>
+</html>

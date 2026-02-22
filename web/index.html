@@ -167,8 +167,6 @@
       <div id="viewMap" class="app-view hidden">
         <iframe id="mapFrame" src="about:blank" class="w-full h-full border-0 block" title="路线地图"></iframe>
       </div>
-      <!-- 设置视图：同页切换，内容由 JS 从弹窗移入 -->
-      <div id="viewSettings" class="app-view hidden"></div>
     </main>
 
     <!-- 底部导航栏（App 风格） -->
@@ -181,76 +179,68 @@
         <span class="text-lg">🗺️</span>
         <span class="text-xs font-medium">地图</span>
       </button>
-      <button type="button" id="navSettings" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel">
+      <a id="navSettings" href="setup.html" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100 no-underline">
         <span class="text-lg">⚙️</span>
         <span class="text-xs font-medium">设置</span>
-      </button>
+      </a>
     </nav>
   </div>
 
-  <!-- 设置面板：挂到 body 下，避免移动端 fixed 被父容器影响导致内容露在首页 -->
-  <div id="settingsPanelOverlay" class="settings-overlay" aria-hidden="true">
-    <div id="settingsPanel" class="settings-panel" role="dialog" aria-labelledby="settingsPanelTitle">
-      <div class="settings-panel-header">
-        <h2 id="settingsPanelTitle" class="text-lg font-medium text-gray-100">设置</h2>
-        <button type="button" id="settingsPanelClose" class="p-2 rounded-xl border border-border text-muted hover:text-gray-100 hover:bg-panel" aria-label="关闭">✕</button>
-      </div>
-      <div class="settings-panel-body">
-        <div class="mb-5">
-          <label for="driverPlate" class="block text-muted text-sm font-medium mb-2">🚗 车牌（用于接单与路线规避限行）</label>
-          <input type="text" id="driverPlate" maxlength="16" placeholder="如 沪A12345"
-            class="w-full bg-[#0c0c0f] border border-border rounded-xl px-4 py-3 text-big text-gray-100 placeholder-gray-500" />
-          <p class="text-sm text-muted mt-1">绑定后搜寻订单与规划线路会按该车牌规避限行区域。</p>
-        </div>
-        <h3 class="text-muted text-sm font-medium mb-3 flex items-center gap-2">
-          <span aria-hidden="true">🧠</span> 调度模式
-        </h3>
-        <div class="grid grid-cols-1 gap-3">
-          <button type="button" data-mode="mode1" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-            <span class="text-2xl">📅</span>
-            <span class="text-big font-medium">下次计划</span>
-          </button>
-          <button type="button" data-mode="mode2" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-            <span class="text-2xl">🚗</span>
-            <span class="text-big font-medium">半路吸尘器</span>
-          </button>
-          <button type="button" data-mode="mode3" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-            <span class="text-2xl">🔄</span>
-            <span class="text-big font-medium">附近接力</span>
-          </button>
-          <button type="button" data-mode="pause" class="mode-btn btn-touch rounded-xl border-2 px-4 py-4 text-left flex items-center gap-3 bg-panel border-border hover:border-accent transition-colors">
-            <span class="text-2xl">⏸</span>
-            <span class="text-big font-medium">停止接单</span>
-          </button>
-        </div>
-        <div id="planPanel" class="mt-4 p-4 rounded-xl bg-[#0c0c0f] border border-border hidden">
-          <div id="planList" class="space-y-4 mb-4"></div>
-          <button type="button" id="btnAddPlan" class="w-full py-3 rounded-xl border border-dashed border-border text-muted font-medium mb-3">＋ 添加下一批计划</button>
-          <p class="text-sm text-muted">按时间排序，优先第 1 批找单。计划不删；当前批跑完后点「结束找单」即可进入下一批。</p>
-        </div>
-        <div class="mt-5 pt-4 border-t border-border">
-          <p class="text-muted text-sm mb-2">清空本次计划</p>
-          <button type="button" id="btnClearWaypointsAndPlan" class="w-full py-3 rounded-xl border border-danger/60 text-danger font-medium hover:bg-danger/20 mb-4">
-            清空途经
-          </button>
-          <p class="text-sm text-muted mb-4">从数据库取消本车所有已分配订单，并清空本地途经点与乘客列表，仅保留司机位置。</p>
-          <p class="text-muted text-sm mb-3">绕路容忍度（分钟）</p>
-          <div class="flex items-center gap-4">
-            <button type="button" id="detourMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
-            <span id="detourVal" class="text-big font-semibold min-w-[3rem] text-center">15</span>
-            <button type="button" id="detourPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
-          </div>
-          <p class="text-muted text-sm mt-4 mb-3">高收益门槛（元）</p>
-          <div class="flex items-center gap-4">
-            <button type="button" id="profitMinus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">−</button>
-            <span id="profitVal" class="text-big font-semibold min-w-[3rem] text-center">100</span>
-            <button type="button" id="profitPlus" class="btn-touch w-12 h-12 rounded-xl bg-panel border border-border text-xl font-bold hover:bg-border">+</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
+  <script>
+(function () {
+  function setupNav() {
+    var viewHome = document.getElementById("viewHome");
+    var viewMap = document.getElementById("viewMap");
+    var navHome = document.getElementById("navHome");
+    var navMap = document.getElementById("navMap");
+    var navSettings = document.getElementById("navSettings");
+    var bottomNav = document.getElementById("bottomNav");
+    var appMain = document.getElementById("appMain");
+    var appHeader = document.getElementById("appHeader");
+    var appHeaderExtra = document.getElementById("appHeaderExtra");
+    var mapFrame = document.getElementById("mapFrame");
+    if (!viewHome || !viewMap || !navHome || !navMap) return;
+    function addTap(el, fn) {
+      if (!el) return;
+      el.addEventListener("click", fn);
+      el.addEventListener("touchend", function (e) { e.preventDefault(); fn(); }, { passive: false });
+    }
+    function setActive(tab) {
+      [navHome, navMap, navSettings].forEach(function (n) { if (n) n.classList.toggle("active", n === tab); });
+    }
+    function showHome() {
+      viewHome.classList.remove("hidden");
+      viewMap.classList.add("hidden");
+      if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
+      if (appMain) appMain.classList.remove("map-fullscreen");
+      if (appHeader) appHeader.classList.remove("app-header-hidden");
+      if (appHeaderExtra) appHeaderExtra.classList.remove("app-header-hidden");
+      setActive(navHome);
+    }
+    var mapLoaded = false;
+    function showMap() {
+      if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
+      viewHome.classList.add("hidden");
+      viewMap.classList.remove("hidden");
+      if (bottomNav) bottomNav.classList.add("bottom-nav-hidden");
+      if (appMain) appMain.classList.add("map-fullscreen");
+      if (appHeader) appHeader.classList.add("app-header-hidden");
+      if (appHeaderExtra) appHeaderExtra.classList.add("app-header-hidden");
+      setActive(navMap);
+    }
+    addTap(navHome, showHome);
+    addTap(navMap, showMap);
+    var btnShowMap = document.getElementById("btnShowMap");
+    if (btnShowMap) addTap(btnShowMap, showMap);
+    window.addEventListener("message", function (e) {
+      if (e.data && e.data.type === "smartdiaodu_map_back") showHome();
+    });
+    setActive(navHome);
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", setupNav);
+  else setupNav();
+})();
+  </script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="index-config.js"></script>
   <script src="index-state.js"></script>
