@@ -224,6 +224,9 @@
     M.bmap.addOverlay(new window.BMap.Polyline(pathBd, { strokeColor: strokeColor, strokeWeight: ROUTE_STROKE_WEIGHT, strokeOpacity: 0.95 }));
   };
 
+  /** 仅当路段长度 ≥ 该值（米）时才显示路名，短路段不显示以优先保证箭头清晰 */
+  var MIN_SEGMENT_METERS_FOR_ROAD_NAME = 800;
+
   M.addRoadNameLabelsFromSteps = function (route_steps, BPoint) {
     if (!M.bmap || !route_steps || !route_steps.length || !BPoint || typeof window.BMap.Label === "undefined") return;
     var roadNameRe = /高速|国道|省道|大道|快速路|环路|线|路$/;
@@ -234,12 +237,25 @@
       if (!name || name === "无名路" || name.length > 20 || !roadNameRe.test(name)) continue;
       var path = step.path;
       if (!path || path.length < 2) continue;
+      var segBd = [];
+      for (var sj = 0; sj < path.length; sj++) segBd.push({ lng: path[sj][1], lat: path[sj][0] });
+      var segLen = pathLengthMeters(segBd);
+      if (segLen < MIN_SEGMENT_METERS_FOR_ROAD_NAME) continue;
       var midIdx = Math.floor(path.length / 2);
       var p = path[midIdx];
       if (!p || p[0] == null || p[1] == null) continue;
       var pt = new BPoint(p[1], p[0]);
       var label = new window.BMap.Label(name, { offset: new window.BMap.Size(0, 0), position: pt, enableMassClear: true });
-      label.setStyle({ color: "#1a1a1a", fontSize: maxFontPx + "px", fontWeight: "bold", border: "none", backgroundColor: "transparent", padding: "0" });
+      label.setStyle({
+        color: "#1a1a1a",
+        fontSize: maxFontPx + "px",
+        fontWeight: "bold",
+        border: "none",
+        background: "none",
+        backgroundColor: "rgba(0,0,0,0)",
+        padding: "0",
+        maxWidth: "none"
+      });
       M.bmap.addOverlay(label);
     }
   };
@@ -256,11 +272,31 @@
         if (!name || name === "无名路" || name.length > 20) continue;
         if (!/高速|国道|省道|大道|快速路|环路|线|路$/.test(name)) continue;
         var path = step.getPath && step.getPath();
-        if (!path || path.length === 0) continue;
+        if (!path || path.length < 2) continue;
+        var segBd = [];
+        for (var pi = 0; pi < path.length; pi++) {
+          var pt = path[pi];
+          if (!pt) continue;
+          var lng = pt.lng != null ? pt.lng : (typeof pt.getLng === "function" ? pt.getLng() : null);
+          var lat = pt.lat != null ? pt.lat : (typeof pt.getLat === "function" ? pt.getLat() : null);
+          if (lng != null && lat != null) segBd.push({ lng: lng, lat: lat });
+        }
+        if (segBd.length < 2) continue;
+        var segLen = pathLengthMeters(segBd);
+        if (segLen < MIN_SEGMENT_METERS_FOR_ROAD_NAME) continue;
         var mid = path[Math.floor(path.length / 2)];
         if (!mid) continue;
         var label = new window.BMap.Label(name, { offset: new window.BMap.Size(0, 0), position: mid, enableMassClear: true });
-        label.setStyle({ color: "#1a1a1a", fontSize: maxFontPx + "px", fontWeight: "bold", border: "none", backgroundColor: "transparent", padding: "0" });
+        label.setStyle({
+          color: "#1a1a1a",
+          fontSize: maxFontPx + "px",
+          fontWeight: "bold",
+          border: "none",
+          background: "none",
+          backgroundColor: "rgba(0,0,0,0)",
+          padding: "0",
+          maxWidth: "none"
+        });
         M.bmap.addOverlay(label);
       }
     } catch (e) {}

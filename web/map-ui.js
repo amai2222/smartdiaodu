@@ -7,6 +7,17 @@
   var M = window.SmartDiaoduMap;
   if (!M) return;
 
+  /** 预计用时文案：≥1 小时为「x小时x分钟」，否则「x分钟」 */
+  function formatDurationFromSeconds(seconds) {
+    var mins = Math.round((seconds || 0) / 60);
+    if (mins >= 60) {
+      var h = Math.floor(mins / 60);
+      var m = mins % 60;
+      return m === 0 ? (h + "小时") : (h + "小时" + m + "分钟");
+    }
+    return mins + "分钟";
+  }
+
   M.updateNavPanel = function () {
     var nextIdx = M.currentStopIndex + 1;
     var navPanel = document.getElementById("navPanel");
@@ -104,7 +115,7 @@
     .then(function (data) {
       M.applyRouteData(data);
       M.saveRouteSnapshot(data);
-      if (statusEl) statusEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已与控制台同步）" : "共 " + M.route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟（已与控制台同步）";
+      if (statusEl) statusEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已与控制台同步）" : "共 " + M.route_addresses.length + " 站，约 " + formatDurationFromSeconds(data.total_time_seconds) + "（已与控制台同步）";
     })
     .catch(function () {
       if (statusEl) statusEl.textContent = "同步路线失败，请点「更新路线」重试";
@@ -154,7 +165,7 @@
         M.applyRouteData(data);
         M.saveRouteSnapshot(data);
         var routeInfoEl = document.getElementById("routeInfo");
-        if (routeInfoEl) routeInfoEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已入库）" : "共 " + M.route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟（已入库）";
+        if (routeInfoEl) routeInfoEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已入库）" : "共 " + M.route_addresses.length + " 站，约 " + formatDurationFromSeconds(data.total_time_seconds) + "（已入库）";
       })
       .catch(function (e) {
         document.getElementById("navPanel").style.display = "none";
@@ -230,7 +241,7 @@
 
         var durStr = "";
         if (M.route_durations && M.route_durations[M.routeAlternativeIndex]) {
-          durStr = " (约 " + Math.round(M.route_durations[M.routeAlternativeIndex] / 60) + " 分钟)";
+          durStr = " (约 " + formatDurationFromSeconds(M.route_durations[M.routeAlternativeIndex]) + ")";
         }
         document.getElementById("routeInfo").textContent = "已切换至方案 " + (M.routeAlternativeIndex + 1) + durStr;
       };
@@ -275,7 +286,7 @@
     M.loadSavedRoute(function (data) {
       if (data) {
         M.applyRouteData(data);
-        statusEl.textContent = "已恢复上次线路（共 " + M.route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟）";
+        statusEl.textContent = "已恢复上次线路（共 " + M.route_addresses.length + " 站，约 " + formatDurationFromSeconds(data.total_time_seconds) + "）";
       } else {
         statusEl.textContent = "无已保存线路，请先点「更新路线」规划并入库";
         if (M.bmap) M.clearMapOverlays();
@@ -292,7 +303,7 @@
       M.loadSavedRoute(function (data) {
         if (data) {
           M.applyRouteData(data);
-          statusEl.textContent = "已恢复上次线路（共 " + M.route_addresses.length + " 站，约 " + Math.round((data.total_time_seconds || 0) / 60) + " 分钟）";
+          statusEl.textContent = "已恢复上次线路（共 " + M.route_addresses.length + " 站，约 " + formatDurationFromSeconds(data.total_time_seconds) + "）";
         } else {
           M.loadAndDraw();
         }

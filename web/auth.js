@@ -26,6 +26,16 @@
     window.location.replace(url || DEFAULT_LOGIN_URL);
   }
 
+  function clearTokenAndRedirect(loginUrl) {
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem(C.STORAGE_TOKEN);
+        localStorage.removeItem(C.STORAGE_USERNAME);
+      }
+    } catch (e) {}
+    redirectToLogin(loginUrl);
+  }
+
   function setTokenFromSession(session) {
     try {
       if (session && session.access_token) {
@@ -65,7 +75,28 @@
         return;
       }
       if (hasToken()) {
-        C.loadAppConfig(callback);
+        var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
+        if (!url || !anon || !window.supabase) {
+          C.loadAppConfig(callback);
+          return;
+        }
+        var sup = C.getSupabaseClient();
+        if (!sup) {
+          C.loadAppConfig(callback);
+          return;
+        }
+        sup.auth.getSession()
+          .then(function (r) {
+            if (r.data && r.data.session) {
+              setTokenFromSession(r.data.session);
+              C.loadAppConfig(callback);
+            } else {
+              clearTokenAndRedirect(loginUrl);
+            }
+          })
+          .catch(function () {
+            C.loadAppConfig(callback);
+          });
         return;
       }
       var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
@@ -104,6 +135,7 @@
   window.SmartDiaoduAuth = {
     requireAuth: requireAuth,
     redirectToLogin: redirectToLogin,
+    clearTokenAndRedirect: clearTokenAndRedirect,
     isAuthenticated: hasToken,
     setTokenFromSession: setTokenFromSession
   };
