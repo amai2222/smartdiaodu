@@ -47,7 +47,7 @@ html, body {
   pointer-events: none;
 }
 .toolbar .toolbar-row { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; pointer-events: auto; }
-.toolbar .toolbar-row--btns { flex-shrink: 0; }
+.toolbar .toolbar-row--btns { flex-shrink: 0; width: 100%; justify-content: center; }
 .toolbar .toolbar-row--btns > * { min-height: 40px; flex-shrink: 0; }
 .toolbar .toolbar-row--status { width: 100%; min-height: 40px; flex-basis: 100%; order: 1; }
 .toolbar select, .toolbar button, .toolbar a.toolbar-btn-link {
