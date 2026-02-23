@@ -26,11 +26,13 @@
     window.location.replace(url || DEFAULT_LOGIN_URL);
   }
 
+  var STORAGE_TOKEN_SOURCE = "smartdiaodu_token_source";
   function clearTokenAndRedirect(loginUrl) {
     try {
       if (typeof localStorage !== "undefined") {
         localStorage.removeItem(C.STORAGE_TOKEN);
         localStorage.removeItem(C.STORAGE_USERNAME);
+        localStorage.removeItem(STORAGE_TOKEN_SOURCE);
       }
     } catch (e) {}
     redirectToLogin(loginUrl);
@@ -75,6 +77,12 @@
         return;
       }
       if (hasToken()) {
+        var tokenSource = "";
+        try { tokenSource = localStorage.getItem(STORAGE_TOKEN_SOURCE) || ""; } catch (e) {}
+        if (tokenSource === "backend") {
+          C.loadAppConfig(callback);
+          return;
+        }
         var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
         if (!url || !anon || !window.supabase) {
           C.loadAppConfig(callback);
@@ -89,6 +97,7 @@
           .then(function (r) {
             if (r.data && r.data.session) {
               setTokenFromSession(r.data.session);
+              try { localStorage.setItem(STORAGE_TOKEN_SOURCE, "supabase"); } catch (e) {}
               C.loadAppConfig(callback);
             } else {
               clearTokenAndRedirect(loginUrl);

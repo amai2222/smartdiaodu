@@ -81,6 +81,7 @@ probe_cancel_trip_requested: bool = False
 # 仅从环境变量读取：连接数据库与登录签发
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip() or "https://zqcctbcwibnqmumtqweu.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or ""
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "").strip()
 JWT_SECRET = os.environ.get("JWT_SECRET", "").strip() or "smartdiaodu_jwt_change_me"
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_SECONDS = 7 * 24 * 3600
@@ -388,6 +389,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class AuthExchangeRequest(BaseModel):
+    """邮箱登录后用 Supabase access_token 换我们 JWT"""
+    access_token: str
+
+
 # ---------------------------------------------------------------------------
 # 登录：从 Supabase app_users 校验并签发 JWT
 # ---------------------------------------------------------------------------
@@ -412,6 +418,46 @@ def _get_user_by_username(username: str) -> Optional[dict]:
         return data[0]
     except Exception as e:
         logger.warning("查询 app_users 失败: %s", e)
+        return None
+
+
+def _get_user_by_email(email: str) -> Optional[dict]:
+    """从 app_users 按邮箱查 username 与 driver_id，用于 /auth/exchange。"""
+    if not email or not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return None
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/app_users"
+    params = {"email": f"eq.{email.strip().lower()}", "select": "username,driver_id"}
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Accept": "application/json",
+    }
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        if not data or not isinstance(data, list):
+            return None
+        return data[0]
+    except Exception as e:
+        logger.warning("查询 app_users 按邮箱失败: %s", e)
+        return None
+
+
+def _decode_supabase_token(access_token: str) -> Optional[str]:
+    """用 Supabase 项目 JWT 密钥解码 access_token，返回 email，失败返回 None。"""
+    if not SUPABASE_JWT_SECRET or not access_token:
+        return None
+    try:
+        payload = jwt.decode(
+            access_token,
+            SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            options={"verify_aud": False, "verify_iss": False},
+        )
+        return (payload.get("email") or "").strip().lower() or None
+    except Exception:
         return None
 
 
@@ -490,6 +536,34 @@ async def auth_me(credentials: Optional[HTTPAuthorizationCredentials] = Depends(
     if user and user.get("driver_id") is not None:
         driver_id = str(user["driver_id"]) if hasattr(user["driver_id"], "hex") else user["driver_id"]
     out = {"username": username}
+    if driver_id:
+        out["driver_id"] = driver_id
+    return out
+
+
+@app.post("/auth/exchange")
+async def auth_exchange(body: AuthExchangeRequest) -> dict:
+    """
+    邮箱登录后：用 Supabase 的 access_token 换我们大脑的 JWT。
+    需配置 SUPABASE_JWT_SECRET（Supabase 项目设置 -> API -> JWT Secret）；
+    app_users 表需有 email 列且该邮箱已关联到某用户（如 admin@test.com -> admin）。
+    返回 token、username、driver_id，前端存为 token_source=backend 后 /auth/me 与地图等均可用。
+    """
+    if not body.access_token or not body.access_token.strip():
+        raise HTTPException(status_code=401, detail="未提供 access_token")
+    email = _decode_supabase_token(body.access_token.strip())
+    if not email:
+        raise HTTPException(status_code=401, detail="Supabase 凭证无效或已过期")
+    user = _get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=403, detail="该邮箱未关联到控制台用户，请在 app_users 中绑定 email")
+    username = user.get("username") or ""
+    driver_id = user.get("driver_id")
+    if driver_id is not None and hasattr(driver_id, "hex"):
+        driver_id = str(driver_id)
+    token = _create_token(username)
+    logger.info("邮箱 %s 换 JWT 成功, username=%s, driver_id=%s", email, username, driver_id)
+    out = {"token": token, "username": username}
     if driver_id:
         out["driver_id"] = driver_id
     return out

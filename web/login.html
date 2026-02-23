@@ -68,6 +68,7 @@
   var STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
   var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
   var STORAGE_DRIVER_ID = "smartdiaodu_driver_id";
+  var STORAGE_TOKEN_SOURCE = "smartdiaodu_token_source";
   var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
 
   var tabUsername = document.getElementById("tabUsername");
@@ -97,6 +98,20 @@
   function getSupabaseAnon() {
     return (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON)) || cfg.supabaseAnonKey || "";
   }
+  (function syncApiBaseFromDb() {
+    var url = getSupabaseUrl().trim(), anon = getSupabaseAnon().trim();
+    if (!url || !anon || !window.supabase || typeof window.supabase.createClient !== "function") return;
+    try {
+      window.supabase.createClient(url, anon).from("app_config").select("key, value").eq("key", "api_base").maybeSingle()
+        .then(function (r) {
+          if (r.data && r.data.value && String(r.data.value).trim()) {
+            var v = String(r.data.value).trim().replace(/\/$/, "");
+            if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_API, v);
+          }
+        })
+        .catch(function () {});
+    } catch (e) {}
+  })();
 
   var form = document.getElementById("loginForm");
   var emailInput = document.getElementById("email");
@@ -131,13 +146,43 @@
         if (typeof localStorage !== "undefined") {
           localStorage.setItem(STORAGE_SUPABASE_URL, url);
           localStorage.setItem(STORAGE_SUPABASE_ANON, anon);
-          var tok = (r.data.session && r.data.session.access_token) ? r.data.session.access_token : "1";
-          localStorage.setItem(STORAGE_TOKEN, tok);
-          if (r.data.user && r.data.user.email) localStorage.setItem(STORAGE_USERNAME, r.data.user.email);
+          if (r.data.user && r.data.user.email) {
+            var em = r.data.user.email;
+            var displayName = em.indexOf("@") !== -1 ? em.slice(0, em.indexOf("@")) : em;
+            localStorage.setItem(STORAGE_USERNAME, displayName);
+          }
           if (cfg.apiBase) localStorage.setItem(STORAGE_API, cfg.apiBase);
           if (cfg.driverId) localStorage.setItem("smartdiaodu_driver_id", cfg.driverId);
         }
-        window.location.href = "index.html";
+        var accessToken = (r.data.session && r.data.session.access_token) ? r.data.session.access_token : "";
+        getApiBaseForLogin(function (base) {
+          base = (base || "").replace(/\/$/, "");
+          if (!base || !accessToken) {
+            localStorage.setItem(STORAGE_TOKEN, accessToken || "1");
+            localStorage.setItem(STORAGE_TOKEN_SOURCE, "supabase");
+            window.location.href = "index.html";
+            return;
+          }
+          fetch(base + "/auth/exchange", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ access_token: accessToken })
+          }).then(function (res) {
+            if (!res.ok) return res.json().then(function (d) { throw new Error(d.detail || "换取大脑 token 失败"); });
+            return res.json();
+          }).then(function (d) {
+            if (typeof localStorage !== "undefined") {
+              localStorage.setItem(STORAGE_TOKEN, d.token || "1");
+              localStorage.setItem(STORAGE_TOKEN_SOURCE, "backend");
+              if (d.username) localStorage.setItem(STORAGE_USERNAME, d.username);
+              if (d.driver_id) localStorage.setItem("smartdiaodu_driver_id", d.driver_id);
+            }
+            window.location.href = "index.html";
+          }).catch(function (err) {
+            showErr(err.message || "换取大脑 token 失败，地图可能无法带 token。请用「用户名登录」或联系管理员在 app_users 绑定邮箱并配置 SUPABASE_JWT_SECRET");
+            btnSubmit.disabled = false;
+          });
+        });
       })
       .catch(function (e) {
         showErr(e.message || "网络错误");
@@ -158,17 +203,35 @@
     errBackend.textContent = msg || "";
     errBackend.style.display = msg ? "block" : "none";
   }
+  function getApiBaseForLogin(cb) {
+    var url = getSupabaseUrl().trim(), anon = getSupabaseAnon().trim();
+    var fromStorage = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_API)) || "";
+    var fromCfg = (cfg.apiBase || "").trim().replace(/\/$/, "");
+    if (url && anon && window.supabase && typeof window.supabase.createClient === "function") {
+      try {
+        window.supabase.createClient(url, anon).from("app_config").select("key, value").eq("key", "api_base").maybeSingle()
+          .then(function (r) {
+            var base = (r.data && r.data.value && String(r.data.value).trim()) ? String(r.data.value).trim().replace(/\/$/, "") : (fromStorage || fromCfg);
+            if (r.data && r.data.value && typeof localStorage !== "undefined") localStorage.setItem(STORAGE_API, base);
+            cb(base || fromStorage || fromCfg);
+          })
+          .catch(function () { cb(fromStorage || fromCfg); });
+      } catch (e) { cb(fromStorage || fromCfg); }
+    } else {
+      cb(fromStorage || fromCfg);
+    }
+  }
   backendForm.addEventListener("submit", function (e) {
     e.preventDefault();
-    var base = (typeof localStorage !== "undefined" && localStorage.getItem("smartdiaodu_api_base")) || cfg.apiBase || "";
-    base = (base || "").replace(/\/$/, "");
     var username = (backendUser.value || "").trim();
     var password = backendPwd.value || "";
     showErrBackend("");
-    if (!base) { showErrBackend("未配置 api_base，请在 config.js 或 Supabase app_config 中设置"); return; }
     if (!username) { showErrBackend("请填写用户名"); return; }
     btnBackend.disabled = true;
-    fetch(base + "/login", {
+    getApiBaseForLogin(function (base) {
+      base = (base || "").replace(/\/$/, "");
+      if (!base) { showErrBackend("未配置 api_base，请在 config.js 或 Supabase app_config 中设置"); btnBackend.disabled = false; return; }
+      fetch(base + "/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: username, password: password })
@@ -178,14 +241,17 @@
     }).then(function (d) {
       if (typeof localStorage !== "undefined") {
         localStorage.setItem(STORAGE_TOKEN, d.token || "1");
+        localStorage.setItem(STORAGE_TOKEN_SOURCE, "backend");
         localStorage.setItem(STORAGE_USERNAME, d.username || username);
         if (cfg.apiBase) localStorage.setItem(STORAGE_API, cfg.apiBase);
+        else if (base) localStorage.setItem(STORAGE_API, base);
         if (d.driver_id) localStorage.setItem(STORAGE_DRIVER_ID, d.driver_id);
       }
       window.location.href = "index.html";
     }).catch(function (err) {
       showErrBackend(err.message || "网络错误");
       btnBackend.disabled = false;
+    });
     });
   });
 })();

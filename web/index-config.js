@@ -18,6 +18,7 @@
   C.STORAGE_ONBOARD = "smartdiaodu_onboard";
   C.STORAGE_WAYPOINTS = "smartdiaodu_waypoints";
   C.STORAGE_DRIVER_ID = "smartdiaodu_driver_id";
+  C.STORAGE_TOKEN_SOURCE = "smartdiaodu_token_source";
   C.DEFAULT_DRIVER_ID = "a0000001-0000-4000-8000-000000000001";
 
   C.cachedAppConfig = { api_base: "", driver_id: "" };
@@ -35,8 +36,9 @@
       }
       var base = C.cachedAppConfig.api_base;
       var token = null;
-      try { token = localStorage.getItem(C.STORAGE_TOKEN); } catch (e) {}
-      if (base && token && typeof fetch === "function") {
+      var tokenSource = "";
+      try { token = localStorage.getItem(C.STORAGE_TOKEN); tokenSource = localStorage.getItem(C.STORAGE_TOKEN_SOURCE) || ""; } catch (e) {}
+      if (base && token && tokenSource === "backend" && typeof fetch === "function") {
         fetch(base + "/auth/me", { headers: { "Authorization": "Bearer " + token } })
           .then(function (res) { return res.ok ? res.json() : null; })
           .then(function (data) {
