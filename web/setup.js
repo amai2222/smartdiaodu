@@ -80,6 +80,15 @@
       "</div>" +
       "<p class=\"text-muted text-sm font-medium mb-2\">已生成批次</p>" +
       "<div id=\"planList\" class=\"space-y-4 mb-4\"></div>" +
+      "<p class=\"text-muted text-sm font-medium mb-2 mt-4\">手工添加计划</p>" +
+      "<p class=\"text-xs text-muted mb-2\">输入出发日期时间、起点、终点，保存后探子会按时间找单。</p>" +
+      "<label class=\"block text-muted text-xs mb-1\">出发日期时间</label>" +
+      "<input type=\"text\" id=\"manualDepartureTime\" class=\"w-full bg-panel border border-border rounded-lg px-3 py-2 text-console mb-2\" placeholder=\"2026-02-23 06:00\" />" +
+      "<label class=\"block text-muted text-xs mb-1\">起点</label>" +
+      "<input type=\"text\" id=\"manualOrigin\" class=\"w-full bg-panel border border-border rounded-lg px-3 py-2 text-console mb-2\" placeholder=\"如东\" />" +
+      "<label class=\"block text-muted text-xs mb-1\">终点</label>" +
+      "<input type=\"text\" id=\"manualDestination\" class=\"w-full bg-panel border border-border rounded-lg px-3 py-2 text-console mb-2\" placeholder=\"上海\" />" +
+      "<button type=\"button\" id=\"btnAddManualPlan\" class=\"w-full py-2 rounded-xl bg-accent text-white text-sm font-medium mb-3\">添加计划</button>" +
       "<button type=\"button\" id=\"btnAddPlan\" class=\"w-full py-3 rounded-xl border border-dashed border-border text-muted font-medium mb-3\">＋ 添加下一批计划</button>" +
       "<p class=\"text-sm text-muted\">点「结束找单」后会自动按循环设置追加下一批（返程=去的时间+间隔，次日再去）。</p>");
     fetch(base + "/planned_trip" + driverQuery()).then(function (r) { return r.json(); }).then(function (d) {
@@ -124,7 +133,12 @@
           cycle_rounds: parseInt(document.getElementById("cycleRounds") && document.getElementById("cycleRounds").value, 10) || 2
         };
         fetch(base + "/planned_trip/config" + driverQuery(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-          .then(function () { status("循环设置已保存"); });
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            status("循环设置已保存，已生成 " + (d.plans && d.plans.length ? d.plans.length : 0) + " 批预期计划");
+            loadPlannedTripFromData(d);
+          })
+          .catch(function () { status("保存失败"); });
       };
     }
     var btnCycleStopToggle = document.getElementById("btnCycleStopToggle");
@@ -141,6 +155,33 @@
         });
       };
     }
+    var btnAddManualPlan = document.getElementById("btnAddManualPlan");
+    if (btnAddManualPlan) {
+      btnAddManualPlan.onclick = function () {
+        var depEl = document.getElementById("manualDepartureTime");
+        var originEl = document.getElementById("manualOrigin");
+        var destEl = document.getElementById("manualDestination");
+        var dep = (depEl && depEl.value) ? depEl.value.trim() : "";
+        var origin = (originEl && originEl.value) ? originEl.value.trim() : "";
+        var dest = (destEl && destEl.value) ? destEl.value.trim() : "";
+        if (!dep) {
+          var d = new Date();
+          dep = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " 06:00";
+        }
+        if (!origin || !dest) {
+          status("请填写起点和终点");
+          return;
+        }
+        var body = { origin: origin, destination: dest, departure_time: dep, time_window_minutes: 30, min_orders: 2, max_orders: 4 };
+        fetch(base + "/planned_trip" + driverQuery(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            status("已添加计划，探子将按出发时间找单");
+            loadPlannedTripFromData(d);
+          })
+          .catch(function () { status("添加失败"); });
+      };
+    }
     var btnAddPlan = document.getElementById("btnAddPlan");
     if (btnAddPlan) {
       btnAddPlan.onclick = function () {
@@ -154,7 +195,12 @@
         }
         var body = { origin: origin, destination: dest, departure_time: dep, time_window_minutes: 30, min_orders: 2, max_orders: 4 };
         fetch(base + "/planned_trip" + driverQuery(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-          .then(function () { status("已添加一批，可修改后保存；结束找单后将自动追加下一批"); loadPlannedTrip(); });
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            status("已添加一批，可修改后保存；结束找单后将自动追加下一批");
+            loadPlannedTripFromData(d);
+          })
+          .catch(function () { status("添加失败"); });
       };
     }
   }

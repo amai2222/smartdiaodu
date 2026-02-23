@@ -183,6 +183,24 @@
       <div id="viewMap" class="app-view hidden">
         <iframe id="mapFrame" src="about:blank" class="w-full h-full border-0 block" title="路线地图"></iframe>
       </div>
+      <!-- 计划视图：预期计划列表，点击显示明细 -->
+      <div id="viewPlans" class="app-view hidden overflow-auto">
+        <div class="px-4 pt-4 pb-6">
+          <h2 class="text-muted font-medium mb-3 flex items-center gap-2">
+            <span aria-hidden="true">📋</span> 预期计划
+          </h2>
+          <p class="text-xs text-muted mb-2">以下为全部预期计划，点击任一条可查看详情。</p>
+          <p id="plansListStatus" class="text-sm text-muted mb-3">加载中…</p>
+          <div id="plansListRoot" class="space-y-3"></div>
+        </div>
+        <div id="planDetailOverlay" class="fixed inset-0 bg-black/60 z-[2000] flex items-center justify-center p-4 pb-safe" style="display: none;" aria-hidden="true">
+          <div id="planDetailPanel" class="bg-panel border border-border rounded-xl max-w-md w-full shadow-xl p-5" role="dialog" aria-labelledby="planDetailTitle">
+            <h3 id="planDetailTitle" class="text-console font-medium text-muted mb-4 border-b border-border pb-2">计划明细</h3>
+            <div id="planDetailContent" class="space-y-3 text-sm"></div>
+            <button type="button" id="planDetailClose" class="mt-4 w-full py-2.5 rounded-xl border border-border text-muted font-medium">关闭</button>
+          </div>
+        </div>
+      </div>
       <!-- 设置视图：内嵌 setup.html，预加载后点击即显，避免整页跳转卡顿 -->
       <div id="viewSetup" class="app-view hidden">
         <iframe id="setupFrame" src="about:blank" class="w-full h-full min-h-[60vh] border-0 block" title="设置"></iframe>
@@ -199,6 +217,10 @@
         <span class="text-lg">🗺️</span>
         <span class="text-xs font-medium">地图</span>
       </button>
+      <button type="button" id="navPlans" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100">
+        <span class="text-lg">📋</span>
+        <span class="text-xs font-medium">计划</span>
+      </button>
       <button type="button" id="navSettings" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100">
         <span class="text-lg">⚙️</span>
         <span class="text-xs font-medium">设置</span>
@@ -211,9 +233,11 @@
   function setupNav() {
     var viewHome = document.getElementById("viewHome");
     var viewMap = document.getElementById("viewMap");
+    var viewPlans = document.getElementById("viewPlans");
     var viewSetup = document.getElementById("viewSetup");
     var navHome = document.getElementById("navHome");
     var navMap = document.getElementById("navMap");
+    var navPlans = document.getElementById("navPlans");
     var navSettings = document.getElementById("navSettings");
     var bottomNav = document.getElementById("bottomNav");
     var appMain = document.getElementById("appMain");
@@ -228,11 +252,12 @@
       el.addEventListener("touchend", function (e) { e.preventDefault(); fn(); }, { passive: false });
     }
     function setActive(tab) {
-      [navHome, navMap, navSettings].forEach(function (n) { if (n) n.classList.toggle("active", n === tab); });
+      [navHome, navMap, navPlans, navSettings].forEach(function (n) { if (n) n.classList.toggle("active", n === tab); });
     }
     function showHome() {
       viewHome.classList.remove("hidden");
       viewMap.classList.add("hidden");
+      if (viewPlans) viewPlans.classList.add("hidden");
       if (viewSetup) viewSetup.classList.add("hidden");
       if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
       if (appMain) appMain.classList.remove("map-fullscreen");
@@ -245,6 +270,7 @@
       if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
       viewHome.classList.add("hidden");
       viewMap.classList.remove("hidden");
+      if (viewPlans) viewPlans.classList.add("hidden");
       if (viewSetup) viewSetup.classList.add("hidden");
       if (bottomNav) bottomNav.classList.add("bottom-nav-hidden");
       if (appMain) appMain.classList.add("map-fullscreen");
@@ -252,11 +278,93 @@
       if (appHeaderExtra) appHeaderExtra.classList.add("app-header-hidden");
       setActive(navMap);
     }
+    function showPlans() {
+      viewHome.classList.add("hidden");
+      viewMap.classList.add("hidden");
+      if (viewPlans) viewPlans.classList.remove("hidden");
+      if (viewSetup) viewSetup.classList.add("hidden");
+      if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
+      if (appMain) appMain.classList.remove("map-fullscreen");
+      if (appHeader) appHeader.classList.remove("app-header-hidden");
+      if (appHeaderExtra) appHeaderExtra.classList.remove("app-header-hidden");
+      setActive(navPlans);
+      loadPlansList();
+    }
+    function loadPlansList() {
+      var root = document.getElementById("plansListRoot");
+      var statusEl = document.getElementById("plansListStatus");
+      if (!root || !statusEl) return;
+      var C = window.SmartDiaoduConsole;
+      var base = C && C.getApiBase ? C.getApiBase() : "";
+      var driverId = C && C.getDriverId ? C.getDriverId() : "";
+      var q = driverId ? "?driver_id=" + encodeURIComponent(driverId) : "";
+      root.innerHTML = "";
+      if (!base) {
+        statusEl.textContent = "未配置后端，无法加载计划";
+        return;
+      }
+      statusEl.textContent = "加载中…";
+      fetch(base + "/planned_trip" + q).then(function (r) { return r.json(); }).then(function (d) {
+        var plans = (d && d.plans) ? d.plans : [];
+        plans.sort(function (a, b) {
+          var t1 = a.departure_time || "";
+          var t2 = b.departure_time || "";
+          return t1 > t2 ? -1 : t1 < t2 ? 1 : 0;
+        });
+        var currentDep = null;
+        plans.forEach(function (p) {
+          if (!p.completed && p.departure_time) {
+            if (currentDep === null || p.departure_time < currentDep) currentDep = p.departure_time;
+          }
+        });
+        statusEl.textContent = "共 " + plans.length + " 条计划，点击可查看详情";
+        plans.forEach(function (p, idx) {
+          var isCurrent = !p.completed && currentDep !== null && p.departure_time === currentDep;
+          var card = document.createElement("button");
+          card.type = "button";
+          card.className = "w-full text-left py-3 px-4 rounded-xl bg-panel border text-gray-100 hover:border-accent/60 transition-colors " + (isCurrent ? "border-accent ring-1 ring-accent/30" : "border-border");
+          card.innerHTML = (isCurrent ? "<span class=\"text-xs text-accent font-medium mb-1 block\">当前计划</span>" : "") +
+            "<span class=\"font-medium\">" + (p.origin || "—") + " → " + (p.destination || "—") + "</span><br><span class=\"text-sm text-muted\">" + (p.departure_time || "—") + (p.completed ? " <span class=\"text-muted\">已完成</span>" : "") + "</span>";
+          card.dataset.index = String(idx);
+          card.addEventListener("click", function () { showPlanDetail(p); });
+          root.appendChild(card);
+        });
+      }).catch(function () {
+        statusEl.textContent = "加载失败";
+        root.innerHTML = "";
+      });
+    }
+    function showPlanDetail(p) {
+      var overlay = document.getElementById("planDetailOverlay");
+      var content = document.getElementById("planDetailContent");
+      if (!overlay || !content) return;
+      content.innerHTML =
+        "<div class=\"flex justify-between\"><span class=\"text-muted\">起点</span><span class=\"text-gray-100\">" + (p.origin || "—") + "</span></div>" +
+        "<div class=\"flex justify-between\"><span class=\"text-muted\">终点</span><span class=\"text-gray-100\">" + (p.destination || "—") + "</span></div>" +
+        "<div class=\"flex justify-between\"><span class=\"text-muted\">出发时间</span><span class=\"text-gray-100\">" + (p.departure_time || "—") + "</span></div>" +
+        "<div class=\"flex justify-between\"><span class=\"text-muted\">时间窗</span><span class=\"text-gray-100\">±" + (p.time_window_minutes != null ? p.time_window_minutes : 30) + " 分钟</span></div>" +
+        "<div class=\"flex justify-between\"><span class=\"text-muted\">人数</span><span class=\"text-gray-100\">" + (p.min_orders != null ? p.min_orders : 2) + "～" + (p.max_orders != null ? p.max_orders : 4) + "</span></div>" +
+        "<div class=\"flex justify-between\"><span class=\"text-muted\">状态</span><span class=\"text-gray-100\">" + (p.completed ? "已完成" : "未完成") + "</span></div>" +
+        "<div class=\"pt-2 mt-2 border-t border-border\"><span class=\"text-muted\">乘客</span><span class=\"text-gray-100 block mt-1 text-xs\">预期计划暂无乘客；探子到点按此线路找单，有合适单会推送到首页，乘客在「首页」当前计划中查看。</span></div>";
+      overlay.style.display = "flex";
+      overlay.setAttribute("aria-hidden", "false");
+    }
+    document.getElementById("planDetailClose").addEventListener("click", function () {
+      var o = document.getElementById("planDetailOverlay");
+      if (o) { o.style.display = "none"; o.setAttribute("aria-hidden", "true"); }
+    });
+    document.getElementById("planDetailOverlay").addEventListener("click", function (e) {
+      if (e.target === document.getElementById("planDetailOverlay")) {
+        var o = document.getElementById("planDetailOverlay");
+        if (o) { o.style.display = "none"; o.setAttribute("aria-hidden", "true"); }
+      }
+    });
     var setupLoaded = false;
     function showSetup() {
       if (setupFrame && !setupLoaded) { setupFrame.src = "setup.html"; setupLoaded = true; }
       viewHome.classList.add("hidden");
       viewMap.classList.add("hidden");
+      if (viewPlans) viewPlans.classList.add("hidden");
       if (viewSetup) viewSetup.classList.remove("hidden");
       if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
       if (appMain) appMain.classList.remove("map-fullscreen");
@@ -266,6 +374,7 @@
     }
     addTap(navHome, showHome);
     addTap(navMap, showMap);
+    addTap(navPlans, showPlans);
     addTap(navSettings, showSetup);
     var btnShowMap = document.getElementById("btnShowMap");
     if (btnShowMap) addTap(btnShowMap, showMap);
@@ -277,7 +386,8 @@
     });
     setActive(navHome);
     if (location.hash === "#map") showMap();
-    if (location.hash === "#setup") showSetup();
+    else if (location.hash === "#plans") showPlans();
+    else if (location.hash === "#setup") showSetup();
     if (setupFrame) setupFrame.src = "setup.html";
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", setupNav);

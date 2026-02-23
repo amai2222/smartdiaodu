@@ -1231,6 +1231,36 @@ def _parse_departure_time(s: str) -> tuple:
     return (None, 6, 0)
 
 
+def _departure_time_to_datetime(s: str) -> datetime:
+    """把出发时间字符串转成可比较的 datetime；仅时间时用今天日期。"""
+    d, h, m = _parse_departure_time(s or "")
+    today = datetime.now().date()
+    use_date = d if d is not None else today
+    return datetime(use_date.year, use_date.month, use_date.day, h, m, 0)
+
+
+def _maybe_expire_past_plans() -> bool:
+    """若某批的出发时间已过，自动标为已完成并补足到 cycle_rounds 批；返回是否有变更。"""
+    global planned_trips
+    now = datetime.now()
+    changed = False
+    for p in planned_trips:
+        if p.get("completed"):
+            continue
+        try:
+            dep_dt = _departure_time_to_datetime(p.get("departure_time") or "")
+            if dep_dt < now:
+                p["completed"] = True
+                changed = True
+                logger.info("计划已过出发时间，自动结束找单: %s -> %s, 出发 %s", p.get("origin"), p.get("destination"), p.get("departure_time"))
+        except (ValueError, TypeError):
+            pass
+    if changed:
+        _sort_planned_trips()
+        _ensure_planned_trip_rounds()
+    return changed
+
+
 def _format_next_departure(
     completed_departure: str,
     cycle_departure_time: str,
@@ -1261,6 +1291,41 @@ def _is_outbound_departure(departure_time: str, cycle_departure_time: str, cycle
     min1 = h1 * 60 + m1
     min2 = h2 * 60 + m2
     return abs(min1 - min2) <= 60
+
+
+def _ensure_planned_trip_rounds() -> None:
+    """在未停止循环时，若未完成计划数不足 cycle_rounds（预期计划条数），自动生成到够数；保存循环设置后即生成带时间的预期计划并入库，探子读库按时间路线找单。"""
+    global planned_trips, planned_trip_cycle_origin, planned_trip_cycle_destination, planned_trip_cycle_departure_time
+    global planned_trip_cycle_interval_hours, planned_trip_cycle_rounds, planned_trip_cycle_stopped
+    if planned_trip_cycle_stopped:
+        return
+    target = planned_trip_cycle_rounds
+    n = sum(1 for p in planned_trips if not p.get("completed"))
+    if n >= target:
+        return
+    origin = (planned_trip_cycle_origin or "").strip()
+    dest = (planned_trip_cycle_destination or "").strip()
+    dep = (planned_trip_cycle_departure_time or "06:00").strip()
+    if not origin or not dest:
+        return
+    if not planned_trips:
+        planned_trips.append({
+            "origin": origin,
+            "destination": dest,
+            "departure_time": dep,
+            "time_window_minutes": 30,
+            "min_orders": 2,
+            "max_orders": 4,
+            "completed": False,
+        })
+        _sort_planned_trips()
+        n = 1
+        logger.info("已自动生成第 1 批: %s -> %s, 出发 %s", origin, dest, dep)
+    while n < target:
+        last_plan = planned_trips[-1]
+        if not _append_next_cycle_plan(last_plan):
+            break
+        n += 1
 
 
 def _append_next_cycle_plan(reference_plan: dict) -> bool:
@@ -1301,10 +1366,12 @@ def _append_next_cycle_plan(reference_plan: dict) -> bool:
 
 @app.get("/planned_trip")
 async def get_planned_trip(request: Request) -> dict:
-    """获取全部循环计划（多批次）及循环配置。按 driver_id 从库加载后返回。"""
+    """获取全部循环计划（多批次）及循环配置。按 driver_id 从库加载；出发时间已过的批自动结束找单并补足到轮次数。"""
     driver_id = _get_driver_id(request)
     _load_planned_trip_from_db(driver_id)
     _sort_planned_trips()
+    if _maybe_expire_past_plans():
+        _sync_planned_trip_plans_to_db(driver_id)
     return _planned_trip_response()
 
 
@@ -1343,6 +1410,8 @@ async def set_planned_trip_cycle_config(request: Request, body: PlannedTripCycle
         planned_trip_cycle_stopped = bool(body.cycle_stopped)
     logger.info("循环计划配置已保存: 轮次=%s, 停止=%s (driver_id=%s)", planned_trip_cycle_rounds, planned_trip_cycle_stopped, driver_id)
     _save_planned_trip_config_to_db(driver_id)
+    _ensure_planned_trip_rounds()
+    _sync_planned_trip_plans_to_db(driver_id)
     return _planned_trip_response()
 
 
