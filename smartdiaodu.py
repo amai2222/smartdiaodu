@@ -78,10 +78,11 @@ abandoned_fingerprints: Set[str] = set()
 pending_response: Dict[str, float] = {}
 probe_cancel_trip_requested: bool = False
 
-# 仅从环境变量读取：连接数据库与登录签发
+# 仅从环境变量读取：连接数据库与登录签发（可在项目根 .env 中配置，勿提交 .env）
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip() or "https://zqcctbcwibnqmumtqweu.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or ""
-SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "").strip()
+# 邮箱登录后 /auth/exchange 验证 Supabase token 用；优先读环境变量，无则用下方默认（生产环境请用 .env 覆盖，勿提交含真实密钥）
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "").strip() or "R/hKjn3YPRT1ILfzNkskgnfYm8//x07pp5v0PNmutX66ByFCp/x/Rq8nC1M6t+txs8A8Nykh4hrk/RKE/3eFoQ=="
 JWT_SECRET = os.environ.get("JWT_SECRET", "").strip() or "smartdiaodu_jwt_change_me"
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_SECONDS = 7 * 24 * 3600
@@ -551,9 +552,17 @@ async def auth_exchange(body: AuthExchangeRequest) -> dict:
     """
     if not body.access_token or not body.access_token.strip():
         raise HTTPException(status_code=401, detail="未提供 access_token")
+    if not SUPABASE_JWT_SECRET:
+        raise HTTPException(
+            status_code=503,
+            detail="服务器未配置 SUPABASE_JWT_SECRET，无法验证邮箱登录。请在 Supabase 控制台 -> 项目设置 -> API 中复制 JWT Secret，配置到大脑后端环境变量；或暂时使用「用户名登录」。",
+        )
     email = _decode_supabase_token(body.access_token.strip())
     if not email:
-        raise HTTPException(status_code=401, detail="Supabase 凭证无效或已过期")
+        raise HTTPException(
+            status_code=401,
+            detail="Supabase 凭证无效或已过期（请确认后端 SUPABASE_JWT_SECRET 与 Supabase 项目 JWT Secret 一致）",
+        )
     user = _get_user_by_email(email)
     if not user:
         raise HTTPException(status_code=403, detail="该邮箱未关联到控制台用户，请在 app_users 中绑定 email")
