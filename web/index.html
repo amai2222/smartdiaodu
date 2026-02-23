@@ -189,6 +189,7 @@
           <h2 class="text-muted font-medium mb-3 flex items-center gap-2">
             <span aria-hidden="true">📋</span> 预期计划
           </h2>
+          <p class="text-xs text-muted mb-2">当前计划（各乘客起点、终点、途经点）在<strong>首页</strong>点击「查看当前计划」查看；本页为<strong>预期计划</strong>（到点找单的线路），暂无乘客。</p>
           <p class="text-xs text-muted mb-2">以下为全部预期计划，点击任一条可查看详情。</p>
           <p id="plansListStatus" class="text-sm text-muted mb-3">加载中…</p>
           <div id="plansListRoot" class="space-y-3"></div>
@@ -309,7 +310,7 @@
         plans.sort(function (a, b) {
           var t1 = a.departure_time || "";
           var t2 = b.departure_time || "";
-          return t1 > t2 ? -1 : t1 < t2 ? 1 : 0;
+          return t1 < t2 ? -1 : t1 > t2 ? 1 : 0;
         });
         var currentDep = null;
         plans.forEach(function (p) {
@@ -317,14 +318,22 @@
             if (currentDep === null || p.departure_time < currentDep) currentDep = p.departure_time;
           }
         });
+        function planTimeWithDate(t) {
+          if (!t || !t.trim()) return "—";
+          if (/^\d{4}-\d{1,2}-\d{1,2}/.test(t.trim())) return t.trim();
+          var d = new Date();
+          var dateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+          return dateStr + " " + t.trim();
+        }
         statusEl.textContent = "共 " + plans.length + " 条计划，点击可查看详情";
         plans.forEach(function (p, idx) {
           var isCurrent = !p.completed && currentDep !== null && p.departure_time === currentDep;
+          var timeStr = planTimeWithDate(p.departure_time);
           var card = document.createElement("button");
           card.type = "button";
           card.className = "w-full text-left py-3 px-4 rounded-xl bg-panel border text-gray-100 hover:border-accent/60 transition-colors " + (isCurrent ? "border-accent ring-1 ring-accent/30" : "border-border");
-          card.innerHTML = (isCurrent ? "<span class=\"text-xs text-accent font-medium mb-1 block\">当前计划</span>" : "") +
-            "<span class=\"font-medium\">" + (p.origin || "—") + " → " + (p.destination || "—") + "</span><br><span class=\"text-sm text-muted\">" + (p.departure_time || "—") + (p.completed ? " <span class=\"text-muted\">已完成</span>" : "") + "</span>";
+          card.innerHTML = (isCurrent ? "<span class=\"text-xs text-accent font-medium mb-1 block\">当前预期计划</span>" : "") +
+            "<span class=\"font-medium\">" + (p.origin || "—") + " → " + (p.destination || "—") + "</span><br><span class=\"text-sm text-muted\">" + timeStr + (p.completed ? " <span class=\"text-muted\">已完成</span>" : "") + "</span>";
           card.dataset.index = String(idx);
           card.addEventListener("click", function () { showPlanDetail(p); });
           root.appendChild(card);
@@ -338,10 +347,12 @@
       var overlay = document.getElementById("planDetailOverlay");
       var content = document.getElementById("planDetailContent");
       if (!overlay || !content) return;
+      var depTime = (p.departure_time || "").trim();
+      var depTimeStr = depTime ? (/^\d{4}-\d{1,2}-\d{1,2}/.test(depTime) ? depTime : (function () { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0") + " " + depTime; }())) : "—";
       content.innerHTML =
         "<div class=\"flex justify-between\"><span class=\"text-muted\">起点</span><span class=\"text-gray-100\">" + (p.origin || "—") + "</span></div>" +
         "<div class=\"flex justify-between\"><span class=\"text-muted\">终点</span><span class=\"text-gray-100\">" + (p.destination || "—") + "</span></div>" +
-        "<div class=\"flex justify-between\"><span class=\"text-muted\">出发时间</span><span class=\"text-gray-100\">" + (p.departure_time || "—") + "</span></div>" +
+        "<div class=\"flex justify-between\"><span class=\"text-muted\">出发时间</span><span class=\"text-gray-100\">" + depTimeStr + "</span></div>" +
         "<div class=\"flex justify-between\"><span class=\"text-muted\">时间窗</span><span class=\"text-gray-100\">±" + (p.time_window_minutes != null ? p.time_window_minutes : 30) + " 分钟</span></div>" +
         "<div class=\"flex justify-between\"><span class=\"text-muted\">人数</span><span class=\"text-gray-100\">" + (p.min_orders != null ? p.min_orders : 2) + "～" + (p.max_orders != null ? p.max_orders : 4) + "</span></div>" +
         "<div class=\"flex justify-between\"><span class=\"text-muted\">状态</span><span class=\"text-gray-100\">" + (p.completed ? "已完成" : "未完成") + "</span></div>" +
