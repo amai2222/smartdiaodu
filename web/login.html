@@ -21,21 +21,43 @@
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .err { color: var(--red); font-size: 0.9rem; margin-top: 0.75rem; display: none; }
     .hint { font-size: 0.8rem; color: var(--muted); margin-top: 1rem; }
+    .tabs { display: flex; gap: 0; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); }
+    .tabs button { flex: 1; padding: 0.6rem 1rem; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 0.95rem; cursor: pointer; margin-bottom: -1px; }
+    .tabs button:hover { color: var(--text); }
+    .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .panel { display: none; }
+    .panel.active { display: block; }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>顺风车智能调度</h1>
-    <p class="subtitle">网页直连 Supabase 登录（HTTPS，无需自建后端）</p>
-    <form id="loginForm">
-      <label>邮箱</label>
-      <input type="email" id="email" placeholder="admin@test.com" autocomplete="username" />
-      <label>密码</label>
-      <input type="password" id="password" placeholder="密码" autocomplete="current-password" />
-      <button type="submit" class="btn" id="btnSubmit">登录</button>
-      <p id="err" class="err"></p>
-    </form>
-    <p class="hint">Supabase URL 与密钥从 config（环境变量）自动读取；请在 Supabase 控制台添加用户（邮箱+密码）。</p>
+    <div class="tabs">
+      <button type="button" id="tabUsername" class="active">用户名登录</button>
+      <button type="button" id="tabEmail">邮箱登录</button>
+    </div>
+    <div id="panelUsername" class="panel active">
+      <form id="backendLoginForm">
+        <label>用户名</label>
+        <input type="text" id="backendUser" placeholder="admin" autocomplete="username" />
+        <label>密码</label>
+        <input type="password" id="backendPwd" placeholder="密码" autocomplete="current-password" />
+        <button type="submit" class="btn" id="btnBackendSubmit">登录</button>
+        <p id="errBackend" class="err"></p>
+      </form>
+      <p class="hint">大脑后端 app_users 账号，登录后自动绑定该账号对应司机。</p>
+    </div>
+    <div id="panelEmail" class="panel">
+      <form id="loginForm">
+        <label>邮箱</label>
+        <input type="email" id="email" placeholder="admin@test.com" autocomplete="username" />
+        <label>密码</label>
+        <input type="password" id="password" placeholder="密码" autocomplete="current-password" />
+        <button type="submit" class="btn" id="btnSubmit">登录</button>
+        <p id="err" class="err"></p>
+      </form>
+      <p class="hint">Supabase Auth，邮箱与司机一一对应；需在 Supabase 控制台添加用户。</p>
+    </div>
   </div>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script>
@@ -45,13 +67,30 @@
   var STORAGE_USERNAME = "smartdiaodu_username";
   var STORAGE_SUPABASE_URL = "smartdiaodu_supabase_url";
   var STORAGE_SUPABASE_ANON = "smartdiaodu_supabase_anon_key";
-  var form = document.getElementById("loginForm");
-  var emailInput = document.getElementById("email");
-  var passwordInput = document.getElementById("password");
-  var btnSubmit = document.getElementById("btnSubmit");
-  var errEl = document.getElementById("err");
-
+  var STORAGE_DRIVER_ID = "smartdiaodu_driver_id";
   var cfg = typeof window.SMARTDIAODU_CONFIG !== "undefined" ? window.SMARTDIAODU_CONFIG : {};
+
+  var tabUsername = document.getElementById("tabUsername");
+  var tabEmail = document.getElementById("tabEmail");
+  var panelUsername = document.getElementById("panelUsername");
+  var panelEmail = document.getElementById("panelEmail");
+  tabUsername.addEventListener("click", function () {
+    tabUsername.classList.add("active");
+    tabEmail.classList.remove("active");
+    panelUsername.classList.add("active");
+    panelEmail.classList.remove("active");
+    document.getElementById("err").style.display = "none";
+    document.getElementById("errBackend").style.display = "none";
+  });
+  tabEmail.addEventListener("click", function () {
+    tabEmail.classList.add("active");
+    tabUsername.classList.remove("active");
+    panelEmail.classList.add("active");
+    panelUsername.classList.remove("active");
+    document.getElementById("err").style.display = "none";
+    document.getElementById("errBackend").style.display = "none";
+  });
+
   function getSupabaseUrl() {
     return (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_URL)) || cfg.supabaseUrl || "";
   }
@@ -59,6 +98,11 @@
     return (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_SUPABASE_ANON)) || cfg.supabaseAnonKey || "";
   }
 
+  var form = document.getElementById("loginForm");
+  var emailInput = document.getElementById("email");
+  var passwordInput = document.getElementById("password");
+  var btnSubmit = document.getElementById("btnSubmit");
+  var errEl = document.getElementById("err");
   function showErr(msg) {
     errEl.textContent = msg || "";
     errEl.style.display = msg ? "block" : "none";
@@ -103,6 +147,46 @@
       showErr(err && err.message ? err.message : "登录出错，请重试");
       btnSubmit.disabled = false;
     }
+  });
+
+  var backendForm = document.getElementById("backendLoginForm");
+  var backendUser = document.getElementById("backendUser");
+  var backendPwd = document.getElementById("backendPwd");
+  var btnBackend = document.getElementById("btnBackendSubmit");
+  var errBackend = document.getElementById("errBackend");
+  function showErrBackend(msg) {
+    errBackend.textContent = msg || "";
+    errBackend.style.display = msg ? "block" : "none";
+  }
+  backendForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var base = (typeof localStorage !== "undefined" && localStorage.getItem("smartdiaodu_api_base")) || cfg.apiBase || "";
+    base = (base || "").replace(/\/$/, "");
+    var username = (backendUser.value || "").trim();
+    var password = backendPwd.value || "";
+    showErrBackend("");
+    if (!base) { showErrBackend("未配置 api_base，请在 config.js 或 Supabase app_config 中设置"); return; }
+    if (!username) { showErrBackend("请填写用户名"); return; }
+    btnBackend.disabled = true;
+    fetch(base + "/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: username, password: password })
+    }).then(function (r) {
+      if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || "登录失败"); });
+      return r.json();
+    }).then(function (d) {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(STORAGE_TOKEN, d.token || "1");
+        localStorage.setItem(STORAGE_USERNAME, d.username || username);
+        if (cfg.apiBase) localStorage.setItem(STORAGE_API, cfg.apiBase);
+        if (d.driver_id) localStorage.setItem(STORAGE_DRIVER_ID, d.driver_id);
+      }
+      window.location.href = "index.html";
+    }).catch(function (err) {
+      showErrBackend(err.message || "网络错误");
+      btnBackend.disabled = false;
+    });
   });
 })();
   </script>

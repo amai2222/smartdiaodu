@@ -33,11 +33,34 @@
           else if (k === "driver_id") C.cachedAppConfig.driver_id = v;
         });
       }
-      if (cb) cb();
+      var base = C.cachedAppConfig.api_base;
+      var token = null;
+      try { token = localStorage.getItem(C.STORAGE_TOKEN); } catch (e) {}
+      if (base && token && typeof fetch === "function") {
+        fetch(base + "/auth/me", { headers: { "Authorization": "Bearer " + token } })
+          .then(function (res) { return res.ok ? res.json() : null; })
+          .then(function (data) {
+            if (data && data.driver_id) {
+              C.cachedAppConfig.driver_id = data.driver_id;
+              try { localStorage.setItem(C.STORAGE_DRIVER_ID, data.driver_id); } catch (e) {}
+            }
+          })
+          .catch(function () {})
+          .then(function () { if (cb) cb(); });
+      } else {
+        if (cb) cb();
+      }
     }).catch(function () { if (cb) cb(); });
   };
 
-  C.getDriverId = function () { return C.cachedAppConfig.driver_id || C.DEFAULT_DRIVER_ID; };
+  /** 当前司机 id：优先登录绑定（localStorage）→ app_config → 默认；多司机各自登录后各自用自己 id */
+  C.getDriverId = function () {
+    try {
+      var fromStorage = localStorage.getItem(C.STORAGE_DRIVER_ID);
+      if (fromStorage && fromStorage.trim()) return fromStorage.trim();
+    } catch (e) {}
+    return C.cachedAppConfig.driver_id || C.DEFAULT_DRIVER_ID;
+  };
   C._supabaseClient = null;
   C._supabaseClientUrl = "";
   C._supabaseClientAnon = "";

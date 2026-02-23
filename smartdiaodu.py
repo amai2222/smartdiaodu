@@ -391,12 +391,12 @@ class LoginRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # 登录：从 Supabase app_users 校验并签发 JWT
 # ---------------------------------------------------------------------------
-def _get_user_password_hash(username: str) -> Optional[str]:
-    """从 Supabase app_users 表按用户名查 password_hash，无则返回 None。"""
+def _get_user_by_username(username: str) -> Optional[dict]:
+    """从 Supabase app_users 表按用户名查 password_hash 与 driver_id，无则返回 None。"""
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return None
     url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/app_users"
-    params = {"username": f"eq.{username}", "select": "password_hash"}
+    params = {"username": f"eq.{username}", "select": "password_hash,driver_id"}
     headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
@@ -409,7 +409,7 @@ def _get_user_password_hash(username: str) -> Optional[str]:
         data = resp.json()
         if not data or not isinstance(data, list):
             return None
-        return data[0].get("password_hash")
+        return data[0]
     except Exception as e:
         logger.warning("查询 app_users 失败: %s", e)
         return None
@@ -456,29 +456,43 @@ async def health() -> dict:
 async def login(body: LoginRequest) -> dict:
     """
     用户名密码登录，校验 app_users 表后签发 JWT。
+    返回 driver_id 供多司机各自登录时前端使用；未绑定司机的账号 driver_id 为 null。
     需配置 SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY；默认账号 admin / 123456。
     """
     username = (body.username or "").strip()
     password = body.password or ""
     if not username:
         raise HTTPException(status_code=400, detail="用户名不能为空")
-    hash_from_db = _get_user_password_hash(username)
-    if not _verify_password(password, hash_from_db):
+    user = _get_user_by_username(username)
+    if not user or not _verify_password(password, user.get("password_hash")):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     token = _create_token(username)
-    logger.info("用户 %s 登录成功", username)
-    return {"token": token, "username": username}
+    driver_id = user.get("driver_id")
+    if driver_id is not None and hasattr(driver_id, "hex"):
+        driver_id = str(driver_id)
+    logger.info("用户 %s 登录成功, driver_id=%s", username, driver_id)
+    out = {"token": token, "username": username}
+    if driver_id:
+        out["driver_id"] = driver_id
+    return out
 
 
 @app.get("/auth/me")
 async def auth_me(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
-    """校验 JWT，返回当前用户名；未带有效 token 返回 401。"""
+    """校验 JWT，返回当前用户名与绑定的 driver_id；未带有效 token 返回 401。"""
     if not credentials or not credentials.credentials:
         raise HTTPException(status_code=401, detail="未提供登录凭证")
     username = _decode_token(credentials.credentials)
     if not username:
         raise HTTPException(status_code=401, detail="登录已过期或无效")
-    return {"username": username}
+    user = _get_user_by_username(username)
+    driver_id = None
+    if user and user.get("driver_id") is not None:
+        driver_id = str(user["driver_id"]) if hasattr(user["driver_id"], "hex") else user["driver_id"]
+    out = {"username": username}
+    if driver_id:
+        out["driver_id"] = driver_id
+    return out
 
 
 # ---------------------------------------------------------------------------
