@@ -33,13 +33,30 @@ CURRENT_STATE = {
     "deliveries": ["上海市外滩"],
 }
 
+# 多计划（mode1）时轮换发布：每次轮询发布下一条行程，循环，汇总各路线订单供选择
+_trips_rotation_index = 0
+
 
 def get_publish_trip() -> Optional[dict]:
+    global _trips_rotation_index
     url = f"{API_BASE.rstrip('/')}/probe_publish_trip"
     try:
         r = requests.post(url, json={"current_state": CURRENT_STATE}, timeout=10)
         if r.status_code == 200:
-            return r.json()
+            data = r.json()
+            trips = data.get("trips") if isinstance(data, dict) else None
+            if isinstance(trips, list) and len(trips) > 0:
+                idx = _trips_rotation_index % len(trips)
+                _trips_rotation_index += 1
+                t = trips[idx]
+                return {
+                    "origin": t.get("origin"),
+                    "destination": t.get("destination"),
+                    "depart_time": t.get("depart_time") or "",
+                    "cancel_current_trip": data.get("cancel_current_trip"),
+                    "hint": data.get("hint"),
+                }
+            return data
     except Exception as e:
         print("请求失败:", e)
     return None
@@ -96,7 +113,7 @@ def fill_and_publish(d: u2.Device, origin: str, dest: str, depart_time: str) -> 
 def main():
     d = u2.connect()
     print("探针·发布/取消行程 已启动（PC+UIAutomator2，拟人化延迟）")
-    print("每约", POLL_INTERVAL_SEC, "秒轮询；接单后将自动取消已发布行程\n")
+    print("每约", POLL_INTERVAL_SEC, "秒轮询；多计划时轮换发布各条行程，接单后自动取消\n")
     while True:
         trip = get_publish_trip()
         if not trip:

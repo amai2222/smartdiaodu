@@ -9,6 +9,7 @@ import math
 import os
 import time
 import traceback
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 # 优先从项目根目录 .env 加载环境变量（含 SUPABASE_SERVICE_ROLE_KEY 等）
@@ -21,7 +22,7 @@ except ImportError:
 import bcrypt
 import jwt
 import requests
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -63,8 +64,16 @@ MODE2_HIGH_PROFIT_THRESHOLD = 100
 MODE3_MAX_MINUTES_TO_PICKUP = 30
 MODE3_MAX_DETOUR_MINUTES = 25
 planned_trips: List[Dict[str, Any]] = []
+# 循环计划配置：首次起点、首次终点、去的时间、循环间隔（小时）、找单轮次（默认2=当天回程+次日去程）、是否已停止循环
+planned_trip_cycle_origin: str = ""
+planned_trip_cycle_destination: str = ""
+planned_trip_cycle_departure_time: str = "06:00"
+planned_trip_cycle_interval_hours: int = 12
+planned_trip_cycle_rounds: int = 2
+planned_trip_cycle_stopped: bool = False
 RESPONSE_TIMEOUT_SECONDS = 300
 RESPONSE_PAGE_BASE = ""
+DEFAULT_DRIVER_ID: Optional[str] = None  # 从 app_config driver_id 加载，请求未带 driver_id 时使用
 abandoned_fingerprints: Set[str] = set()
 pending_response: Dict[str, float] = {}
 probe_cancel_trip_requested: bool = False
@@ -82,7 +91,7 @@ def _load_app_config_from_db() -> None:
     global BAIDU_AK, BAIDU_SERVICE_ID, BARK_KEY, MAX_DETOUR_SECONDS, REQUEST_TIMEOUT
     global DRIVER_MODE, MODE2_DETOUR_MINUTES_MIN, MODE2_DETOUR_MINUTES_MAX, MODE2_HIGH_PROFIT_THRESHOLD
     global MODE3_MAX_MINUTES_TO_PICKUP, MODE3_MAX_DETOUR_MINUTES
-    global RESPONSE_TIMEOUT_SECONDS, RESPONSE_PAGE_BASE
+    global RESPONSE_TIMEOUT_SECONDS, RESPONSE_PAGE_BASE, DEFAULT_DRIVER_ID
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         logger.warning("未配置 SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY，跳过从 DB 加载 app_config")
         return
@@ -153,12 +162,146 @@ def _load_app_config_from_db() -> None:
                 pass
         if "response_page_base" in cfg:
             RESPONSE_PAGE_BASE = cfg["response_page_base"] or ""
-        logger.info("已从 app_config 加载配置: baidu_ak=%s, driver_mode=%s", bool(BAIDU_AK), DRIVER_MODE)
+        if cfg.get("driver_id"):
+            DEFAULT_DRIVER_ID = (cfg["driver_id"] or "").strip() or None
+        logger.info("已从 app_config 加载配置: baidu_ak=%s, driver_mode=%s, driver_id=%s", bool(BAIDU_AK), DRIVER_MODE, bool(DEFAULT_DRIVER_ID))
     except Exception as e:
         logger.warning("从 app_config 加载配置失败: %s，使用默认值", e)
 
 
+def _get_driver_id(request: Optional[Request] = None) -> Optional[str]:
+    """从请求 query 或 header 取 driver_id，否则用 app_config 的 DEFAULT_DRIVER_ID。"""
+    if request is not None:
+        q = getattr(request, "query_params", None)
+        if q and hasattr(q, "get") and q.get("driver_id"):
+            return (q.get("driver_id") or "").strip() or None
+        h = getattr(request, "headers", None)
+        if h and hasattr(h, "get") and h.get("x-driver-id"):
+            return (h.get("x-driver-id") or "").strip() or None
+    return DEFAULT_DRIVER_ID
+
+
+def _load_planned_trip_from_db(driver_id: Optional[str] = None) -> None:
+    """从数据库加载循环计划配置与计划批次到内存。按 driver_id 过滤；无 driver_id 时兼容旧逻辑（config 取 id=1 或首行，plans 取全部或 driver_id 为空）。"""
+    global planned_trips, planned_trip_cycle_origin, planned_trip_cycle_destination, planned_trip_cycle_departure_time
+    global planned_trip_cycle_interval_hours, planned_trip_cycle_rounds, planned_trip_cycle_stopped
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return
+    url = SUPABASE_URL.rstrip("/")
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        if driver_id:
+            r = requests.get(f"{url}/rest/v1/planned_trip_cycle_config?driver_id=eq.{driver_id}&select=*", headers=headers, timeout=10)
+        else:
+            r = requests.get(f"{url}/rest/v1/planned_trip_cycle_config?select=*&order=id.asc&limit=1", headers=headers, timeout=10)
+            if r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) == 0:
+                r = requests.get(f"{url}/rest/v1/planned_trip_cycle_config?id=eq.1&select=*", headers=headers, timeout=10)
+        if r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) > 0:
+            row = r.json()[0]
+            planned_trip_cycle_origin = (row.get("cycle_origin") or "").strip()
+            planned_trip_cycle_destination = (row.get("cycle_destination") or "").strip()
+            planned_trip_cycle_departure_time = (row.get("cycle_departure_time") or "06:00").strip()
+            planned_trip_cycle_interval_hours = max(1, min(24, int(row.get("cycle_interval_hours") or 12)))
+            planned_trip_cycle_rounds = max(1, min(10, int(row.get("cycle_rounds") or 2)))
+            planned_trip_cycle_stopped = bool(row.get("cycle_stopped"))
+        plans_url = f"{url}/rest/v1/planned_trip_plans?select=id,sort_order,origin,destination,departure_time,time_window_minutes,min_orders,max_orders,completed&order=completed.asc,sort_order.asc,departure_time.asc"
+        if driver_id:
+            plans_url += f"&driver_id=eq.{driver_id}"
+        r2 = requests.get(plans_url, headers=headers, timeout=10)
+        if r2.status_code == 200 and isinstance(r2.json(), list):
+            rows = r2.json()
+            planned_trips.clear()
+            for row in rows:
+                planned_trips.append({
+                    "id": row.get("id"),
+                    "origin": row.get("origin") or "",
+                    "destination": row.get("destination") or "",
+                    "departure_time": row.get("departure_time") or "",
+                    "time_window_minutes": int(row.get("time_window_minutes") or 30),
+                    "min_orders": int(row.get("min_orders") or 2),
+                    "max_orders": int(row.get("max_orders") or 4),
+                    "completed": bool(row.get("completed")),
+                })
+            logger.info("已从数据库加载循环计划(driver_id=%s): 配置 1 条, 批次 %s 条", driver_id or "null", len(planned_trips))
+    except Exception as e:
+        logger.warning("从数据库加载循环计划失败: %s，使用内存默认值", e)
+
+
+def _save_planned_trip_config_to_db(driver_id: Optional[str] = None) -> None:
+    """将内存中的循环计划配置写入数据库。有 driver_id 时按 driver_id  upsert；无则按 id=1 兼容。"""
+    global planned_trip_cycle_origin, planned_trip_cycle_destination, planned_trip_cycle_departure_time
+    global planned_trip_cycle_interval_hours, planned_trip_cycle_rounds, planned_trip_cycle_stopped
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/planned_trip_cycle_config"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "cycle_origin": planned_trip_cycle_origin,
+        "cycle_destination": planned_trip_cycle_destination,
+        "cycle_departure_time": planned_trip_cycle_departure_time,
+        "cycle_interval_hours": planned_trip_cycle_interval_hours,
+        "cycle_rounds": planned_trip_cycle_rounds,
+        "cycle_stopped": planned_trip_cycle_stopped,
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    try:
+        if driver_id:
+            payload["driver_id"] = driver_id
+            requests.post(url, json=payload, headers={**headers, "Prefer": "resolution=merge-duplicates,return=minimal"}, timeout=10)
+        else:
+            requests.patch(f"{url}?id=eq.1", json=payload, headers=headers, timeout=10)
+    except Exception as e:
+        logger.warning("写入循环计划配置到数据库失败: %s", e)
+
+
+def _sync_planned_trip_plans_to_db(driver_id: Optional[str] = None) -> None:
+    """将内存中的计划批次同步到数据库：有 id 的 PATCH，无 id 的 INSERT 并回填 id；按 sort_order 写入；有 driver_id 时写入 driver_id。"""
+    global planned_trips
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/planned_trip_plans"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+    _sort_planned_trips()
+    try:
+        for i, p in enumerate(planned_trips):
+            row = {
+                "sort_order": i,
+                "origin": p.get("origin") or "",
+                "destination": p.get("destination") or "",
+                "departure_time": p.get("departure_time") or "",
+                "time_window_minutes": int(p.get("time_window_minutes") or 30),
+                "min_orders": int(p.get("min_orders") or 2),
+                "max_orders": int(p.get("max_orders") or 4),
+                "completed": bool(p.get("completed")),
+            }
+            if driver_id:
+                row["driver_id"] = driver_id
+            pid = p.get("id")
+            if pid:
+                requests.patch(f"{url}?id=eq.{pid}", json=row, headers={**headers, "Prefer": ""}, timeout=10)
+            else:
+                r = requests.post(url, json=row, headers=headers, timeout=10)
+                if r.status_code in (200, 201) and isinstance(r.json(), list) and len(r.json()) > 0:
+                    planned_trips[i]["id"] = r.json()[0].get("id")
+    except Exception as e:
+        logger.warning("同步计划批次到数据库失败: %s", e)
+
+
 _load_app_config_from_db()
+_load_planned_trip_from_db(DEFAULT_DRIVER_ID)
 # ==========================================
 
 
@@ -183,9 +326,10 @@ class NewOrder(BaseModel):
 
 
 class EvaluateRequest(BaseModel):
-    """评估接口请求体"""
+    """评估接口请求体。可选 driver_id：多司机时按该司机的模式与参数决定是否推送。"""
     current_state: CurrentState
     new_order: NewOrder
+    driver_id: Optional[str] = None
 
 
 class DriverModeUpdate(BaseModel):
@@ -215,6 +359,16 @@ class PlannedTripUpdate(BaseModel):
 class PlannedTripUpdateWithIndex(PlannedTripUpdate):
     """更新指定索引的计划"""
     index: int
+
+
+class PlannedTripCycleConfig(BaseModel):
+    """循环计划配置：首次起点、终点、去的时间、循环间隔（小时）、找单轮次、是否停止循环"""
+    cycle_origin: Optional[str] = None
+    cycle_destination: Optional[str] = None
+    cycle_departure_time: Optional[str] = None
+    cycle_interval_hours: Optional[int] = None
+    cycle_rounds: Optional[int] = None       # 找单计划轮次，默认2（当天回程+次日去程）
+    cycle_stopped: Optional[bool] = None     # True=停止自动生成计划
 
 
 class GeocodeBatchRequest(BaseModel):
@@ -868,33 +1022,136 @@ def _get_mode_config() -> dict:
         "response_page_base": RESPONSE_PAGE_BASE or None,
     }
 
+
+def _get_driver_mode_from_db(driver_id: str) -> Optional[dict]:
+    """从 driver_mode_config 表按 driver_id 读取 mode + config；无行或异常时返回 None。"""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not driver_id:
+        return None
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/driver_mode_config?driver_id=eq.{driver_id}&select=*"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) > 0:
+            row = r.json()[0]
+            return {
+                "mode": (row.get("mode") or "mode2").strip(),
+                "config": {
+                    "mode2_detour_min": int(row.get("mode2_detour_min") or 20),
+                    "mode2_detour_max": int(row.get("mode2_detour_max") or 60),
+                    "mode2_high_profit_threshold": float(row.get("mode2_high_profit_threshold") or 100),
+                    "mode3_max_minutes_to_pickup": int(row.get("mode3_max_minutes_to_pickup") or 30),
+                    "mode3_max_detour_minutes": int(row.get("mode3_max_detour_minutes") or 25),
+                    "response_timeout_seconds": RESPONSE_TIMEOUT_SECONDS,
+                    "response_page_base": RESPONSE_PAGE_BASE or None,
+                },
+            }
+    except Exception as e:
+        logger.warning("从 driver_mode_config 读取失败: %s", e)
+    return None
+
+
+def _set_driver_mode_to_db(driver_id: str, mode: str) -> None:
+    """将 mode 写入 driver_mode_config（upsert 该 driver_id 行）。"""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not driver_id:
+        return
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/driver_mode_config"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+    }
+    payload = {"driver_id": driver_id, "mode": mode, "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    try:
+        requests.post(url, json=payload, headers=headers, timeout=10)
+    except Exception as e:
+        logger.warning("写入 driver_mode_config(mode) 失败: %s", e)
+
+
+def _set_driver_mode_config_to_db(driver_id: str, body: ModeConfigUpdate) -> None:
+    """将模式参数写入 driver_mode_config（只更新传入的字段；无行则先插入默认行再 PATCH）。"""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not driver_id:
+        return
+    base = SUPABASE_URL.rstrip("/")
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {"updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if body.mode2_detour_min is not None:
+        payload["mode2_detour_min"] = max(0, body.mode2_detour_min)
+    if body.mode2_detour_max is not None:
+        payload["mode2_detour_max"] = max(0, body.mode2_detour_max)
+    if body.mode2_high_profit_threshold is not None:
+        payload["mode2_high_profit_threshold"] = max(0, body.mode2_high_profit_threshold)
+    if body.mode3_max_minutes_to_pickup is not None:
+        payload["mode3_max_minutes_to_pickup"] = max(1, body.mode3_max_minutes_to_pickup)
+    if body.mode3_max_detour_minutes is not None:
+        payload["mode3_max_detour_minutes"] = max(0, body.mode3_max_detour_minutes)
+    if len(payload) <= 1:
+        return
+    try:
+        r = requests.get(f"{base}/rest/v1/driver_mode_config?driver_id=eq.{driver_id}&select=driver_id", headers=headers, timeout=10)
+        if r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) == 0:
+            requests.post(f"{base}/rest/v1/driver_mode_config", json={"driver_id": driver_id}, headers={**headers, "Prefer": "return=minimal"}, timeout=10)
+        requests.patch(f"{base}/rest/v1/driver_mode_config?driver_id=eq.{driver_id}", json=payload, headers=headers, timeout=10)
+    except Exception as e:
+        logger.warning("写入 driver_mode_config 参数失败: %s", e)
+
+
 @app.get("/driver_mode")
-async def get_driver_mode() -> dict:
-    """获取当前调度模式及模式参数。"""
+async def get_driver_mode(request: Request) -> dict:
+    """获取当前调度模式及模式参数。按请求 driver_id 从 driver_mode_config 读；无 driver_id 用内存默认。"""
+    driver_id = _get_driver_id(request)
+    if driver_id:
+        row = _get_driver_mode_from_db(driver_id)
+        if row:
+            return {"mode": row["mode"], "config": row["config"]}
     return {"mode": DRIVER_MODE, "config": _get_mode_config()}
 
 
 @app.put("/driver_mode")
-async def set_driver_mode(body: DriverModeUpdate) -> dict:
+async def set_driver_mode(request: Request, body: DriverModeUpdate) -> dict:
     """切换调度模式。mode1=出发前找单, mode2=路上接满, mode3=送人后周边, pause=停止。"""
-    global DRIVER_MODE
+    driver_id = _get_driver_id(request)
     m = body.mode.strip().lower()
     if m not in VALID_MODES:
         raise HTTPException(status_code=400, detail=f"mode 必须是 {VALID_MODES} 之一")
+    if driver_id:
+        _set_driver_mode_to_db(driver_id, m)
+        logger.info("调度模式已切换为: %s (driver_id=%s)", m, driver_id)
+        return {"mode": m}
+    global DRIVER_MODE
     DRIVER_MODE = m
     logger.info("调度模式已切换为: %s", DRIVER_MODE)
     return {"mode": DRIVER_MODE}
 
 
 @app.get("/driver_mode_config")
-async def get_driver_mode_config() -> dict:
-    """仅获取当前模式参数（用于前端展示/编辑）。"""
+async def get_driver_mode_config(request: Request) -> dict:
+    """仅获取当前模式参数（用于前端展示/编辑）。按 driver_id 从库读，无则内存默认。"""
+    driver_id = _get_driver_id(request)
+    if driver_id:
+        row = _get_driver_mode_from_db(driver_id)
+        if row:
+            return row["config"]
     return _get_mode_config()
 
 
 @app.put("/driver_mode_config")
-async def set_driver_mode_config(body: ModeConfigUpdate) -> dict:
-    """更新模式参数（只更新传入的字段）。"""
+async def set_driver_mode_config(request: Request, body: ModeConfigUpdate) -> dict:
+    """更新模式参数（只更新传入的字段）。按 driver_id 落库，无则仅更新内存。"""
+    driver_id = _get_driver_id(request)
+    if driver_id:
+        _set_driver_mode_config_to_db(driver_id, body)
+        row = _get_driver_mode_from_db(driver_id)
+        if row:
+            return row["config"]
     global MODE2_DETOUR_MINUTES_MIN, MODE2_DETOUR_MINUTES_MAX
     global MODE2_HIGH_PROFIT_THRESHOLD, MODE3_MAX_MINUTES_TO_PICKUP, MODE3_MAX_DETOUR_MINUTES
     if body.mode2_detour_min is not None:
@@ -939,17 +1196,148 @@ def _sort_planned_trips() -> None:
     )
 
 
-@app.get("/planned_trip")
-async def get_planned_trip() -> dict:
-    """获取全部下次计划（多批次）。未结束找单的按出发时间从早到晚排前，已结束的排后。探子/调度用第一条 completed=false 的；计划不删只结束找单。"""
+def _parse_departure_time(s: str) -> tuple:
+    """解析出发时间，返回 (date 或 None, hour, minute)。s 如 '06:00' 或 '2025-02-22 06:00'。"""
+    import re
+    s = (s or "").strip()
+    if not s:
+        return (None, 6, 0)
+    # 先试带日期
+    m = re.match(r"(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})", s)
+    if m:
+        try:
+            y, mo, d, h, mi = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5))
+            return (date(y, mo, d), h % 24, mi % 60)
+        except (ValueError, TypeError):
+            pass
+    # 仅时间 HH:MM
+    m = re.match(r"(\d{1,2}):(\d{2})", s)
+    if m:
+        return (None, int(m.group(1)) % 24, int(m.group(2)) % 60)
+    return (None, 6, 0)
+
+
+def _format_next_departure(
+    completed_departure: str,
+    cycle_departure_time: str,
+    cycle_interval_hours: int,
+    is_outbound: bool,
+) -> str:
+    """根据刚结束的计划计算下一批出发时间。is_outbound=True 表示刚结束的是「去」，下一批是「返」= 同一天 去的时间+间隔；否则下一批是「去」= 次日 去的时间。"""
+    cd = (cycle_departure_time or "06:00").strip()
+    comp_date, ch, cm = _parse_departure_time(completed_departure)
+    out_h, out_m = 6, 0
+    mt = __import__("re").match(r"(\d{1,2}):(\d{2})", cd)
+    if mt:
+        out_h, out_m = int(mt.group(1)) % 24, int(mt.group(2)) % 60
+    today = datetime.now().date() if comp_date is None else comp_date
+    use_date = comp_date is not None or (completed_departure or "").strip().startswith("2")
+    if is_outbound:
+        t = datetime(today.year, today.month, today.day, out_h, out_m) + timedelta(hours=cycle_interval_hours)
+        return t.strftime("%Y-%m-%d %H:%M") if use_date else t.strftime("%H:%M")
+    else:
+        next_day = today + timedelta(days=1)
+        return next_day.strftime("%Y-%m-%d") + " " + cd
+
+
+def _is_outbound_departure(departure_time: str, cycle_departure_time: str, cycle_interval_hours: int = 12) -> bool:
+    """判断该计划的出发时间是否为「去」：与 cycle_departure_time 接近视为去，否则为返。"""
+    _, h1, m1 = _parse_departure_time(departure_time or "")
+    _, h2, m2 = _parse_departure_time(cycle_departure_time or "06:00")
+    min1 = h1 * 60 + m1
+    min2 = h2 * 60 + m2
+    return abs(min1 - min2) <= 60
+
+
+def _append_next_cycle_plan(reference_plan: dict) -> bool:
+    """根据参考计划追加下一批（返/去），成功返回 True。"""
+    global planned_trips, planned_trip_cycle_origin, planned_trip_cycle_destination, planned_trip_cycle_departure_time, planned_trip_cycle_interval_hours
+    if not planned_trip_cycle_interval_hours:
+        return False
+    origin = (planned_trip_cycle_origin or reference_plan.get("origin") or "").strip()
+    dest = (planned_trip_cycle_destination or reference_plan.get("destination") or "").strip()
+    if not origin or not dest:
+        return False
+    is_out = _is_outbound_departure(
+        reference_plan.get("departure_time") or "",
+        planned_trip_cycle_departure_time,
+        planned_trip_cycle_interval_hours,
+    )
+    next_origin = reference_plan.get("destination") or dest
+    next_dest = reference_plan.get("origin") or origin
+    next_time = _format_next_departure(
+        reference_plan.get("departure_time") or "",
+        planned_trip_cycle_departure_time,
+        planned_trip_cycle_interval_hours,
+        is_out,
+    )
+    planned_trips.append({
+        "origin": next_origin,
+        "destination": next_dest,
+        "departure_time": next_time,
+        "time_window_minutes": reference_plan.get("time_window_minutes", 30),
+        "min_orders": reference_plan.get("min_orders", 2),
+        "max_orders": reference_plan.get("max_orders", 4),
+        "completed": False,
+    })
     _sort_planned_trips()
-    return {"plans": [_plan_to_dict(p) for p in planned_trips]}
+    logger.info("已自动追加下一批: %s -> %s, 出发 %s", next_origin, next_dest, next_time)
+    return True
+
+
+@app.get("/planned_trip")
+async def get_planned_trip(request: Request) -> dict:
+    """获取全部循环计划（多批次）及循环配置。按 driver_id 从库加载后返回。"""
+    driver_id = _get_driver_id(request)
+    _load_planned_trip_from_db(driver_id)
+    _sort_planned_trips()
+    return _planned_trip_response()
+
+
+def _planned_trip_response() -> dict:
+    global planned_trip_cycle_origin, planned_trip_cycle_destination, planned_trip_cycle_departure_time, planned_trip_cycle_interval_hours, planned_trip_cycle_rounds, planned_trip_cycle_stopped
+    return {
+        "plans": [_plan_to_dict(p) for p in planned_trips],
+        "cycle_config": {
+            "cycle_origin": planned_trip_cycle_origin,
+            "cycle_destination": planned_trip_cycle_destination,
+            "cycle_departure_time": planned_trip_cycle_departure_time,
+            "cycle_interval_hours": planned_trip_cycle_interval_hours,
+            "cycle_rounds": planned_trip_cycle_rounds,
+            "cycle_stopped": planned_trip_cycle_stopped,
+        },
+    }
+
+
+@app.put("/planned_trip/config")
+async def set_planned_trip_cycle_config(request: Request, body: PlannedTripCycleConfig) -> dict:
+    """保存循环计划配置：首次起点、终点、去的时间、循环间隔、找单轮次、是否停止循环。按 driver_id 落库。"""
+    driver_id = _get_driver_id(request)
+    _load_planned_trip_from_db(driver_id)
+    global planned_trip_cycle_origin, planned_trip_cycle_destination, planned_trip_cycle_departure_time, planned_trip_cycle_interval_hours, planned_trip_cycle_rounds, planned_trip_cycle_stopped
+    if body.cycle_origin is not None:
+        planned_trip_cycle_origin = (body.cycle_origin or "").strip()
+    if body.cycle_destination is not None:
+        planned_trip_cycle_destination = (body.cycle_destination or "").strip()
+    if body.cycle_departure_time is not None:
+        planned_trip_cycle_departure_time = (body.cycle_departure_time or "06:00").strip()
+    if body.cycle_interval_hours is not None:
+        planned_trip_cycle_interval_hours = max(1, min(24, int(body.cycle_interval_hours)))
+    if body.cycle_rounds is not None:
+        planned_trip_cycle_rounds = max(1, min(10, int(body.cycle_rounds)))
+    if body.cycle_stopped is not None:
+        planned_trip_cycle_stopped = bool(body.cycle_stopped)
+    logger.info("循环计划配置已保存: 轮次=%s, 停止=%s (driver_id=%s)", planned_trip_cycle_rounds, planned_trip_cycle_stopped, driver_id)
+    _save_planned_trip_config_to_db(driver_id)
+    return _planned_trip_response()
 
 
 @app.post("/planned_trip")
-async def add_planned_trip(body: PlannedTripUpdate) -> dict:
-    """新增一条下次计划（找单任务未结束）。"""
-    global planned_trips
+async def add_planned_trip(request: Request, body: PlannedTripUpdate) -> dict:
+    """新增一条循环计划；若未停止循环且未完成数不足轮次，自动追加至轮次数。按 driver_id 落库。"""
+    driver_id = _get_driver_id(request)
+    _load_planned_trip_from_db(driver_id)
+    global planned_trips, planned_trip_cycle_stopped, planned_trip_cycle_rounds
     plan = {
         "origin": body.origin,
         "destination": body.destination,
@@ -961,13 +1349,22 @@ async def add_planned_trip(body: PlannedTripUpdate) -> dict:
     }
     planned_trips.append(plan)
     _sort_planned_trips()
-    logger.info("下次计划+1: %s -> %s, 出发 %s（共 %s 批）", body.origin, body.destination, body.departure_time, len(planned_trips))
-    return {"plans": [_plan_to_dict(p) for p in planned_trips]}
+    logger.info("循环计划+1: %s -> %s, 出发 %s（共 %s 批）", body.origin, body.destination, body.departure_time, len(planned_trips))
+    n = sum(1 for p in planned_trips if not p.get("completed"))
+    while not planned_trip_cycle_stopped and n < planned_trip_cycle_rounds:
+        last_plan = planned_trips[-1]
+        if not _append_next_cycle_plan(last_plan):
+            break
+        n += 1
+    _sync_planned_trip_plans_to_db(driver_id)
+    return _planned_trip_response()
 
 
 @app.put("/planned_trip")
-async def update_planned_trip(body: PlannedTripUpdateWithIndex) -> dict:
-    """更新指定索引的一条下次计划（索引为排序后顺序，0=当前优先找单的一批）。"""
+async def update_planned_trip(request: Request, body: PlannedTripUpdateWithIndex) -> dict:
+    """更新指定索引的一条循环计划（索引为排序后顺序，0=当前优先找单的一批）。按 driver_id 落库。"""
+    driver_id = _get_driver_id(request)
+    _load_planned_trip_from_db(driver_id)
     global planned_trips
     _sort_planned_trips()
     i = body.index
@@ -983,20 +1380,31 @@ async def update_planned_trip(body: PlannedTripUpdateWithIndex) -> dict:
         "completed": planned_trips[i].get("completed", False),
     }
     _sort_planned_trips()
-    logger.info("下次计划[%s]已更新: %s -> %s, 出发 %s", i, body.origin, body.destination, body.departure_time)
-    return {"plans": [_plan_to_dict(p) for p in planned_trips]}
+    logger.info("循环计划[%s]已更新: %s -> %s, 出发 %s", i, body.origin, body.destination, body.departure_time)
+    _sync_planned_trip_plans_to_db(driver_id)
+    return _planned_trip_response()
 
 
 @app.post("/planned_trip/complete")
-async def complete_planned_trip(index: int) -> dict:
-    """结束指定索引的找单任务（计划保留不删，仅标记为已结束找单，探子/调度自动取下一条）。"""
-    global planned_trips
+async def complete_planned_trip(request: Request, index: int) -> dict:
+    """结束指定索引的找单任务；若未停止循环且已配置循环计划，自动追加至轮次数（返程=去的时间+间隔，次日再去）。按 driver_id 落库。"""
+    driver_id = _get_driver_id(request)
+    _load_planned_trip_from_db(driver_id)
+    global planned_trips, planned_trip_cycle_stopped, planned_trip_cycle_rounds
     _sort_planned_trips()
     if index < 0 or index >= len(planned_trips):
         raise HTTPException(status_code=400, detail="index 越界")
-    planned_trips[index]["completed"] = True
-    logger.info("找单任务已结束: 第 %s 批（计划保留），下一批自动接上", index + 1)
-    return {"plans": [_plan_to_dict(p) for p in planned_trips]}
+    completed = planned_trips[index]
+    completed["completed"] = True
+    logger.info("找单任务已结束: 第 %s 批（计划保留）", index + 1)
+    n = sum(1 for p in planned_trips if not p.get("completed"))
+    while not planned_trip_cycle_stopped and n < planned_trip_cycle_rounds:
+        if not _append_next_cycle_plan(completed):
+            break
+        n += 1
+        completed = planned_trips[-1]
+    _sync_planned_trip_plans_to_db(driver_id)
+    return _planned_trip_response()
 
 
 # ---------------------------------------------------------------------------
@@ -1150,8 +1558,12 @@ async def probe_publish_trip(req: dict) -> dict:
     """
     探针用：根据当前状态算出「建议在平台发布的行程」，供探针号在 App 里自动填表发布。
     平台（哈啰/滴滴）可能要求先发布行程才展示该路线的顺路单；探针可轮询此接口并自动填 起点/终点/出发时间 后点发布。
+    请求体可带 driver_id，便于多司机时使用该司机的计划与「停止循环」状态；未带则用内存中的状态。
     返回：origin（建议起点）, destination（建议终点）, depart_time（建议出发时间，可选）。
     """
+    driver_id = (req.get("driver_id") or "").strip() or None
+    if driver_id:
+        _load_planned_trip_from_db(driver_id)
     try:
         state = req.get("current_state") or {}
         driver_loc = (state.get("driver_loc") or "").strip()
@@ -1175,13 +1587,44 @@ async def probe_publish_trip(req: dict) -> dict:
         probe_cancel_trip_requested = False
         logger.info("探针本次请求携带「取消已发布行程」信号")
 
-    def _resp(origin: str, dest: str, depart: str, hint: str) -> dict:
+    def _resp(origin: str, dest: str, depart: str, hint: str, trips: Optional[list] = None) -> dict:
         out = {"origin": origin, "destination": dest, "depart_time": depart, "hint": hint}
+        if trips is not None:
+            out["trips"] = trips
         if cancel_now:
             out["cancel_current_trip"] = True
         return out
 
     if not pickups:
+        global DRIVER_MODE, planned_trips, planned_trip_cycle_stopped
+        if DRIVER_MODE == "mode1":
+            _sort_planned_trips()
+            # 前端「停止循环」后，探子下次请求即会收到无计划，从而停止发布/找单
+            if planned_trip_cycle_stopped:
+                return _resp(
+                    driver_loc, driver_loc, "",
+                    "已停止循环，暂无找单计划；探针可暂停发布与轮询。",
+                    trips=[],
+                )
+            active = [p for p in planned_trips if not p.get("completed")]
+            if active:
+                trips = [
+                    {
+                        "origin": (p.get("origin") or "").strip() or driver_loc,
+                        "destination": (p.get("destination") or "").strip() or driver_loc,
+                        "depart_time": (p.get("departure_time") or "").strip(),
+                        "plan_index": i,
+                    }
+                    for i, p in enumerate(active)
+                ]
+                first = trips[0]
+                return _resp(
+                    first["origin"],
+                    first["destination"],
+                    first["depart_time"],
+                    "多计划同时找单：探针可对每条行程发布或轮询，汇总匹配订单供选择；本次返回第 1 条，trips 含全部未完成计划。",
+                    trips=trips,
+                )
         return _resp(driver_loc, driver_loc, "", "当前无已接单，起点=终点=司机位置；探针可暂不发布或按需填写")
 
     addresses = [driver_loc] + list(pickups) + list(deliveries)
@@ -1268,15 +1711,24 @@ async def order_response(
 async def evaluate_new_order(req: EvaluateRequest) -> dict:
     """
     评估新订单是否值得接：绕路时间 <= 阈值则视为顺路单并推送 Bark。
+    请求体可带 driver_id：多司机时按该司机的模式与参数决定是否推送、用哪档绕路/高收益阈值。
     """
     current = req.current_state
     new_order = req.new_order
+    driver_id = (req.driver_id or "").strip() or None
+    driver_mode = DRIVER_MODE
+    cfg = _get_mode_config()
+    if driver_id:
+        row = _get_driver_mode_from_db(driver_id)
+        if row:
+            driver_mode = row["mode"]
+            cfg = row["config"]
 
-    # ---------- 0. 调度模式 ----------
-    if DRIVER_MODE == "pause":
-        logger.info("当前为停止接单模式，跳过评估")
+    # ---------- 0. 调度模式（按该司机设置） ----------
+    if driver_mode == "pause":
+        logger.info("当前为停止接单模式(driver_id=%s)，跳过评估", driver_id or "default")
         return {"status": "ignored", "reason": "当前为停止接单模式，不评估新单"}
-    if DRIVER_MODE == "mode1":
+    if driver_mode == "mode1":
         logger.info("模式1为出发前规划，单笔评估不适用")
         return {"status": "ignored", "reason": "模式1为出发前找单，请使用规划任务接口筛选并批量优化 2～4 单"}
 
@@ -1302,7 +1754,9 @@ async def evaluate_new_order(req: EvaluateRequest) -> dict:
         )
 
         # ---------- 模式3 专用：预估下一送客点 → 周边时效 + 剩余路线耽误（可串行：每次送客前都按此规则找单） ----------
-        if DRIVER_MODE == "mode3" and len(current.deliveries) >= 1:
+        mode3_max_pickup = int(cfg.get("mode3_max_minutes_to_pickup") or MODE3_MAX_MINUTES_TO_PICKUP)
+        mode3_max_detour = int(cfg.get("mode3_max_detour_minutes") or MODE3_MAX_DETOUR_MINUTES)
+        if driver_mode == "mode3" and len(current.deliveries) >= 1:
             # 根据当前位到各送客点耗时，预估「即将放下客人」的地点（取最近的一个）
             addr_eta = [current.driver_loc] + current.deliveries
             coords_eta = geocode_addresses(addr_eta)
@@ -1317,10 +1771,10 @@ async def evaluate_new_order(req: EvaluateRequest) -> dict:
             # 新单起点须在「预估送客点」周边时效内（不是当前位）
             to_pickup_seconds = get_duration_between(drop_location, new_order.pickup)
             to_pickup_minutes = to_pickup_seconds / 60
-            if to_pickup_minutes > MODE3_MAX_MINUTES_TO_PICKUP:
+            if to_pickup_minutes > mode3_max_pickup:
                 return {
                     "status": "rejected",
-                    "reason": f"新单起点距预估送客点约 {round(to_pickup_minutes, 1)} 分钟，超过设定时效 {MODE3_MAX_MINUTES_TO_PICKUP} 分钟",
+                    "reason": f"新单起点距预估送客点约 {round(to_pickup_minutes, 1)} 分钟，超过设定时效 {mode3_max_pickup} 分钟",
                 }
 
             # 剩余路线：不接 vs 接该单，看耽误是否在「不能耽误太久」内
@@ -1336,10 +1790,10 @@ async def evaluate_new_order(req: EvaluateRequest) -> dict:
                 return {"status": "rejected", "reason": "接入该单后剩余路线无法规划出合理顺序"}
             extra_seconds = new_total - old_total
             extra_minutes = round(extra_seconds / 60, 1)
-            if extra_seconds > MODE3_MAX_DETOUR_MINUTES * 60:
+            if extra_seconds > mode3_max_detour * 60:
                 return {
                     "status": "rejected",
-                    "reason": f"接该单会使剩余路线多绕约 {extra_minutes} 分钟，超过允许 {MODE3_MAX_DETOUR_MINUTES} 分钟（不能耽误太久）",
+                    "reason": f"接该单会使剩余路线多绕约 {extra_minutes} 分钟，超过允许 {mode3_max_detour} 分钟（不能耽误太久）",
                 }
 
             pushed_orders_cache[fingerprint] = now
@@ -1385,35 +1839,38 @@ async def evaluate_new_order(req: EvaluateRequest) -> dict:
         extra_time_minutes = round(extra_time_seconds / 60, 1)
 
         # 模式3 且当前没有待送客：按「当前位→新单起点」时效卡
-        if DRIVER_MODE == "mode3" and len(current.deliveries) == 0:
+        if driver_mode == "mode3" and len(current.deliveries) == 0:
             to_pickup_seconds = get_duration_between(current.driver_loc, new_order.pickup)
-            if to_pickup_seconds > MODE3_MAX_MINUTES_TO_PICKUP * 60:
+            if to_pickup_seconds > mode3_max_pickup * 60:
                 return {
                     "status": "rejected",
-                    "reason": f"新单起点距当前位置约 {round(to_pickup_seconds/60, 1)} 分钟，超过设定时效 {MODE3_MAX_MINUTES_TO_PICKUP} 分钟",
+                    "reason": f"新单起点距当前位置约 {round(to_pickup_seconds/60, 1)} 分钟，超过设定时效 {mode3_max_pickup} 分钟",
                 }
 
-        # 模式2：规定耽误时间内可接；超过 detour_min 只在高收益时放宽到 detour_max
-        if DRIVER_MODE == "mode2":
-            detour_max_seconds = MODE2_DETOUR_MINUTES_MAX * 60
-            detour_min_seconds = MODE2_DETOUR_MINUTES_MIN * 60
+        # 模式2：规定耽误时间内可接；超过 detour_min 只在高收益时放宽到 detour_max（按该司机配置）
+        mode2_detour_min = int(cfg.get("mode2_detour_min") or MODE2_DETOUR_MINUTES_MIN)
+        mode2_detour_max = int(cfg.get("mode2_detour_max") or MODE2_DETOUR_MINUTES_MAX)
+        mode2_profit = float(cfg.get("mode2_high_profit_threshold") or MODE2_HIGH_PROFIT_THRESHOLD)
+        if driver_mode == "mode2":
+            detour_max_seconds = mode2_detour_max * 60
+            detour_min_seconds = mode2_detour_min * 60
             if extra_time_seconds > detour_max_seconds:
                 return {
                     "status": "rejected",
-                    "reason": f"绕路将增加 {extra_time_minutes} 分钟，超过最大允许 {MODE2_DETOUR_MINUTES_MAX} 分钟",
+                    "reason": f"绕路将增加 {extra_time_minutes} 分钟，超过最大允许 {mode2_detour_max} 分钟",
                 }
             if extra_time_seconds > detour_min_seconds:
                 try:
                     price_val = float(new_order.price)
                 except (TypeError, ValueError):
                     price_val = 0
-                if price_val < MODE2_HIGH_PROFIT_THRESHOLD:
+                if price_val < mode2_profit:
                     return {
                         "status": "rejected",
-                        "reason": f"绕路 {extra_time_minutes} 分钟超过轻松接单范围（{MODE2_DETOUR_MINUTES_MIN} 分钟），且收益未达高收益门槛（{MODE2_HIGH_PROFIT_THRESHOLD} 元）",
+                        "reason": f"绕路 {extra_time_minutes} 分钟超过轻松接单范围（{mode2_detour_min} 分钟），且收益未达高收益门槛（{mode2_profit} 元）",
                     }
         # 其他模式兜底：按固定 15 分钟绕路阈值
-        if DRIVER_MODE not in ("mode2", "mode3") and extra_time_seconds > MAX_DETOUR_SECONDS:
+        if driver_mode not in ("mode2", "mode3") and extra_time_seconds > MAX_DETOUR_SECONDS:
             return {
                 "status": "rejected",
                 "reason": f"绕路太远，将增加 {extra_time_minutes} 分钟，已放弃该单",

@@ -632,10 +632,11 @@
   document.getElementById("btnContinueMatch").onclick = function () {
     var base = C.getApiBase();
     if (base) {
-      fetch(base + "/driver_mode").then(function (r) { return r.json(); }).then(function (d) {
+      var dq = C.getDriverId() ? "?driver_id=" + encodeURIComponent(C.getDriverId()) : "";
+      fetch(base + "/driver_mode" + dq).then(function (r) { return r.json(); }).then(function (d) {
         var mode = d.mode || "mode2";
         if (mode === "pause") {
-          fetch(base + "/driver_mode", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "mode2" }) }).then(refreshMode);
+          fetch(base + "/driver_mode" + dq, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "mode2" }) }).then(refreshMode);
         }
       });
     }

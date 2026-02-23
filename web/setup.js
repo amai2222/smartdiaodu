@@ -16,10 +16,17 @@
     if (el) el.textContent = msg || "";
   }
 
+  /** 请求司机相关 API 时携带当前司机 ID（query），便于后端按司机落库 */
+  function driverQuery(sep) {
+    var did = C.getDriverId && C.getDriverId();
+    if (!did) return "";
+    return (sep === "&" ? "&" : "?") + "driver_id=" + encodeURIComponent(did);
+  }
+
   function refreshMode() {
     var base = C.getApiBase();
     if (!base) return;
-    fetch(base + "/driver_mode").then(function (r) { return r.json(); }).then(function (d) {
+    fetch(base + "/driver_mode" + driverQuery()).then(function (r) { return r.json(); }).then(function (d) {
       var mode = d.mode || "mode2";
       document.querySelectorAll(".mode-btn").forEach(function (btn) {
         btn.classList.remove("border-accent", "bg-accent/20");
@@ -53,19 +60,101 @@
   function openMode1Modal() {
     var base = C.getApiBase();
     if (!base) return;
-    fetch(base + "/driver_mode", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "mode1" }) })
+    fetch(base + "/driver_mode" + driverQuery(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "mode1" }) })
       .then(function () { refreshMode(); });
-    openModal("下次计划",
+    openModal("循环计划",
+      "<div class=\"mb-4 p-4 rounded-xl bg-[#0c0c0f] border border-border\">" +
+      "<p class=\"text-muted text-sm font-medium mb-3\">循环设置（返程 = 去的时间 + 间隔，次日再去）</p>" +
+      "<label class=\"block text-muted text-xs mb-1\">首次起点</label>" +
+      "<input type=\"text\" id=\"cycleOrigin\" class=\"w-full bg-panel border border-border rounded-lg px-3 py-2 text-console mb-2\" placeholder=\"如东\" />" +
+      "<label class=\"block text-muted text-xs mb-1\">首次终点</label>" +
+      "<input type=\"text\" id=\"cycleDestination\" class=\"w-full bg-panel border border-border rounded-lg px-3 py-2 text-console mb-2\" placeholder=\"上海\" />" +
+      "<label class=\"block text-muted text-xs mb-1\">出发时间（带日期）</label>" +
+      "<input type=\"text\" id=\"cycleDepartureTime\" class=\"w-full bg-panel border border-border rounded-lg px-3 py-2 text-console mb-2\" placeholder=\"2025-02-22 06:00\" />" +
+      "<label class=\"block text-muted text-xs mb-1\">循环间隔（小时）</label>" +
+      "<input type=\"number\" id=\"cycleIntervalHours\" min=\"1\" max=\"24\" class=\"w-full bg-panel border border-border rounded-lg px-3 py-2 text-console mb-2\" placeholder=\"12\" />" +
+      "<label class=\"block text-muted text-xs mb-1\">找单轮次（默认2=当天回程+次日去程）</label>" +
+      "<input type=\"number\" id=\"cycleRounds\" min=\"1\" max=\"10\" class=\"w-full bg-panel border border-border rounded-lg px-3 py-2 text-console mb-3\" placeholder=\"2\" />" +
+      "<button type=\"button\" id=\"btnSaveCycleConfig\" class=\"w-full py-2 rounded-xl bg-accent text-white text-sm font-medium mb-2\">保存循环设置</button>" +
+      "<button type=\"button\" id=\"btnCycleStopToggle\" class=\"w-full py-2 rounded-xl border border-border text-muted text-sm font-medium\">停止循环</button>" +
+      "</div>" +
+      "<p class=\"text-muted text-sm font-medium mb-2\">已生成批次</p>" +
       "<div id=\"planList\" class=\"space-y-4 mb-4\"></div>" +
       "<button type=\"button\" id=\"btnAddPlan\" class=\"w-full py-3 rounded-xl border border-dashed border-border text-muted font-medium mb-3\">＋ 添加下一批计划</button>" +
-      "<p class=\"text-sm text-muted\">按时间排序，优先第 1 批找单。计划不删；当前批跑完后点「结束找单」即可进入下一批。</p>");
-    loadPlannedTrip();
+      "<p class=\"text-sm text-muted\">点「结束找单」后会自动按循环设置追加下一批（返程=去的时间+间隔，次日再去）。</p>");
+    fetch(base + "/planned_trip" + driverQuery()).then(function (r) { return r.json(); }).then(function (d) {
+      var cc = d.cycle_config || {};
+      var o = document.getElementById("cycleOrigin");
+      var dest = document.getElementById("cycleDestination");
+      var t = document.getElementById("cycleDepartureTime");
+      var h = document.getElementById("cycleIntervalHours");
+      var roundsEl = document.getElementById("cycleRounds");
+      var stopBtn = document.getElementById("btnCycleStopToggle");
+      if (o) o.value = cc.cycle_origin || "";
+      if (dest) dest.value = cc.cycle_destination || "";
+      if (t) {
+        var v = (cc.cycle_departure_time || "").trim();
+        if (!v || /^\d{1,2}:\d{2}/.test(v) && v.length <= 8) {
+          var d = new Date();
+          v = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " " + (v || "06:00").replace(/^(\d{1,2}):(\d{2}).*/, "$1:$2");
+        }
+        t.value = v;
+      }
+      if (h) h.value = cc.cycle_interval_hours != null ? cc.cycle_interval_hours : 12;
+      if (roundsEl) roundsEl.value = cc.cycle_rounds != null ? cc.cycle_rounds : 2;
+      if (stopBtn) stopBtn.textContent = cc.cycle_stopped ? "开启循环" : "停止循环";
+      loadPlannedTripFromData(d);
+    });
+    var btnSaveCycleConfig = document.getElementById("btnSaveCycleConfig");
+    if (btnSaveCycleConfig) {
+      btnSaveCycleConfig.onclick = function () {
+        var body = {
+          cycle_origin: (document.getElementById("cycleOrigin") && document.getElementById("cycleOrigin").value) || "",
+          cycle_destination: (document.getElementById("cycleDestination") && document.getElementById("cycleDestination").value) || "",
+          cycle_departure_time: (function () {
+            var el = document.getElementById("cycleDepartureTime");
+            var v = (el && el.value) ? el.value.trim() : "";
+            if (!v) {
+              var d = new Date();
+              v = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " 06:00";
+            }
+            return v;
+          })(),
+          cycle_interval_hours: parseInt(document.getElementById("cycleIntervalHours") && document.getElementById("cycleIntervalHours").value, 10) || 12,
+          cycle_rounds: parseInt(document.getElementById("cycleRounds") && document.getElementById("cycleRounds").value, 10) || 2
+        };
+        fetch(base + "/planned_trip/config" + driverQuery(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+          .then(function () { status("循环设置已保存"); });
+      };
+    }
+    var btnCycleStopToggle = document.getElementById("btnCycleStopToggle");
+    if (btnCycleStopToggle) {
+      btnCycleStopToggle.onclick = function () {
+        fetch(base + "/planned_trip" + driverQuery()).then(function (r) { return r.json(); }).then(function (d) {
+          var stopped = !!(d.cycle_config && d.cycle_config.cycle_stopped);
+          return fetch(base + "/planned_trip/config" + driverQuery(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cycle_stopped: !stopped }) });
+        }).then(function () { return fetch(base + "/planned_trip" + driverQuery()); }).then(function (r) { return r.json(); }).then(function (d) {
+          var cc = d.cycle_config || {};
+          var stopBtn = document.getElementById("btnCycleStopToggle");
+          if (stopBtn) stopBtn.textContent = cc.cycle_stopped ? "开启循环" : "停止循环";
+          status(cc.cycle_stopped ? "已停止循环，不再自动生成计划" : "已开启循环，结束找单后将自动追加计划");
+        });
+      };
+    }
     var btnAddPlan = document.getElementById("btnAddPlan");
     if (btnAddPlan) {
       btnAddPlan.onclick = function () {
-        var body = { origin: "如东荣生花苑", destination: "上海", departure_time: "06:00", time_window_minutes: 30, min_orders: 2, max_orders: 4 };
-        fetch(base + "/planned_trip", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-          .then(function () { status("已添加一批，请填写时间与地点后保存"); loadPlannedTrip(); });
+        var origin = (document.getElementById("cycleOrigin") && document.getElementById("cycleOrigin").value) || "如东";
+        var dest = (document.getElementById("cycleDestination") && document.getElementById("cycleDestination").value) || "上海";
+        var depEl = document.getElementById("cycleDepartureTime");
+        var dep = (depEl && depEl.value) ? depEl.value.trim() : "";
+        if (!dep) {
+          var d = new Date();
+          dep = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " 06:00";
+        }
+        var body = { origin: origin, destination: dest, departure_time: dep, time_window_minutes: 30, min_orders: 2, max_orders: 4 };
+        fetch(base + "/planned_trip" + driverQuery(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+          .then(function () { status("已添加一批，可修改后保存；结束找单后将自动追加下一批"); loadPlannedTrip(); });
       };
     }
   }
@@ -87,7 +176,7 @@
       "<button type=\"button\" id=\"profitPlus\" class=\"btn-touch w-12 h-12 rounded-xl bg-[#0c0c0f] border border-border text-xl font-bold hover:bg-border\">+</button>" +
       "</div>" +
       "<button type=\"button\" id=\"mode2Confirm\" class=\"w-full py-3 rounded-xl bg-accent text-white font-medium\">使用此模式</button>");
-    fetch(base + "/driver_mode_config").then(function (r) { return r.json(); }).then(function (c) {
+    fetch(base + "/driver_mode_config" + driverQuery()).then(function (r) { return r.json(); }).then(function (c) {
       var dv = document.getElementById("detourVal");
       var pv = document.getElementById("profitVal");
       if (dv) dv.textContent = c.mode2_detour_max != null ? c.mode2_detour_max : 15;
@@ -116,7 +205,7 @@
       saveProfit(v);
     };
     document.getElementById("mode2Confirm").onclick = function () {
-      fetch(base + "/driver_mode", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "mode2" }) })
+      fetch(base + "/driver_mode" + driverQuery(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "mode2" }) })
         .then(function () { refreshMode(); closeModal(); status("已切换为半路吸尘器"); });
     };
   }
@@ -128,7 +217,7 @@
       "<p class=\"text-muted text-sm mb-4\">送完本单后，在目的地附近继续接单。</p>" +
       "<button type=\"button\" id=\"mode3Confirm\" class=\"w-full py-3 rounded-xl bg-accent text-white font-medium\">使用此模式</button>");
     document.getElementById("mode3Confirm").onclick = function () {
-      fetch(base + "/driver_mode", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "mode3" }) })
+      fetch(base + "/driver_mode" + driverQuery(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "mode3" }) })
         .then(function () { refreshMode(); closeModal(); status("已切换为附近接力"); });
     };
   }
@@ -140,20 +229,17 @@
       "<p class=\"text-muted text-sm mb-4\">暂停接单，不再推送新订单。</p>" +
       "<button type=\"button\" id=\"pauseConfirm\" class=\"w-full py-3 rounded-xl bg-accent text-white font-medium\">确定</button>");
     document.getElementById("pauseConfirm").onclick = function () {
-      fetch(base + "/driver_mode", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "pause" }) })
+      fetch(base + "/driver_mode" + driverQuery(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "pause" }) })
         .then(function () { refreshMode(); closeModal(); status("已停止接单"); });
     };
   }
 
-  function loadPlannedTrip() {
-    var base = C.getApiBase();
-    if (!base) return;
-    fetch(base + "/planned_trip").then(function (r) { return r.json(); }).then(function (d) {
-      var plans = d.plans || [];
-      var list = document.getElementById("planList");
-      if (!list) return;
-      list.innerHTML = "";
-      plans.forEach(function (p, idx) {
+  function loadPlannedTripFromData(d) {
+    var plans = (d && d.plans) ? d.plans : [];
+    var list = document.getElementById("planList");
+    if (!list) return;
+    list.innerHTML = "";
+    plans.forEach(function (p, idx) {
         var completed = p.completed === true;
         var card = document.createElement("div");
         card.className = "p-4 rounded-xl bg-panel border border-border" + (completed ? " opacity-75" : "");
@@ -178,6 +264,13 @@
         }
         list.appendChild(card);
       });
+  }
+
+  function loadPlannedTrip() {
+    var base = C.getApiBase();
+    if (!base) return;
+    fetch(base + "/planned_trip" + driverQuery()).then(function (r) { return r.json(); }).then(function (d) {
+      loadPlannedTripFromData(d);
     });
   }
 
@@ -185,7 +278,7 @@
     var base = C.getApiBase();
     if (!base) return;
     if (!confirm("本批找单任务结束？计划保留，下一批将自动接上。")) return;
-    fetch(base + "/planned_trip/complete?index=" + idx, { method: "POST" })
+    fetch(base + "/planned_trip/complete?index=" + idx + driverQuery("&"), { method: "POST" })
       .then(function () { status("已结束找单，下一批接上"); loadPlannedTrip(); });
   }
 
@@ -203,14 +296,14 @@
       min_orders: 2,
       max_orders: 4
     };
-    fetch(base + "/planned_trip", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    fetch(base + "/planned_trip" + driverQuery(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(function () { status("第 " + (idx + 1) + " 批计划已保存"); loadPlannedTrip(); });
   }
 
   function loadConfig() {
     var base = C.getApiBase();
     if (!base) return;
-    fetch(base + "/driver_mode_config").then(function (r) { return r.json(); }).then(function (c) {
+    fetch(base + "/driver_mode_config" + driverQuery()).then(function (r) { return r.json(); }).then(function (c) {
       var dv = document.getElementById("detourVal");
       var pv = document.getElementById("profitVal");
       if (dv) dv.textContent = c.mode2_detour_max != null ? c.mode2_detour_max : 15;
@@ -221,13 +314,13 @@
   function saveDetour(v) {
     var base = C.getApiBase();
     if (!base) return;
-    fetch(base + "/driver_mode_config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode2_detour_max: v }) });
+    fetch(base + "/driver_mode_config" + driverQuery(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode2_detour_max: v }) });
   }
 
   function saveProfit(v) {
     var base = C.getApiBase();
     if (!base) return;
-    fetch(base + "/driver_mode_config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode2_high_profit_threshold: v }) });
+    fetch(base + "/driver_mode_config" + driverQuery(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode2_high_profit_threshold: v }) });
   }
 
   function runClearWaypointsAndPlan() {

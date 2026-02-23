@@ -1,7 +1,10 @@
 import requests
 import time
 
-BRAIN_URL = "http://127.0.0.1:8000/evaluate_new_order"
+# 与 tanzi.py 一致，指向同一大脑；本地调试可改为 http://127.0.0.1:8000/evaluate_new_order
+BRAIN_URL = "https://xg.325218.xyz/api/evaluate_new_order"
+# 当前司机 UUID，后端按此决定是否推送（与 seed 一致）
+DRIVER_ID = "a0000001-0000-4000-8000-000000000001"
 
 current_state = {
     "driver_loc": "如东县委党校",
@@ -29,7 +32,9 @@ for i, order in enumerate(mock_orders):
         "current_state": current_state,
         "new_order": order
     }
-    
+    if DRIVER_ID and str(DRIVER_ID).strip():
+        payload["driver_id"] = str(DRIVER_ID).strip()
+
     try:
         response = requests.post(BRAIN_URL, json=payload)
         decision = response.json()

@@ -27,12 +27,22 @@ function humanDelay(minMs, maxMs) {
   sleep(minMs + Math.random() * (maxMs - minMs));
 }
 
+// 多计划（mode1）时轮换发布：第 1 次轮询发第 1 条，第 2 次发第 2 条…循环，汇总各路线订单供选择
+var _tripsRotationIndex = 0;
+
 function getPublishTrip() {
   var base = CONFIG.API_BASE.replace(/\/$/, "");
   var res = http.postJson(base + "/probe_publish_trip", { current_state: CONFIG.CURRENT_STATE }, { timeout: 8000 });
   if (res && res.statusCode === 200) {
     var body = res.body;
     if (typeof body === "string") body = JSON.parse(body);
+    var trips = body.trips;
+    if (Array.isArray(trips) && trips.length > 0) {
+      var idx = _tripsRotationIndex % trips.length;
+      _tripsRotationIndex += 1;
+      var t = trips[idx];
+      return { origin: t.origin, destination: t.destination, depart_time: t.depart_time || "", cancel_current_trip: body.cancel_current_trip, hint: body.hint };
+    }
     return body;
   }
   return null;
@@ -85,7 +95,7 @@ function fillAndPublish(origin, dest, departTime) {
 }
 
 function main() {
-  log("探针·发布行程 已启动，每 " + (CONFIG.POLL_INTERVAL_MS / 1000) + " 秒拉取；接单后将自动取消已发布行程");
+  log("探针·发布行程 已启动，每 " + (CONFIG.POLL_INTERVAL_MS / 1000) + " 秒拉取；多计划时轮换发布各条行程，接单后自动取消");
   while (true) {
     var trip = getPublishTrip();
     if (!trip) { sleep(CONFIG.POLL_INTERVAL_MS); continue; }

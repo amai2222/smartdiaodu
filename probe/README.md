@@ -24,7 +24,7 @@
 
 - **技术**：在**电脑**上运行 Python 脚本，手机通过 USB 或网络 ADB 连接，使用 **UIAutomator2** 通过底层 atx-agent 获取界面树并读控件。
 - **原理**：不开启手机系统里的「无障碍」，App 无法通过「辅助功能已开启」检测到你；点击/滑动由 PC 经 ADB 下发，更易做拟人化延迟。
-- **本目录**：`uiautomator2_capture.py`（抓单）、`uiautomator2_publish_trip.py`（发布/取消行程），已带随机延迟与间隔抖动。
+- **本目录**：`tanzi.py`（抓单，原 uiautomator2_capture.py）、`uiautomator2_publish_trip.py`（发布/取消行程），已带随机延迟与间隔抖动。
 - **前提**：`pip install uiautomator2 requests`，手机开 USB 调试并 `python -m uiautomator2 init`；用 weditor 查大厅/发布页控件并改选择器。
 
 ### 方案 A'：手机端 AutoX.js（需隐藏应用 + 拟人化）
@@ -57,11 +57,11 @@
 
 ## 四、本目录脚本说明
 
-### 1. Python UIAutomator2：`uiautomator2_capture.py`（推荐）
+### 1. Python UIAutomator2：`tanzi.py`（推荐）
 
 - **运行位置**：**PC**，手机 USB 或 adb over WiFi。
 - **特点**：不依赖手机无障碍，风控更小；已带 `human_delay` 与循环间隔抖动。
-- **步骤**：安装 uiautomator2、requests，用 weditor 确认大厅控件，改 SELECTOR_* 与 API_BASE、CURRENT_STATE，在 PC 运行脚本。
+- **步骤**：安装 uiautomator2、requests，用 weditor 确认大厅控件，改 SELECTOR_* 与 CURRENT_STATE（API_BASE、DRIVER_ID 已按项目 config 设好），在 PC 运行 `python tanzi.py`。
 
 ### 2. Python UIAutomator2：`uiautomator2_publish_trip.py`
 
@@ -78,7 +78,7 @@
   3. 打开 `autox_capture.js`，修改顶部 `CONFIG.API_BASE` 和 `CONFIG.CURRENT_STATE`，把 `SELECTORS` 改成你实际抓到的选择器。
   4. 前台打开顺风车大厅列表，运行脚本；脚本会循环抓取当前屏订单并 POST 到大脑 `/evaluate_new_order`。
 
-### 2. Python UIAutomator2：`uiautomator2_capture.py`
+### 2. Python UIAutomator2：`tanzi.py`
 
 - **运行位置**：**PC**，手机通过 USB 或 adb over WiFi 连接。
 - **适合**：开发调试、用 `weditor` 查控件结构。
@@ -86,7 +86,7 @@
   1. `pip install uiautomator2 requests`，手机开启 USB 调试，执行 `python -m uiautomator2 init`。
   2. 用 `weditor` 打开顺风车大厅页，确认起点/终点/价格控件的 `resourceId` 或文本特征。
   3. 修改脚本里 `SELECTOR_PICKUP` / `SELECTOR_DELIVERY` / `SELECTOR_PRICE` 和 `API_BASE`、`CURRENT_STATE`。
-  4. 在 PC 上运行 `python uiautomator2_capture.py`，保持大厅在前台。
+  4. 在 PC 上运行 `python tanzi.py`，保持大厅在前台。
 
 两种脚本都是：**从当前界面提取一条订单 → 组装 `current_state` + `new_order` → POST 到大脑 `POST /evaluate_new_order`**。  
 若你后续改为「先写入 Supabase 订单池再由后端统一匹配」，只需把上报地址改为后端的「订单接入」接口即可。
@@ -94,7 +94,7 @@
 ### 4. 自动发布行程：`uiautomator2_publish_trip.py`（推荐）/ `autox_publish_trip.js`
 
 - **用途**：模式2 下从「第一个客人下车点」找顺路单时，部分平台可能要求**先发布行程**才展示匹配订单；探针自动填起点/终点/时间并发布，接单后自动取消已发布行程。
-- **Python 版**（`uiautomator2_publish_trip.py`）：在 **PC** 运行，不依赖无障碍，已带拟人化延迟；轮询 `POST /probe_publish_trip`，收到 `cancel_current_trip` 时在 App 内执行取消。
+- **Python 版**（`uiautomator2_publish_trip.py`）：在 **PC** 运行，不依赖无障碍，已带拟人化延迟；轮询 `POST /probe_publish_trip`，收到 `cancel_current_trip` 时在 App 内执行取消。**模式1 多计划**：若大脑返回 `trips` 数组，脚本会轮换发布每条行程，汇总多路线订单供选择。
 - **AutoX 版**（`autox_publish_trip.js`）：在手机运行时建议配合 **HideMyApplist** 并加随机 sleep。
 - **接单后取消**：大脑在用户点「接单」后置位，探针下次轮询拿到 `cancel_current_trip: true`，进入「我的行程/已发布」点取消。需按实际 App 改选择器。
 - **是否必须**：取决于平台；若不发布就看不到顺路单再启用。

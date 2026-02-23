@@ -21,6 +21,8 @@ const CONFIG = {
   API_BASE: "https://api.yourdomain.com",
   // 单次抓取间隔（毫秒），建议 800~2000，太频繁容易被风控
   LOOP_INTERVAL_MS: 1200,
+  // 当前司机 UUID（多司机时必填，后端按此决定是否推送、用谁的绕路/高收益阈值）
+  DRIVER_ID: "",
   // 当前司机状态（用于 /evaluate_new_order）。若后端按 driver_id 从 Supabase 读可留空，由后端补全
   CURRENT_STATE: {
     driver_loc: "如东县委党校",
@@ -77,6 +79,9 @@ function reportToBrain(order) {
     current_state: CONFIG.CURRENT_STATE,
     new_order: order
   };
+  if (CONFIG.DRIVER_ID && String(CONFIG.DRIVER_ID).trim()) {
+    body.driver_id = String(CONFIG.DRIVER_ID).trim();
+  }
   try {
     const res = http.postJson(url, body, { timeout: 8000 });
     if (res && res.statusCode === 200) {

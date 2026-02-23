@@ -32,11 +32,13 @@ import requests
 import uiautomator2 as u2
 
 # --------------------------------------------
-# 配置
+# 配置（与 web/config.js / app_config 保持一致）
 # --------------------------------------------
-API_BASE = "https://api.yourdomain.com"  # 结尾不要 /
+API_BASE = "https://xg.325218.xyz/api"  # 大脑 API，结尾不要 /
 LOOP_INTERVAL_SEC = 1.2
-# 当前司机状态（若后端从 Supabase 按 driver_id 读可留空，由后端补全）
+# 当前司机 UUID，后端按此决定是否推送、用谁的绕路/高收益阈值（与 seed 一致）
+DRIVER_ID = "a0000001-0000-4000-8000-000000000001"
+# 当前司机状态（起点、已接单的上下车点，用于评估是否顺路）
 CURRENT_STATE = {
     "driver_loc": "如东县委党校",
     "pickups": ["如东县掘港镇荣生豪景花苑2号楼"],
@@ -81,12 +83,14 @@ def extract_one_order(d: u2.Device) -> Optional[dict]:
 
 
 def report_to_brain(order: dict) -> dict | None:
-    """POST 到大脑 /evaluate_new_order。"""
+    """POST 到大脑 /evaluate_new_order。带 driver_id 时后端按该司机设置决定是否推送。"""
     url = f"{API_BASE.rstrip('/')}/evaluate_new_order"
     payload = {
         "current_state": CURRENT_STATE,
         "new_order": order,
     }
+    if DRIVER_ID and str(DRIVER_ID).strip():
+        payload["driver_id"] = str(DRIVER_ID).strip()
     try:
         r = requests.post(url, json=payload, timeout=8)
         if r.status_code == 200:
