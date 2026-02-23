@@ -46,7 +46,14 @@
     return (typeof localStorage !== "undefined" ? localStorage.getItem(M.STORAGE_SUPABASE_ANON) : "") ||
       (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseAnonKey) || "";
   };
-  M.getDriverId = function () { return M.cachedAppConfig.driver_id || M.DEFAULT_DRIVER_ID; };
+  /** 与首页一致：优先用登录绑定司机（localStorage），再 app_config，再默认。这样地图与首页用同一司机，路线/订单一致。 */
+  M.getDriverId = function () {
+    try {
+      var fromStorage = typeof localStorage !== "undefined" && localStorage.getItem(M.STORAGE_DRIVER_ID);
+      if (fromStorage && String(fromStorage).trim()) return String(fromStorage).trim();
+    } catch (e) {}
+    return M.cachedAppConfig.driver_id || M.DEFAULT_DRIVER_ID;
+  };
   M._supabaseClient = null;
   M._supabaseClientUrl = "";
   M._supabaseClientAnon = "";
