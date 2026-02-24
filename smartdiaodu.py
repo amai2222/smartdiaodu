@@ -81,8 +81,8 @@ probe_cancel_trip_requested: bool = False
 # 仅从环境变量读取：连接数据库与登录签发（可在项目根 .env 中配置，勿提交 .env）
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip() or "https://zqcctbcwibnqmumtqweu.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or ""
-# 邮箱登录后 /auth/exchange 验证 Supabase token 用；优先读环境变量，无则用下方默认（生产环境请用 .env 覆盖，勿提交含真实密钥）
-SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "").strip() or "R/hKjn3YPRT1ILfzNkskgnfYm8//x07pp5v0PNmutX66ByFCp/x/Rq8nC1M6t+txs8A8Nykh4hrk/RKE/3eFoQ=="
+# 可选：若用本地解码 Supabase JWT 才需要；当前 /auth/exchange 已改为调 Supabase Auth 接口校验，可不配
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "").strip()
 JWT_SECRET = os.environ.get("JWT_SECRET", "").strip() or "smartdiaodu_jwt_change_me"
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_SECONDS = 7 * 24 * 3600
@@ -446,19 +446,25 @@ def _get_user_by_email(email: str) -> Optional[dict]:
         return None
 
 
-def _decode_supabase_token(access_token: str) -> Optional[str]:
-    """用 Supabase 项目 JWT 密钥解码 access_token，返回 email，失败返回 None。"""
-    if not SUPABASE_JWT_SECRET or not access_token:
+def _get_supabase_user_email_by_token(access_token: str) -> Optional[str]:
+    """调 Supabase Auth 接口校验 token 并取邮箱，不依赖本地 JWT Secret。"""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not access_token:
         return None
+    url = f"{SUPABASE_URL.rstrip('/')}/auth/v1/user"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {access_token.strip()}",
+        "Content-Type": "application/json",
+    }
     try:
-        payload = jwt.decode(
-            access_token,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            options={"verify_aud": False, "verify_iss": False},
-        )
-        return (payload.get("email") or "").strip().lower() or None
-    except Exception:
+        resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        email = (data.get("email") or "").strip().lower() or None
+        return email
+    except Exception as e:
+        logger.warning("Supabase Auth 校验 token 失败: %s", e)
         return None
 
 
@@ -546,22 +552,17 @@ async def auth_me(credentials: Optional[HTTPAuthorizationCredentials] = Depends(
 async def auth_exchange(body: AuthExchangeRequest) -> dict:
     """
     邮箱登录后：用 Supabase 的 access_token 换我们大脑的 JWT。
-    需配置 SUPABASE_JWT_SECRET（Supabase 项目设置 -> API -> JWT Secret）；
+    通过调用 Supabase Auth 接口校验 token 并取邮箱，无需配置 JWT Secret；
     app_users 表需有 email 列且该邮箱已关联到某用户（如 admin@test.com -> admin）。
     返回 token、username、driver_id，前端存为 token_source=backend 后 /auth/me 与地图等均可用。
     """
     if not body.access_token or not body.access_token.strip():
         raise HTTPException(status_code=401, detail="未提供 access_token")
-    if not SUPABASE_JWT_SECRET:
-        raise HTTPException(
-            status_code=503,
-            detail="服务器未配置 SUPABASE_JWT_SECRET，无法验证邮箱登录。请在 Supabase 控制台 -> 项目设置 -> API 中复制 JWT Secret，配置到大脑后端环境变量；或暂时使用「用户名登录」。",
-        )
-    email = _decode_supabase_token(body.access_token.strip())
+    email = _get_supabase_user_email_by_token(body.access_token.strip())
     if not email:
         raise HTTPException(
             status_code=401,
-            detail="Supabase 凭证无效或已过期（请确认后端 SUPABASE_JWT_SECRET 与 Supabase 项目 JWT Secret 一致）",
+            detail="Supabase 凭证无效或已过期（请确认 SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY 正确，且该邮箱已在 Supabase Auth 中注册）",
         )
     user = _get_user_by_email(email)
     if not user:

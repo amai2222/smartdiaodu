@@ -100,7 +100,7 @@
               try { localStorage.setItem(STORAGE_TOKEN_SOURCE, "supabase"); } catch (e) {}
               C.loadAppConfig(callback);
             } else {
-              clearTokenAndRedirect(loginUrl);
+              C.loadAppConfig(callback);
             }
           })
           .catch(function () {

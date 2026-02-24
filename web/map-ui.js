@@ -102,9 +102,10 @@
     var tacticsMap = { "DEFAULT": 0, "LEAST_TIME": 13, "LEAST_DISTANCE": 12, "AVOID_CONGESTION": 5, "LEAST_FEE": 6, "AVOID_HIGHWAY": 3 };
     var currentTactics = tacticsMap[M.routePolicyKey || "DEFAULT"] || 0;
     if (statusEl) statusEl.textContent = "同步路线中…";
+    var headers = Object.assign({ "Content-Type": "application/json" }, (M.getAuthHeaders && M.getAuthHeaders()) || {});
     fetch(base + "/current_route_preview", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: headers,
       body: JSON.stringify({ current_state: state, tactics: currentTactics })
     })
     .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); }); return r.json(); })
@@ -151,9 +152,10 @@
       };
       var currentTactics = tacticsMap[M.routePolicyKey || "DEFAULT"] || 0;
       statusEl.textContent = "规划路线中…";
+      var headers = Object.assign({ "Content-Type": "application/json" }, (M.getAuthHeaders && M.getAuthHeaders()) || {});
       fetch(base + "/current_route_preview", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: headers,
         body: JSON.stringify({ current_state: state, tactics: currentTactics })
       })
       .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); }); return r.json(); })

@@ -30,8 +30,10 @@
       if (r.data && Array.isArray(r.data)) {
         r.data.forEach(function (row) {
           var k = row.key, v = (row.value || "").trim();
-          if (k === "api_base") C.cachedAppConfig.api_base = v.replace(/\/$/, "");
-          else if (k === "driver_id") C.cachedAppConfig.driver_id = v;
+          if (k === "api_base") {
+            C.cachedAppConfig.api_base = v.replace(/\/$/, "");
+            try { localStorage.setItem(C.STORAGE_API, C.cachedAppConfig.api_base); } catch (e) {}
+          } else if (k === "driver_id") C.cachedAppConfig.driver_id = v;
         });
       }
       var base = C.cachedAppConfig.api_base;
@@ -80,12 +82,17 @@
     var url = C.getSupabaseUrl(), anon = C.getSupabaseAnon();
     if (!url || !anon) { if (cb) cb(); return; }
     var script = document.createElement("script");
-    script.src = "https://unpkg.com/@supabase/supabase-js@2";
+    script.src = "vendor/supabase.js";
     script.onload = function () { if (cb) cb(); };
     script.onerror = function () { if (cb) cb(); };
     document.head.appendChild(script);
   };
-  C.getApiBase = function () { return C.cachedAppConfig.api_base || ""; };
+  C.getApiBase = function () {
+    var v = C.cachedAppConfig.api_base || "";
+    if (v) return v;
+    try { v = localStorage.getItem(C.STORAGE_API); if (v && String(v).trim()) return String(v).trim().replace(/\/$/, ""); } catch (e) {}
+    return "";
+  };
   C.getSupabaseUrl = function () {
     try {
       var v = (typeof localStorage !== "undefined" && localStorage.getItem(C.STORAGE_SUPABASE_URL)) || "";

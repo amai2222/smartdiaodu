@@ -23,7 +23,14 @@
 
   M.loadAppConfig = function (cb) {
     var sup = M.getSupabaseClient();
-    if (!sup) { if (cb) cb(); return; }
+    if (!sup) {
+      try {
+        var fromStorage = typeof localStorage !== "undefined" && localStorage.getItem(M.STORAGE_API);
+        if (fromStorage && String(fromStorage).trim()) M.cachedAppConfig.api_base = String(fromStorage).trim().replace(/\/$/, "");
+      } catch (e) {}
+      if (cb) cb();
+      return;
+    }
     sup.from("app_config").select("key, value").then(function (r) {
       if (r.data && Array.isArray(r.data)) {
         r.data.forEach(function (row) {
@@ -33,11 +40,20 @@
           else if (k === "driver_id") M.cachedAppConfig.driver_id = v;
         });
       }
+      try {
+        var fromStorage = typeof localStorage !== "undefined" && localStorage.getItem(M.STORAGE_API);
+        if (fromStorage && String(fromStorage).trim() && !M.cachedAppConfig.api_base) M.cachedAppConfig.api_base = String(fromStorage).trim().replace(/\/$/, "");
+      } catch (e) {}
       if (cb) cb();
     }).catch(function () { if (cb) cb(); });
   };
 
-  M.getApiBase = function () { return M.cachedAppConfig.api_base || ""; };
+  M.getApiBase = function () {
+    var v = M.cachedAppConfig.api_base || "";
+    if (v) return v;
+    try { v = typeof localStorage !== "undefined" && localStorage.getItem(M.STORAGE_API); if (v && String(v).trim()) return String(v).trim().replace(/\/$/, ""); } catch (e) {}
+    return "";
+  };
   M.getSupabaseUrl = function () {
     return (typeof localStorage !== "undefined" ? localStorage.getItem(M.STORAGE_SUPABASE_URL) : "") ||
       (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.supabaseUrl) || "";
@@ -67,4 +83,12 @@
     return M._supabaseClient;
   };
   M.getBaiduMapAk = function () { return M.cachedAppConfig.baidu_map_ak || ""; };
+  /** 请求大脑时带上登录 token（与首页一致），避免后端鉴权时 401 */
+  M.getAuthHeaders = function () {
+    try {
+      var t = typeof localStorage !== "undefined" && localStorage.getItem("smartdiaodu_token");
+      if (t && String(t).trim()) return { "Authorization": "Bearer " + String(t).trim() };
+    } catch (e) {}
+    return {};
+  };
 })();

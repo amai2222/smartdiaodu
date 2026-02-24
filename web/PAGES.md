@@ -14,7 +14,7 @@
 ```html
 <script src="config.js"></script>
 <!-- 其他样式、Tailwind 等 -->
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="vendor/supabase.js"></script>
 <script src="index-config.js"></script>
 <script src="index-state.js"></script>   <!-- 若不需要控制台状态可省略 -->
 <script src="auth.js"></script>
