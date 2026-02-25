@@ -79,7 +79,13 @@
     if (M._supabaseClient && M._supabaseClientUrl === url && M._supabaseClientAnon === anon) return M._supabaseClient;
     M._supabaseClientUrl = url;
     M._supabaseClientAnon = anon;
-    M._supabaseClient = window.supabase.createClient(url, anon);
+    var opts = {};
+    try {
+      if ((localStorage.getItem("smartdiaodu_token_source") || "") === "backend") {
+        opts.auth = { autoRefreshToken: false, persistSession: false };
+      }
+    } catch (e) {}
+    M._supabaseClient = window.supabase.createClient(url, anon, opts);
     return M._supabaseClient;
   };
   M.getBaiduMapAk = function () { return M.cachedAppConfig.baidu_map_ak || ""; };

@@ -74,7 +74,13 @@
     if (C._supabaseClient && C._supabaseClientUrl === url && C._supabaseClientAnon === anon) return C._supabaseClient;
     C._supabaseClientUrl = url;
     C._supabaseClientAnon = anon;
-    C._supabaseClient = window.supabase.createClient(url, anon);
+    var opts = {};
+    try {
+      if ((localStorage.getItem(C.STORAGE_TOKEN_SOURCE) || "") === "backend") {
+        opts.auth = { autoRefreshToken: false, persistSession: false };
+      }
+    } catch (e) {}
+    C._supabaseClient = window.supabase.createClient(url, anon, opts);
     return C._supabaseClient;
   };
   C.loadSupabaseScriptThenRetry = function (cb) {

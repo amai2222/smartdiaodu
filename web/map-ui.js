@@ -136,7 +136,22 @@
     }
     statusEl.textContent = "从数据库加载计划…";
     M.loadStateFromSupabase(function (state) {
-      var driverLoc = (state && state.driver_loc) ? String(state.driver_loc).trim() : "";
+      state = state || {};
+      var driverLoc = (state.driver_loc && String(state.driver_loc).trim()) || "";
+      if (!driverLoc && M.getCurrentState) {
+        var local = M.getCurrentState();
+        if (local && local.driver_loc && String(local.driver_loc).trim()) {
+          state.driver_loc = local.driver_loc;
+          driverLoc = String(local.driver_loc).trim();
+        }
+      }
+      if (!driverLoc && state.pickups && state.pickups.length) {
+        var first = state.pickups[0] && String(state.pickups[0]).trim();
+        if (first) {
+          state.driver_loc = first;
+          driverLoc = first;
+        }
+      }
       if (!driverLoc) {
         statusEl.textContent = "请先在控制台设置当前位置（刷新 GPS 或输入地址）后点「更新路线」";
         M.initMap();
