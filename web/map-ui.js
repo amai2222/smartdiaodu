@@ -43,7 +43,14 @@
     var nextIdx = M.currentStopIndex + 1;
     var navPanel = document.getElementById("navPanel");
     var allDonePanel = document.getElementById("allDonePanel");
-    if (nextIdx >= M.route_addresses.length) {
+    var totalStops = (M.route_addresses && M.route_addresses.length) || 0;
+    // 若只有司机一个点，则不显示「全部送达」面板，只隐藏导航面板，避免误导。
+    if (totalStops <= 1) {
+      if (navPanel) navPanel.style.display = "none";
+      if (allDonePanel) allDonePanel.style.display = "none";
+      return;
+    }
+    if (nextIdx >= totalStops) {
       navPanel.style.display = "none";
       allDonePanel.style.display = "block";
       return;
@@ -162,6 +169,19 @@
           state.driver_loc = local.driver_loc;
         }
       }
+      // 兜底：若仍无乘客信息，直接从 localStorage 的 smartdiaodu_pickups/smartdiaodu_deliveries 读取，保证 current_state 中有完整起终点。
+      if ((!state.pickups || !state.pickups.length) || (!state.deliveries || !state.deliveries.length)) {
+        try {
+          var lp = typeof localStorage !== "undefined" && localStorage.getItem("smartdiaodu_pickups");
+          var ld = typeof localStorage !== "undefined" && localStorage.getItem("smartdiaodu_deliveries");
+          var arrP = lp ? JSON.parse(lp) : [];
+          var arrD = ld ? JSON.parse(ld) : [];
+          if (Array.isArray(arrP) && Array.isArray(arrD) && arrP.length && arrP.length === arrD.length) {
+            state.pickups = arrP;
+            state.deliveries = arrD;
+          }
+        } catch (e) {}
+      }
       updateDebug({
         dbDriverLoc: state.driver_loc || "",
         dbPickupCount: (state.pickups && state.pickups.length) || 0,
@@ -201,14 +221,27 @@
         headers: headers,
         body: JSON.stringify({ current_state: state, tactics: currentTactics })
       })
-      .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); }); return r.json(); })
+      .then(function (r) {
+        var status = r.status;
+        if (!r.ok) {
+          return r.json().then(function (d) {
+            var msg = (d && d.detail) || r.statusText || String(status);
+            updateDebug({ routeStatus: status, routeError: msg });
+            throw new Error(msg);
+          });
+        }
+        updateDebug({ routeStatus: status });
+        return r.json();
+      })
       .then(function (data) {
         M.applyRouteData(data);
         M.saveRouteSnapshot(data);
+        updateDebug({ routeAddrCount: (data.route_addresses && data.route_addresses.length) || 0 });
         var routeInfoEl = document.getElementById("routeInfo");
         if (routeInfoEl) routeInfoEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已入库）" : "剩余 " + (M.route_addresses.length - 1) + " 站，预计 " + formatDurationFromSeconds(data.total_time_seconds) + "！（已入库）";
       })
       .catch(function (e) {
+        updateDebug({ routeFetchError: (e && e.message) || String(e) });
         document.getElementById("navPanel").style.display = "none";
         var restrictionEl = document.getElementById("restrictionHint");
         if (restrictionEl) restrictionEl.style.display = "none";
