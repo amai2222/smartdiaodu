@@ -27,6 +27,10 @@
       try {
         var fromStorage = typeof localStorage !== "undefined" && localStorage.getItem(M.STORAGE_API);
         if (fromStorage && String(fromStorage).trim()) M.cachedAppConfig.api_base = String(fromStorage).trim().replace(/\/$/, "");
+        if (typeof window.SMARTDIAODU_CONFIG !== "undefined") {
+          if (window.SMARTDIAODU_CONFIG.apiBase && !M.cachedAppConfig.api_base) M.cachedAppConfig.api_base = String(window.SMARTDIAODU_CONFIG.apiBase).trim().replace(/\/$/, "");
+          if (window.SMARTDIAODU_CONFIG.driverId && !M.cachedAppConfig.driver_id) M.cachedAppConfig.driver_id = String(window.SMARTDIAODU_CONFIG.driverId).trim();
+        }
       } catch (e) {}
       if (cb) cb();
       return;
@@ -52,6 +56,10 @@
     var v = M.cachedAppConfig.api_base || "";
     if (v) return v;
     try { v = typeof localStorage !== "undefined" && localStorage.getItem(M.STORAGE_API); if (v && String(v).trim()) return String(v).trim().replace(/\/$/, ""); } catch (e) {}
+    if (typeof window.SMARTDIAODU_CONFIG !== "undefined" && window.SMARTDIAODU_CONFIG.apiBase) {
+      v = String(window.SMARTDIAODU_CONFIG.apiBase).trim().replace(/\/$/, "");
+      if (v) return v;
+    }
     return "";
   };
   M.getSupabaseUrl = function () {

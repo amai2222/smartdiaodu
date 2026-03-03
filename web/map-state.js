@@ -107,10 +107,14 @@
     M.route_durations = Array.isArray(data.route_durations) ? data.route_durations : [];
     M.route_steps = Array.isArray(data.route_steps) ? data.route_steps : [];
     M.lastRouteData = data;
-    var hash = M.route_addresses.join("|");
-    var savedHash = typeof localStorage !== "undefined" ? localStorage.getItem(M.STORAGE_MAP_ROUTE_HASH) : "";
-    var savedIdx = typeof localStorage !== "undefined" ? parseInt(localStorage.getItem(M.STORAGE_MAP_STOP_INDEX), 10) : 0;
-    M.currentStopIndex = (hash === savedHash && !isNaN(savedIdx)) ? Math.max(0, Math.min(savedIdx, M.route_addresses.length - 1)) : 0;
+    // 每次规划新路线时从第一站开始展示，不再沿用上次的停靠进度，避免长期停在「全部送达」状态。
+    M.currentStopIndex = 0;
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.removeItem(M.STORAGE_MAP_STOP_INDEX);
+        localStorage.removeItem(M.STORAGE_MAP_ROUTE_HASH);
+      } catch (e) {}
+    }
     M.saveStopIndex();
     if (M.initMap) M.initMap();
     if (M.drawRouteFromIndex) M.drawRouteFromIndex(M.currentStopIndex);

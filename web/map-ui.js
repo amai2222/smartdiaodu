@@ -8,6 +8,21 @@
   var M = window.SmartDiaoduMap;
   if (!M) return;
 
+  var debugEl = document.getElementById("mapDebugInfo");
+  M._debugState = M._debugState || {};
+  function updateDebug(patch) {
+    if (!debugEl) return;
+    try {
+      for (var k in patch) {
+        if (Object.prototype.hasOwnProperty.call(patch, k)) {
+          M._debugState[k] = patch[k];
+        }
+      }
+      debugEl.textContent = "mapDebug " + JSON.stringify(M._debugState);
+      if (window.console && console.debug) console.debug("mapDebug", M._debugState);
+    } catch (e) {}
+  }
+
   /** 预计用时文案：统一为「x小时x分钟」（不足 1 小时为 0小时x分钟）。暴露给 map-route 等使用。 */
   function formatDurationFromSeconds(seconds) {
     var mins = Math.round((seconds || 0) / 60);
@@ -137,24 +152,36 @@
     statusEl.textContent = "从数据库加载计划…";
     M.loadStateFromSupabase(function (state) {
       state = state || {};
-      var driverLoc = (state.driver_loc && String(state.driver_loc).trim()) || "";
-      if (!driverLoc && M.getCurrentState) {
-        var local = M.getCurrentState();
-        if (local && local.driver_loc && String(local.driver_loc).trim()) {
+      var local = (M.getCurrentState && M.getCurrentState()) || {};
+      if (local.pickups && local.pickups.length && (!state.pickups || !state.pickups.length)) {
+        state.pickups = local.pickups;
+        state.deliveries = local.deliveries || [];
+      }
+      if (local.driver_loc && String(local.driver_loc).trim()) {
+        if (!state.driver_loc || !String(state.driver_loc).trim()) {
           state.driver_loc = local.driver_loc;
-          driverLoc = String(local.driver_loc).trim();
         }
       }
+      updateDebug({
+        dbDriverLoc: state.driver_loc || "",
+        dbPickupCount: (state.pickups && state.pickups.length) || 0,
+        localPickupCount: (local.pickups && local.pickups.length) || 0
+      });
+      var driverLoc = (state.driver_loc && String(state.driver_loc).trim()) || "";
       if (!driverLoc && state.pickups && state.pickups.length) {
         var first = state.pickups[0] && String(state.pickups[0]).trim();
-        if (first) {
-          state.driver_loc = first;
-          driverLoc = first;
-        }
+        if (first) { state.driver_loc = first; driverLoc = first; }
       }
       if (!driverLoc) {
         statusEl.textContent = "请先在控制台设置当前位置（刷新 GPS 或输入地址）后点「更新路线」";
         M.initMap();
+        updateDebug({ error: "no_driver_loc" });
+        return;
+      }
+      if (!state.pickups || !state.pickups.length) {
+        statusEl.textContent = "当前计划无乘客，请在首页添加乘客后再看路线";
+        M.initMap();
+        updateDebug({ error: "no_pickups" });
         return;
       }
       var tacticsMap = {
@@ -168,6 +195,7 @@
       var currentTactics = tacticsMap[M.routePolicyKey || "DEFAULT"] || 0;
       statusEl.textContent = "规划路线中…";
       var headers = Object.assign({ "Content-Type": "application/json" }, (M.getAuthHeaders && M.getAuthHeaders()) || {});
+      updateDebug({ planningWithPickups: state.pickups.length, planningDriverLoc: driverLoc });
       fetch(base + "/current_route_preview", {
         method: "POST",
         headers: headers,
@@ -343,8 +371,17 @@
     var mapEl = document.getElementById("map");
     if (!mapEl) return;
     if (statusEl) statusEl.textContent = "加载配置…";
+    updateDebug({
+      supabaseUrl: M.getSupabaseUrl && M.getSupabaseUrl(),
+      supabaseAnon: M.getSupabaseAnon && (M.getSupabaseAnon() ? "OK" : ""),
+      driverId: M.getDriverId && M.getDriverId()
+    });
     M.loadAppConfig(function () {
       if (statusEl) statusEl.textContent = "加载中…";
+       updateDebug({
+         apiBase: M.getApiBase && M.getApiBase(),
+         baiduAk: M.getBaiduMapAk && (M.getBaiduMapAk() ? "OK" : "")
+       });
       M.initMap();
       if (M.loadAndDraw) {
         M.loadAndDraw();
