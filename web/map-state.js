@@ -54,7 +54,7 @@
 
   M.loadStateFromSupabase = function (cb) {
     var sup = M.getSupabaseClient();
-    if (!sup) { if (cb) cb(M.getCurrentState()); return; }
+    if (!sup) { if (cb) cb({ driver_loc: "", pickups: [], deliveries: [], waypoints: [] }); return; }
     var driverId = M.getDriverId();
     sup.from("driver_state").select("current_loc").eq("driver_id", driverId).maybeSingle()
       .then(function (r) {
@@ -87,7 +87,7 @@
               });
           });
       })
-      .catch(function () { if (cb) cb(M.getCurrentState()); });
+      .catch(function () { if (cb) cb({ driver_loc: "", pickups: [], deliveries: [], waypoints: [] }); });
   };
 
   M.saveStopIndex = function () {

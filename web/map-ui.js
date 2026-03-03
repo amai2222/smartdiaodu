@@ -23,6 +23,38 @@
     } catch (e) {}
   }
 
+  /** 二次数据库采集：发给大脑前再按 driver_id 从 DB 拉一次，确保司机位置与乘客起终点完整。 */
+  function collectDbStateForPlanning(seedState, cb) {
+    var state = seedState || {};
+    var sup = M.getSupabaseClient && M.getSupabaseClient();
+    var driverId = (M.getDriverId && M.getDriverId()) || state.driver_id || "";
+    if (!sup || !driverId) { cb(state); return; }
+    sup.from("driver_state").select("current_loc").eq("driver_id", driverId).maybeSingle()
+      .then(function (r1) {
+        var driverLoc = (r1.data && r1.data.current_loc) ? String(r1.data.current_loc).trim() : "";
+        return sup.from("order_pool").select("pickup, delivery").eq("assigned_driver_id", driverId).eq("status", "assigned").order("id")
+          .then(function (r2) {
+            var pickups = [], deliveries = [];
+            if (r2.data && Array.isArray(r2.data)) {
+              r2.data.forEach(function (row) {
+                pickups.push((row.pickup || "").trim());
+                deliveries.push((row.delivery || "").trim());
+              });
+            }
+            state.driver_loc = driverLoc || state.driver_loc || "";
+            state.pickups = pickups;
+            state.deliveries = deliveries;
+            state.driver_id = driverId;
+            updateDebug({ dbSecondPassPickups: pickups.length, dbSecondPassDriverLoc: state.driver_loc || "" });
+            cb(state);
+          });
+      })
+      .catch(function () {
+        updateDebug({ dbSecondPassError: "order_pool_or_driver_state_failed" });
+        cb(state);
+      });
+  }
+
   /** 预计用时文案：统一为「x小时x分钟」（不足 1 小时为 0小时x分钟）。暴露给 map-route 等使用。 */
   function formatDurationFromSeconds(seconds) {
     var mins = Math.round((seconds || 0) / 60);
@@ -109,36 +141,9 @@
     }
   };
 
-  /** 用当前 localStorage 状态重新请求路线并重绘（切回地图页时与控制台保持一致，如乘客全下车后路线会清空） */
+  /** 统一从数据库重算路线（不走 localStorage），避免出现本地缓存与数据库不一致。 */
   M.refreshRouteFromStorage = function () {
-    var base = M.getApiBase();
-    var statusEl = document.getElementById("routeInfo");
-    if (!base) return;
-    var state = M.getCurrentState();
-    var driverLoc = (state && state.driver_loc) ? String(state.driver_loc).trim() : "";
-    if (!driverLoc) {
-      if (statusEl) statusEl.textContent = "请先在控制台设置当前位置后点「更新路线」";
-      M.initMap();
-      return;
-    }
-    var tacticsMap = { "DEFAULT": 0, "LEAST_TIME": 13, "LEAST_DISTANCE": 12, "AVOID_CONGESTION": 5, "LEAST_FEE": 6, "AVOID_HIGHWAY": 3 };
-    var currentTactics = tacticsMap[M.routePolicyKey || "DEFAULT"] || 0;
-    if (statusEl) statusEl.textContent = "同步路线中…";
-    var headers = Object.assign({ "Content-Type": "application/json" }, (M.getAuthHeaders && M.getAuthHeaders()) || {});
-    fetch(base + "/current_route_preview", {
-      method: "POST",
-      headers: headers,
-      body: JSON.stringify({ current_state: state, tactics: currentTactics })
-    })
-    .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); }); return r.json(); })
-    .then(function (data) {
-      M.applyRouteData(data);
-      M.saveRouteSnapshot(data);
-      if (statusEl) statusEl.textContent = M.route_addresses.length <= 1 ? "司机位置（已与控制台同步）" : "剩余 " + (M.route_addresses.length - 1) + " 站，预计 " + formatDurationFromSeconds(data.total_time_seconds) + "！（已与控制台同步）";
-    })
-    .catch(function () {
-      if (statusEl) statusEl.textContent = "同步路线失败，请点「更新路线」重试";
-    });
+    if (M.loadAndDraw) M.loadAndDraw();
   };
 
   M.loadAndDraw = function () {
@@ -159,68 +164,49 @@
     statusEl.textContent = "从数据库加载计划…";
     M.loadStateFromSupabase(function (state) {
       state = state || {};
-      var local = (M.getCurrentState && M.getCurrentState()) || {};
-      if (local.pickups && local.pickups.length && (!state.pickups || !state.pickups.length)) {
-        state.pickups = local.pickups;
-        state.deliveries = local.deliveries || [];
-      }
-      if (local.driver_loc && String(local.driver_loc).trim()) {
-        if (!state.driver_loc || !String(state.driver_loc).trim()) {
-          state.driver_loc = local.driver_loc;
+      // 只信数据库：请求时明确携带 driver_id，后端可据此二次按库兜底查询。
+      state.driver_id = (M.getDriverId && M.getDriverId()) || "";
+      collectDbStateForPlanning(state, function (planningState) {
+        var state2 = planningState || {};
+        updateDebug({
+          dbDriverLoc: state2.driver_loc || "",
+          dbPickupCount: (state2.pickups && state2.pickups.length) || 0,
+          localPickupCount: 0
+        });
+        var driverLoc = (state2.driver_loc && String(state2.driver_loc).trim()) || "";
+        if (!driverLoc && state2.pickups && state2.pickups.length) {
+          var first = state2.pickups[0] && String(state2.pickups[0]).trim();
+          if (first) { state2.driver_loc = first; driverLoc = first; }
         }
-      }
-      // 兜底：若仍无乘客信息，直接从 localStorage 的 smartdiaodu_pickups/smartdiaodu_deliveries 读取，保证 current_state 中有完整起终点。
-      if ((!state.pickups || !state.pickups.length) || (!state.deliveries || !state.deliveries.length)) {
-        try {
-          var lp = typeof localStorage !== "undefined" && localStorage.getItem("smartdiaodu_pickups");
-          var ld = typeof localStorage !== "undefined" && localStorage.getItem("smartdiaodu_deliveries");
-          var arrP = lp ? JSON.parse(lp) : [];
-          var arrD = ld ? JSON.parse(ld) : [];
-          if (Array.isArray(arrP) && Array.isArray(arrD) && arrP.length && arrP.length === arrD.length) {
-            state.pickups = arrP;
-            state.deliveries = arrD;
-          }
-        } catch (e) {}
-      }
-      updateDebug({
-        dbDriverLoc: state.driver_loc || "",
-        dbPickupCount: (state.pickups && state.pickups.length) || 0,
-        localPickupCount: (local.pickups && local.pickups.length) || 0
-      });
-      var driverLoc = (state.driver_loc && String(state.driver_loc).trim()) || "";
-      if (!driverLoc && state.pickups && state.pickups.length) {
-        var first = state.pickups[0] && String(state.pickups[0]).trim();
-        if (first) { state.driver_loc = first; driverLoc = first; }
-      }
-      if (!driverLoc) {
-        statusEl.textContent = "请先在控制台设置当前位置（刷新 GPS 或输入地址）后点「更新路线」";
-        M.initMap();
-        updateDebug({ error: "no_driver_loc" });
-        return;
-      }
-      if (!state.pickups || !state.pickups.length) {
-        statusEl.textContent = "当前计划无乘客，请在首页添加乘客后再看路线";
-        M.initMap();
-        updateDebug({ error: "no_pickups" });
-        return;
-      }
-      var tacticsMap = {
-        "DEFAULT": 0,
-        "LEAST_TIME": 13,
-        "LEAST_DISTANCE": 12,
-        "AVOID_CONGESTION": 5,
-        "LEAST_FEE": 6,
-        "AVOID_HIGHWAY": 3
-      };
-      var currentTactics = tacticsMap[M.routePolicyKey || "DEFAULT"] || 0;
-      statusEl.textContent = "规划路线中…";
-      var headers = Object.assign({ "Content-Type": "application/json" }, (M.getAuthHeaders && M.getAuthHeaders()) || {});
-      updateDebug({ planningWithPickups: state.pickups.length, planningDriverLoc: driverLoc });
-      fetch(base + "/current_route_preview", {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({ current_state: state, tactics: currentTactics })
-      })
+        if (!driverLoc) {
+          statusEl.textContent = "请先在控制台设置当前位置（刷新 GPS 或输入地址）后点「更新路线」";
+          M.initMap();
+          updateDebug({ error: "no_driver_loc" });
+          return;
+        }
+        if (!state2.pickups || !state2.pickups.length || !state2.deliveries || state2.pickups.length !== state2.deliveries.length) {
+          statusEl.textContent = "数据库中当前司机的乘客计划为空或不完整（order_pool）";
+          M.initMap();
+          updateDebug({ error: "no_pickups_or_mismatch" });
+          return;
+        }
+        var tacticsMap = {
+          "DEFAULT": 0,
+          "LEAST_TIME": 13,
+          "LEAST_DISTANCE": 12,
+          "AVOID_CONGESTION": 5,
+          "LEAST_FEE": 6,
+          "AVOID_HIGHWAY": 3
+        };
+        var currentTactics = tacticsMap[M.routePolicyKey || "DEFAULT"] || 0;
+        statusEl.textContent = "规划路线中…";
+        var headers = Object.assign({ "Content-Type": "application/json" }, (M.getAuthHeaders && M.getAuthHeaders()) || {});
+        updateDebug({ planningWithPickups: state2.pickups.length, planningDriverLoc: driverLoc });
+        fetch(base + "/current_route_preview", {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify({ current_state: state2, tactics: currentTactics })
+        })
       .then(function (r) {
         var status = r.status;
         if (!r.ok) {
@@ -254,6 +240,7 @@
           hint = "。请到控制台修改「我的位置」或乘客起终点为更详细地址（如带区县、街道）后重试「更新路线」";
         }
         document.getElementById("routeInfo").textContent = "路线加载失败：" + msg + hint + "，仅显示地图";
+      });
       });
     });
   };
@@ -443,6 +430,14 @@
       }
     });
   })();
+
+  // 首页下车/上车后可通过 postMessage 触发地图立即重算（双保险：仍以数据库为准）。
+  window.addEventListener("message", function (e) {
+    if (!e || !e.data) return;
+    if (e.data.type === "smartdiaodu_refresh_route") {
+      if (M.loadAndDraw) M.loadAndDraw();
+    }
+  });
 })();
 
 /** 返回控制台：不依赖 M，在 iframe 内时「返回」「返回控制台」立即通知父页切回首页。touchstart 即发 postMessage，避免 iOS 上 touchend/click 不触发导致无反应。 */

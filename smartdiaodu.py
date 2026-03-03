@@ -446,6 +446,71 @@ def _get_user_by_email(email: str) -> Optional[dict]:
         return None
 
 
+def _get_assigned_orders_for_driver(driver_id: str) -> List[Dict[str, str]]:
+    """按司机从数据库读取已分配订单（只返回 pickup/delivery）。"""
+    if not driver_id or not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return []
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/order_pool"
+    params = {
+        "assigned_driver_id": f"eq.{driver_id.strip()}",
+        "status": "eq.assigned",
+        "select": "pickup,delivery",
+        "order": "id.asc",
+    }
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Accept": "application/json",
+    }
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
+        if resp.status_code != 200:
+            logger.warning("读取 order_pool 失败: status=%s body=%s", resp.status_code, resp.text[:200])
+            return []
+        data = resp.json()
+        if not isinstance(data, list):
+            return []
+        out: List[Dict[str, str]] = []
+        for row in data:
+            out.append({
+                "pickup": str((row or {}).get("pickup") or "").strip(),
+                "delivery": str((row or {}).get("delivery") or "").strip(),
+            })
+        return out
+    except Exception as e:
+        logger.warning("读取 order_pool 异常: %s", e)
+        return []
+
+
+def _get_driver_current_loc(driver_id: str) -> Optional[str]:
+    """按司机从数据库读取当前位置。"""
+    if not driver_id or not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return None
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/driver_state"
+    params = {
+        "driver_id": f"eq.{driver_id.strip()}",
+        "select": "current_loc",
+        "limit": "1",
+    }
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Accept": "application/json",
+    }
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
+        if resp.status_code != 200:
+            logger.warning("读取 driver_state 失败: status=%s body=%s", resp.status_code, resp.text[:200])
+            return None
+        data = resp.json()
+        if not isinstance(data, list) or not data:
+            return None
+        return str((data[0] or {}).get("current_loc") or "").strip() or None
+    except Exception as e:
+        logger.warning("读取 driver_state 异常: %s", e)
+        return None
+
+
 def _get_supabase_user_email_by_token(access_token: str) -> Optional[str]:
     """调 Supabase Auth 接口校验 token 并取邮箱，不依赖本地 JWT Secret。"""
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not access_token:
@@ -1603,7 +1668,10 @@ async def reverse_geocode_endpoint(body: ReverseGeocodeRequest) -> dict:
 
 
 @app.post("/current_route_preview")
-async def current_route_preview(req: dict) -> dict:
+async def current_route_preview(
+    req: dict,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> dict:
     """
     根据当前状态计算最优路线，返回途经点地址顺序及经纬度，供网页地图绘制。
     请求体：{ "current_state": { "driver_loc", "pickups", "deliveries", "waypoints" } }, "tactics": 策略数字。
@@ -1625,6 +1693,32 @@ async def current_route_preview(req: dict) -> dict:
         raise HTTPException(status_code=400, detail=f"请求体格式错误: {e}") from e
 
     tactics = int(req.get("tactics", 0))
+
+    # 强制鉴权：仅允许已登录司机请求当前路线；driver_id 一律从 token 对应用户读取，忽略前端传入。
+    if not credentials or not credentials.credentials:
+        raise HTTPException(status_code=401, detail="未提供登录凭证")
+    username = _decode_token(credentials.credentials)
+    if not username:
+        raise HTTPException(status_code=401, detail="登录已过期或无效")
+    user = _get_user_by_username(username)
+    driver_id = str((user or {}).get("driver_id") or "").strip()
+    if not driver_id:
+        raise HTTPException(status_code=403, detail="当前账号未绑定司机，无法规划路线")
+
+    # 只信数据库：按 token 绑定司机强制读取已分配订单与司机位置，不信任前端上传的乘客数组。
+    db_orders = _get_assigned_orders_for_driver(driver_id)
+    pickups = [o.get("pickup", "") for o in db_orders]
+    deliveries = [o.get("delivery", "") for o in db_orders]
+    db_loc = _get_driver_current_loc(driver_id)
+    if db_loc:
+        driver_loc = db_loc
+    logger.info(
+        "current_route_preview 数据库读取: driver_id=%s pickups=%s deliveries=%s has_loc=%s",
+        driver_id,
+        len(pickups),
+        len(deliveries),
+        bool(driver_loc),
+    )
 
     if not driver_loc:
         raise HTTPException(status_code=400, detail="driver_loc 不能为空")
@@ -1664,6 +1758,13 @@ async def current_route_preview(req: dict) -> dict:
     route_indices, total_time = solve_pdp_route_flexible(matrix, pickup_delivery_pairs)
     if not route_indices:
         raise HTTPException(status_code=422, detail="无法规划出符合逻辑的路线")
+
+    # 兜底：若有乘客但求解器仅返回司机一个点（route_indices == [0]），
+    # 则退化为按「司机 → 所有接客点 → 所有送客点 → 途经点」的顺序直接返回，
+    # 至少前端可以看到一条完整路线，避免只有司机一个点导致地图没有线路。
+    if n > 0 and len(route_indices) == 1 and route_indices[0] == 0:
+        route_indices = list(range(len(addresses)))
+        total_time = 0
 
     # 节点 0=司机, 1..k=接客, 1+k..1+k+n-1=送客, 1+k+n..1+k+n+m-1=途经点
     passengers_with_pickup = [i for i in range(n) if (pickups[i] or "").strip()]

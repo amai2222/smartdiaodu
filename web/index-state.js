@@ -125,6 +125,13 @@
         if (seatsEl) seatsEl.value = String(Math.min(4, parseInt(seatsEl.value, 10) + 1));
         if (C.renderPassengerList) C.renderPassengerList();
         C.saveStateToStorage();
+        // 通知地图页立刻按数据库重拉并重算路线（首页与地图同源 iframe）。
+        try {
+          var mapFrame = document.getElementById("mapFrame");
+          if (mapFrame && mapFrame.contentWindow) {
+            mapFrame.contentWindow.postMessage({ type: "smartdiaodu_refresh_route" }, "*");
+          }
+        } catch (e) {}
       })
       .catch(function (e) {
         var s = document.getElementById("gpsStatus");
