@@ -732,7 +732,7 @@ def geocode_addresses(addresses: List[str]) -> List[str]:
     return coords
 
 
-def get_duration_matrix(coords: List[str]) -> List[List[int]]:
+def get_duration_matrix(coords: List[str], tactics: int = 11) -> List[List[int]]:
     """
     获取所有点两两之间的驾车耗时（秒）。
     依赖：百度地图 Route Matrix API（驾车）。
@@ -740,29 +740,57 @@ def get_duration_matrix(coords: List[str]) -> List[List[int]]:
     """
     points = "|".join(coords)
     url = "https://api.map.baidu.com/routematrix/v2/driving"
-    params = {
-        "origins": points,
-        "destinations": points,
-        "ak": BAIDU_AK,
-        "tactics": 11,
-    }
-    try:
-        resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.RequestException as e:
-        logger.error("百度路网矩阵请求异常: %s", e)
-        raise HTTPException(
-            status_code=503,
-            detail=f"路网矩阵服务不可用: {e!s}",
-        ) from e
+    # 先尝试前端所选策略；若矩阵接口不支持该策略，则按兼容策略重试，避免直接 502。
+    # 注意：矩阵接口支持策略与驾车路径接口可能不完全一致。
+    # 实测 tactics=0 在矩阵接口会报 invalid，这里预先归一化到 11，避免噪声日志。
+    if tactics == 0:
+        tactics = 11
 
-    if data.get("status") != 0:
-        msg = data.get("message", "未知错误")
-        logger.warning("路网矩阵返回错误: %s", msg)
+    tactic_candidates: List[int] = []
+    for t in (tactics, 11):
+        if t not in tactic_candidates:
+            tactic_candidates.append(t)
+
+    data: Optional[Dict[str, Any]] = None
+    last_error: Optional[str] = None
+    for t in tactic_candidates:
+        params = {
+            "origins": points,
+            "destinations": points,
+            "ak": BAIDU_AK,
+            "tactics": t,
+        }
+        try:
+            resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+            resp.raise_for_status()
+            trial = resp.json()
+        except requests.RequestException as e:
+            last_error = f"请求异常: {e!s}"
+            logger.warning("百度路网矩阵请求失败，tactics=%s, err=%s", t, e)
+            continue
+
+        if trial.get("status") == 0:
+            data = trial
+            if t != tactics:
+                logger.warning(
+                    "路网矩阵策略降级: requested_tactics=%s, applied_tactics=%s",
+                    tactics,
+                    t,
+                )
+            break
+
+        last_error = trial.get("message", "未知错误")
+        logger.warning(
+            "路网矩阵策略不可用，准备降级重试，tactics=%s, status=%s, msg=%s",
+            t,
+            trial.get("status"),
+            last_error,
+        )
+
+    if not data:
         raise HTTPException(
             status_code=502,
-            detail=f"路网矩阵获取失败: {msg}",
+            detail=f"路网矩阵获取失败: {last_error or '未知错误'}",
         )
 
     n = len(coords)
@@ -1010,59 +1038,170 @@ def solve_pdp_route_flexible(
 ) -> Tuple[Optional[List[int]], int]:
     """
     支持「仅送」的 PDP：pickup_delivery_pairs 中每对 (接客点, 送客点) 先接后送；
-    未出现在 pair 中的非起点节点仍会全部访问（通过 Disjunction 必选）。
+    未出现在 pair 中的非起点节点仍会全部访问（默认即必访）。
     节点编号与 matrix 一致：0=司机起点，其余为途经点。
     返回：(最优路线节点索引列表, 总耗时秒数)；无解时 (None, 0)。
     """
     num_nodes = len(matrix)
     if num_nodes <= 1:
         return ([0] if num_nodes else [], 0)
-    manager = pywrapcp.RoutingIndexManager(num_nodes, 1, 0)
-    routing = pywrapcp.RoutingModel(manager)
 
-    def duration_callback(from_index: int, to_index: int) -> int:
-        from_node = manager.IndexToNode(from_index)
-        to_node = manager.IndexToNode(to_index)
-        if to_node == 0:
-            return 0
-        return matrix[from_node][to_node]
+    def _run_once(
+        max_route_seconds: int,
+        first_solution_strategy: int,
+        local_search_metaheuristic: int,
+        time_limit_seconds: int,
+    ) -> Tuple[Optional[List[int]], int]:
+        manager = pywrapcp.RoutingIndexManager(num_nodes, 1, 0)
+        routing = pywrapcp.RoutingModel(manager)
 
-    transit_callback_index = routing.RegisterTransitCallback(duration_callback)
-    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
-    routing.AddDimension(transit_callback_index, 0, 300000, True, "Time")
-    time_dimension = routing.GetDimensionOrDie("Time")
+        def duration_callback(from_index: int, to_index: int) -> int:
+            from_node = manager.IndexToNode(from_index)
+            to_node = manager.IndexToNode(to_index)
+            if to_node == 0:
+                return 0
+            return matrix[from_node][to_node]
 
-    # 所有非起点节点必访（含仅送点）
-    for node in range(1, num_nodes):
-        routing.AddDisjunction([manager.NodeToIndex(node)], 0)
-    for pickup_node, delivery_node in pickup_delivery_pairs:
-        pickup_idx = manager.NodeToIndex(pickup_node)
-        delivery_idx = manager.NodeToIndex(delivery_node)
-        routing.AddPickupAndDelivery(pickup_idx, delivery_idx)
-        routing.solver().Add(
-            routing.VehicleVar(pickup_idx) == routing.VehicleVar(delivery_idx)
+        transit_callback_index = routing.RegisterTransitCallback(duration_callback)
+        routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+        routing.AddDimension(
+            transit_callback_index, 0, max_route_seconds, True, "Time"
         )
-        routing.solver().Add(
-            time_dimension.CumulVar(pickup_idx)
-            <= time_dimension.CumulVar(delivery_idx)
-        )
+        time_dimension = routing.GetDimensionOrDie("Time")
 
-    search_params = pywrapcp.DefaultRoutingSearchParameters()
-    search_params.first_solution_strategy = (
-        routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION
+        # 注意：RoutingModel 默认非起点节点就是“必访”。
+        # 这里不能使用 AddDisjunction(..., 0)，否则语义会变成“可免费跳过”。
+        for pickup_node, delivery_node in pickup_delivery_pairs:
+            pickup_idx = manager.NodeToIndex(pickup_node)
+            delivery_idx = manager.NodeToIndex(delivery_node)
+            routing.AddPickupAndDelivery(pickup_idx, delivery_idx)
+            routing.solver().Add(
+                routing.VehicleVar(pickup_idx) == routing.VehicleVar(delivery_idx)
+            )
+            routing.solver().Add(
+                time_dimension.CumulVar(pickup_idx)
+                <= time_dimension.CumulVar(delivery_idx)
+            )
+
+        search_params = pywrapcp.DefaultRoutingSearchParameters()
+        search_params.first_solution_strategy = first_solution_strategy
+        search_params.local_search_metaheuristic = local_search_metaheuristic
+        search_params.time_limit.seconds = time_limit_seconds
+        solution = routing.SolveWithParameters(search_params)
+        if not solution:
+            return None, 0
+
+        index = routing.Start(0)
+        route_indices: List[int] = []
+        total_time = 0
+        while not routing.IsEnd(index):
+            route_indices.append(manager.IndexToNode(index))
+            prev_index = index
+            index = solution.Value(routing.NextVar(index))
+            total_time += routing.GetArcCostForVehicle(prev_index, index, 0)
+        return route_indices, total_time
+
+    def _is_valid_route(route: Optional[List[int]]) -> bool:
+        # 单逻辑要求：存在待访问节点时，不能只返回司机起点 [0]
+        return bool(route) and (num_nodes <= 1 or len(route) > 1)
+
+    # 第一轮：快速求解（主流程）
+    route_indices, total_time = _run_once(
+        max_route_seconds=300000,
+        first_solution_strategy=routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION,
+        local_search_metaheuristic=routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH,
+        time_limit_seconds=3,
     )
-    solution = routing.SolveWithParameters(search_params)
-    if not solution:
-        return None, 0
-    index = routing.Start(0)
-    route_indices: List[int] = []
-    total_time = 0
-    while not routing.IsEnd(index):
-        route_indices.append(manager.IndexToNode(index))
-        prev_index = index
-        index = solution.Value(routing.NextVar(index))
-        total_time += routing.GetArcCostForVehicle(prev_index, index, 0)
-    return route_indices, total_time
+    if _is_valid_route(route_indices):
+        return route_indices, total_time
+
+    # 第二轮：同一算法框架下扩大可行域+延长搜索时间，尽量避免进入启发式兜底
+    route_indices, total_time = _run_once(
+        max_route_seconds=1209600,  # 14天上限，避免超长线路因上限过紧无解
+        first_solution_strategy=routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC,
+        local_search_metaheuristic=routing_enums_pb2.LocalSearchMetaheuristic.AUTOMATIC,
+        time_limit_seconds=8,
+    )
+    if _is_valid_route(route_indices):
+        return route_indices, total_time
+
+    return None, 0
+
+
+def _parse_coord_pair(coord_str: str) -> Tuple[float, float]:
+    """'lat,lng' -> (lat, lng)，失败时返回 (0,0)。"""
+    try:
+        a, b = coord_str.split(",", 1)
+        return float(a), float(b)
+    except Exception:
+        return 0.0, 0.0
+
+
+def _geo_distance(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+    """简化平面距离（用于策略兜底排序，不做精确里程计算）。"""
+    dx = a[0] - b[0]
+    dy = a[1] - b[1]
+    return (dx * dx + dy * dy) ** 0.5
+
+
+def build_fallback_route_indices_by_tactics(
+    matrix: List[List[int]],
+    coords: List[str],
+    pickups: List[str],
+    deliveries: List[str],
+    waypoints: List[str],
+    tactics: int,
+) -> List[int]:
+    """
+    OR-Tools 退化时的策略兜底：按策略启发式选择下一站，且遵守「先接后送」约束。
+    返回节点序列（含起点 0）。
+    """
+    n = len(deliveries)
+    m = len(waypoints)
+    passengers_with_pickup = [i for i in range(n) if (pickups[i] or "").strip()]
+    k = len(passengers_with_pickup)
+    num_nodes = 1 + k + n + m
+    if num_nodes <= 1:
+        return [0]
+
+    # delivery_node -> required pickup_node
+    required_pickup: Dict[int, int] = {}
+    pickup_ord = 0
+    for i in range(n):
+        if (pickups[i] or "").strip():
+            pickup_node = 1 + pickup_ord
+            delivery_node = 1 + k + i
+            required_pickup[delivery_node] = pickup_node
+            pickup_ord += 1
+
+    coords_ll = [_parse_coord_pair(c) for c in coords]
+    unvisited: Set[int] = set(range(1, num_nodes))
+    visited: Set[int] = {0}
+    route: List[int] = [0]
+    current = 0
+
+    def score(next_node: int) -> float:
+        # 站点层策略：时间类用时长矩阵，距离/省费/不走高速类用几何距离优先
+        if tactics in (12, 6, 3):
+            return _geo_distance(coords_ll[current], coords_ll[next_node])
+        return float(matrix[current][next_node])
+
+    while unvisited:
+        candidates: List[int] = []
+        for node in unvisited:
+            need = required_pickup.get(node)
+            if need is not None and need not in visited:
+                continue
+            candidates.append(node)
+        if not candidates:
+            # 理论上不应发生；兜底放行剩余节点，避免死循环
+            candidates = sorted(list(unvisited))
+        nxt = min(candidates, key=score)
+        route.append(nxt)
+        visited.add(nxt)
+        unvisited.remove(nxt)
+        current = nxt
+    return route
 
 
 # ---------------------------------------------------------------------------
@@ -1693,6 +1832,8 @@ async def current_route_preview(
         raise HTTPException(status_code=400, detail=f"请求体格式错误: {e}") from e
 
     tactics = int(req.get("tactics", 0))
+    if tactics not in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
+        tactics = 0
 
     # 强制鉴权：仅允许已登录司机请求当前路线；driver_id 一律从 token 对应用户读取，忽略前端传入。
     if not credentials or not credentials.credentials:
@@ -1746,7 +1887,7 @@ async def current_route_preview(
     k = len(effective_pickups)
     addresses = [driver_loc] + list(effective_pickups) + list(deliveries) + list(waypoints)
     coords = geocode_addresses(addresses)
-    matrix = get_duration_matrix(coords)
+    matrix = get_duration_matrix(coords, tactics=tactics)
     # 配对：仅对「未上车」的乘客建立接客->送客约束
     pickup_delivery_pairs: List[Tuple[int, int]] = []
     for i in range(n):
@@ -1757,14 +1898,53 @@ async def current_route_preview(
             pickup_delivery_pairs.append((pickup_node, delivery_node))
     route_indices, total_time = solve_pdp_route_flexible(matrix, pickup_delivery_pairs)
     if not route_indices:
-        raise HTTPException(status_code=422, detail="无法规划出符合逻辑的路线")
+        # 无解强诊断：快速判断是约束冲突还是矩阵异常（如大量 0/极值）
+        n_nodes = len(matrix)
+        edge_values: List[int] = []
+        for i in range(n_nodes):
+            for j in range(n_nodes):
+                if i == j:
+                    continue
+                try:
+                    edge_values.append(int(matrix[i][j]))
+                except Exception:
+                    edge_values.append(0)
+        zero_edges = sum(1 for v in edge_values if v <= 0)
+        min_edge = min(edge_values) if edge_values else 0
+        max_edge = max(edge_values) if edge_values else 0
+        logger.error(
+            "current_route_preview OR-Tools无解: driver_id=%s tactics=%s n_nodes=%s n_pairs=%s n_pickups=%s n_deliveries=%s n_waypoints=%s zero_edges=%s min_edge=%s max_edge=%s pickup_delivery_pairs=%s",
+            driver_id,
+            tactics,
+            n_nodes,
+            len(pickup_delivery_pairs),
+            len([p for p in pickups if (p or "").strip()]),
+            len(deliveries),
+            len(waypoints),
+            zero_edges,
+            min_edge,
+            max_edge,
+            pickup_delivery_pairs,
+        )
+        raise HTTPException(status_code=422, detail="OR-Tools 未求得可行路线（仅使用单一求解逻辑）")
+    solver_route_indices = list(route_indices)
+    used_fallback = False
+    fallback_reason = "none"
 
-    # 兜底：若有乘客但求解器仅返回司机一个点（route_indices == [0]），
-    # 则退化为按「司机 → 所有接客点 → 所有送客点 → 途经点」的顺序直接返回，
-    # 至少前端可以看到一条完整路线，避免只有司机一个点导致地图没有线路。
-    if n > 0 and len(route_indices) == 1 and route_indices[0] == 0:
-        route_indices = list(range(len(addresses)))
-        total_time = 0
+    # 关键排查日志：明确本次是否兜底及触发原因
+    logger.info(
+        "current_route_preview 求解结果: driver_id=%s used_fallback=%s reason=%s tactics=%s n_pickups=%s n_deliveries=%s n_waypoints=%s solver_route=%s final_route=%s total_time=%s",
+        driver_id,
+        used_fallback,
+        fallback_reason,
+        tactics,
+        len([p for p in pickups if (p or "").strip()]),
+        len(deliveries),
+        len(waypoints),
+        solver_route_indices,
+        route_indices,
+        total_time,
+    )
 
     # 节点 0=司机, 1..k=接客, 1+k..1+k+n-1=送客, 1+k+n..1+k+n+m-1=途经点
     passengers_with_pickup = [i for i in range(n) if (pickups[i] or "").strip()]
@@ -1797,8 +1977,6 @@ async def current_route_preview(
     cartype = state.get("cartype")
     if cartype is not None and cartype not in (0, 1):
         cartype = None
-    if tactics not in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
-        tactics = 0
     all_paths: List[List[List[float]]] = []
     route_durations: List[int] = []
     route_steps: List[Dict[str, Any]] = []
@@ -1818,6 +1996,14 @@ async def current_route_preview(
         "point_types": point_types,
         "point_labels": point_labels,
         "total_time_seconds": total_time,
+        "debug": {
+            "solver_route_indices": solver_route_indices,
+            "final_route_indices": route_indices,
+            "used_fallback": used_fallback,
+            "fallback_reason": fallback_reason,
+            "pickup_delivery_pairs": pickup_delivery_pairs,
+            "matrix_size": len(matrix),
+        },
     }
 
 

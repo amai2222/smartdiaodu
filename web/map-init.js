@@ -73,10 +73,6 @@
       M.initBaiduMap();
       loadBaiduSymbolLib(function () {
         if (M.lastRouteData && M.drawRouteFromIndex) M.drawRouteFromIndex(M.currentStopIndex);
-        else if (M.getCurrentState && M.loadAndDraw) {
-          var state = M.getCurrentState();
-          if (state && (state.driver_loc || "").trim()) M.loadAndDraw();
-        }
       });
       return;
     }
@@ -88,9 +84,6 @@
           loadBaiduSymbolLib(function () {
             if (M.lastRouteData && M.drawRouteFromIndex) {
               M.drawRouteFromIndex(M.currentStopIndex);
-            } else if (M.getCurrentState && M.loadAndDraw) {
-              var state = M.getCurrentState();
-              if (state && (state.driver_loc || "").trim()) M.loadAndDraw();
             }
           });
           return;

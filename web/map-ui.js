@@ -23,6 +23,10 @@
     } catch (e) {}
   }
 
+  // 防抖 + 并发锁：避免多个入口（onLoad/visibility/message/按钮）在短时间内重复请求大脑。
+  M._routeReqInFlight = false;
+  M._routeReqLastAt = 0;
+
   /** 二次数据库采集：发给大脑前再按 driver_id 从 DB 拉一次，确保司机位置与乘客起终点完整。 */
   function collectDbStateForPlanning(seedState, cb) {
     var state = seedState || {};
@@ -202,6 +206,17 @@
         statusEl.textContent = "规划路线中…";
         var headers = Object.assign({ "Content-Type": "application/json" }, (M.getAuthHeaders && M.getAuthHeaders()) || {});
         updateDebug({ planningWithPickups: state2.pickups.length, planningDriverLoc: driverLoc });
+        var now = Date.now();
+        if (M._routeReqInFlight) {
+          updateDebug({ requestSkipped: "in_flight" });
+          return;
+        }
+        if (M._routeReqLastAt && now - M._routeReqLastAt < 1200) {
+          updateDebug({ requestSkipped: "cooldown" });
+          return;
+        }
+        M._routeReqInFlight = true;
+        M._routeReqLastAt = now;
         fetch(base + "/current_route_preview", {
           method: "POST",
           headers: headers,
@@ -240,6 +255,9 @@
           hint = "。请到控制台修改「我的位置」或乘客起终点为更详细地址（如带区县、街道）后重试「更新路线」";
         }
         document.getElementById("routeInfo").textContent = "路线加载失败：" + msg + hint + "，仅显示地图";
+      })
+      .then(function () {
+        M._routeReqInFlight = false;
       });
       });
     });
@@ -385,7 +403,7 @@
     });
   };
 
-  /** 打开地图时用当前计划（含首页途经点）重新请求路线，保证新加的途经点会参与规划；无后端或失败时再恢复上次保存的路线。 */
+  /** 打开地图时自动按默认策略规划一次；之后不自动刷新。 */
   (function onLoad() {
     var statusEl = document.getElementById("routeInfo");
     var mapEl = document.getElementById("map");
@@ -403,41 +421,15 @@
          baiduAk: M.getBaiduMapAk && (M.getBaiduMapAk() ? "OK" : "")
        });
       M.initMap();
-      if (M.loadAndDraw) {
-        M.loadAndDraw();
-      } else {
-        M.loadSavedRoute(function (data) {
-          if (data) {
-            M.applyRouteData(data);
-            if (statusEl) statusEl.textContent = "已恢复上次线路（剩余 " + (M.route_addresses.length - 1) + " 站，预计 " + formatDurationFromSeconds(data.total_time_seconds) + "！）";
-          } else {
-            if (statusEl) statusEl.textContent = "无已保存线路，请先点「更新路线」规划并入库";
-          }
-        });
-      }
-    });
-  })();
-
-  /** 切回地图页时用控制台最新状态刷新路线（如乘客全下车后不再显示旧站点）；仅从「隐藏」切回时刷新，避免首屏重复请求 */
-  (function () {
-    var hadBeenHidden = false;
-    document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "hidden") {
-        hadBeenHidden = true;
-      } else if (document.visibilityState === "visible" && hadBeenHidden && M.getApiBase()) {
-        hadBeenHidden = false;
-        M.refreshRouteFromStorage();
-      }
-    });
-  })();
-
-  // 首页下车/上车后可通过 postMessage 触发地图立即重算（双保险：仍以数据库为准）。
-  window.addEventListener("message", function (e) {
-    if (!e || !e.data) return;
-    if (e.data.type === "smartdiaodu_refresh_route") {
+      // 页面首次打开：固定默认策略自动规划一次。
+      M.routePolicyKey = "DEFAULT";
+      M.routeAlternativeIndex = 0;
       if (M.loadAndDraw) M.loadAndDraw();
-    }
-  });
+    });
+  })();
+
+  // 按用户要求：取消自动重算触发（visibility / postMessage）。
+  // 仅在手动点击「更新路线」或切换策略时请求后端。
 })();
 
 /** 返回控制台：不依赖 M，在 iframe 内时「返回」「返回控制台」立即通知父页切回首页。touchstart 即发 postMessage，避免 iOS 上 touchend/click 不触发导致无反应。 */
