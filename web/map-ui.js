@@ -8,20 +8,8 @@
   var M = window.SmartDiaoduMap;
   if (!M) return;
 
-  var debugEl = document.getElementById("mapDebugInfo");
-  M._debugState = M._debugState || {};
-  function updateDebug(patch) {
-    if (!debugEl) return;
-    try {
-      for (var k in patch) {
-        if (Object.prototype.hasOwnProperty.call(patch, k)) {
-          M._debugState[k] = patch[k];
-        }
-      }
-      debugEl.textContent = "mapDebug " + JSON.stringify(M._debugState);
-      if (window.console && console.debug) console.debug("mapDebug", M._debugState);
-    } catch (e) {}
-  }
+  // 关闭网页调试输出：保留调用点但不产生任何调试信息。
+  function updateDebug() {}
 
   // 防抖 + 并发锁：避免多个入口（onLoad/visibility/message/按钮）在短时间内重复请求大脑。
   M._routeReqInFlight = false;
@@ -428,8 +416,14 @@
     });
   })();
 
-  // 按用户要求：取消自动重算触发（visibility / postMessage）。
-  // 仅在手动点击「更新路线」或切换策略时请求后端。
+  // 仅保留显式触发：父页面切入地图视图时，通知地图重算一次。
+  window.addEventListener("message", function (e) {
+    var d = e && e.data;
+    if (!d || d.type !== "smartdiaodu_refresh_route") return;
+    if (M.loadAndDraw) M.loadAndDraw();
+  });
+
+  // 不使用 visibility 轮询；仅首次加载、手动更新、策略切换、父页面显式通知时请求后端。
 })();
 
 /** 返回控制台：不依赖 M，在 iframe 内时「返回」「返回控制台」立即通知父页切回首页。touchstart 即发 postMessage，避免 iOS 上 touchend/click 不触发导致无反应。 */

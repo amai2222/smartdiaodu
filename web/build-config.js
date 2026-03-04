@@ -17,4 +17,3 @@ var js = "// Generated at build time from env. Do not edit in repo.\nwindow.SMAR
   driverId: driverId
 }, null, 2) + ";\n";
 fs.writeFileSync(out, js, "utf8");
-console.log("Wrote " + out);

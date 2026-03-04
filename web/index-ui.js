@@ -41,6 +41,7 @@
             (isOnboard ? "" : "<button type=\"button\" class=\"onboard-passenger px-3 py-2 rounded-lg border border-accent/60 text-accent text-sm font-medium\" data-idx=\"" + i + "\">上车</button>") +
             "<button type=\"button\" class=\"edit-passenger px-3 py-2 rounded-lg border border-border text-muted hover:text-gray-100 text-sm font-medium\" data-idx=\"" + i + "\">编辑</button>" +
             "<button type=\"button\" class=\"drop-passenger px-3 py-2 rounded-lg bg-danger/20 text-danger text-sm font-medium\" data-idx=\"" + i + "\" data-order-id=\"" + (orderId || "") + "\" data-delivery=\"" + (d || "").replace(/"/g, "&quot;") + "\">✖️ 下车</button>" +
+            "<button type=\"button\" class=\"delete-passenger px-3 py-2 rounded-lg border border-danger/50 text-danger text-sm font-medium\" data-idx=\"" + i + "\" data-order-id=\"" + (orderId || "") + "\">删除</button>" +
           "</div>";
         if (!isOnboard) {
           var onboardBtn = li.querySelector(".onboard-passenger");
@@ -75,6 +76,19 @@
             C.passengerRows.splice(ix, 1);
             if (C.passengerRows.length === 0) { C.pickups = []; C.deliveries = []; } else { C.applyPassengerRows(); }
             if (dest) { var locEl = document.getElementById("driverLoc"); if (locEl) locEl.value = dest; }
+            C.renderPassengerList();
+            C.saveStateToStorage();
+          }
+        };
+        li.querySelector(".delete-passenger").onclick = function () {
+          var ix = parseInt(this.getAttribute("data-idx"), 10);
+          var oid = this.getAttribute("data-order-id");
+          if (!window.confirm("确认删除该乘客的上下车地点吗？")) return;
+          if (oid && C.getSupabaseClient()) {
+            C.deletePassengerAndUpdateDb(oid, ix);
+          } else {
+            C.passengerRows.splice(ix, 1);
+            if (C.passengerRows.length === 0) { C.pickups = []; C.deliveries = []; } else { C.applyPassengerRows(); }
             C.renderPassengerList();
             C.saveStateToStorage();
           }

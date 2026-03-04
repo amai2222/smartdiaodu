@@ -102,19 +102,29 @@
     }
   };
 
+  function ensureSupabaseOk(res, fallbackMessage) {
+    if (res && res.error) {
+      throw new Error(res.error.message || fallbackMessage || "数据库操作失败");
+    }
+    return res;
+  }
+
   C.dropOffAndUpdateDb = function (orderId, newLoc, idx) {
     var sup = C.getSupabaseClient();
     if (!sup) return;
     var driverId = C.getDriverId();
     sup.from("driver_state").select("empty_seats").eq("driver_id", driverId).maybeSingle()
       .then(function (r) {
+        ensureSupabaseOk(r, "读取空座失败");
         var nextSeats = (r.data && r.data.empty_seats != null) ? Math.min(4, r.data.empty_seats + 1) : 1;
         return Promise.all([
           sup.from("driver_state").update({ current_loc: newLoc, empty_seats: nextSeats }).eq("driver_id", driverId),
           sup.from("order_pool").update({ status: "completed", assigned_driver_id: null }).eq("id", orderId)
         ]);
       })
-      .then(function () {
+      .then(function (results) {
+        ensureSupabaseOk(results && results[0], "更新司机状态失败");
+        ensureSupabaseOk(results && results[1], "更新乘客状态失败");
         C.passengerRows.splice(idx, 1);
         C.applyPassengerRows();
         if (newLoc) {
@@ -125,17 +135,41 @@
         if (seatsEl) seatsEl.value = String(Math.min(4, parseInt(seatsEl.value, 10) + 1));
         if (C.renderPassengerList) C.renderPassengerList();
         C.saveStateToStorage();
-        // 通知地图页立刻按数据库重拉并重算路线（首页与地图同源 iframe）。
-        try {
-          var mapFrame = document.getElementById("mapFrame");
-          if (mapFrame && mapFrame.contentWindow) {
-            mapFrame.contentWindow.postMessage({ type: "smartdiaodu_refresh_route" }, "*");
-          }
-        } catch (e) {}
       })
       .catch(function (e) {
         var s = document.getElementById("gpsStatus");
         if (s) s.textContent = "下车更新失败: " + (e.message || e);
+      });
+  };
+
+  C.deletePassengerAndUpdateDb = function (orderId, idx) {
+    var sup = C.getSupabaseClient();
+    if (!sup) return;
+    sup.from("order_pool")
+      .update({
+        pickup: "",
+        delivery: "",
+        status: "rejected",
+        assigned_driver_id: null
+      })
+      .eq("id", orderId)
+      .then(function (r) {
+        ensureSupabaseOk(r, "删除乘客失败");
+        C.passengerRows.splice(idx, 1);
+        if (C.passengerRows.length === 0) {
+          C.pickups = [];
+          C.deliveries = [];
+        } else {
+          C.applyPassengerRows();
+        }
+        if (C.renderPassengerList) C.renderPassengerList();
+        C.saveStateToStorage();
+        var s = document.getElementById("gpsStatus");
+        if (s) s.textContent = "已删除该乘客上下车地点";
+      })
+      .catch(function (e) {
+        var s = document.getElementById("gpsStatus");
+        if (s) s.textContent = "删除失败: " + (e.message || e);
       });
   };
 
@@ -147,20 +181,9 @@
       if (!url) why.push("缺少 Supabase URL");
       if (!anon) why.push("缺少 Anon Key");
       if (!window.supabase) why.push("Supabase 脚本未加载");
-      console.warn("[loadFromDb] 未连上数据库:", why.join("；"), "| 请确保 config.js 已部署且可访问，或登录后 localStorage 已写入。");
-      try {
-        var p = localStorage.getItem(C.STORAGE_PICKUPS), d = localStorage.getItem(C.STORAGE_DELIVERIES);
-        if (p) C.pickups = JSON.parse(p);
-        if (d) C.deliveries = JSON.parse(d);
-        var ob = [];
-        try { var so = localStorage.getItem(C.STORAGE_ONBOARD); if (so) ob = JSON.parse(so); } catch (e2) {}
-        C.passengerRows = C.pickups.map(function (pu, i) { return { id: null, pickup: pu, delivery: (C.deliveries && C.deliveries[i]) || "", onboard: !!ob[i] }; });
-        try { var sw = localStorage.getItem(C.STORAGE_WAYPOINTS); if (sw) C.waypoints = JSON.parse(sw); } catch (e3) {}
-        C.applyPassengerRows();
-        var locFromStorage = localStorage.getItem(C.STORAGE_DRIVER_LOC);
-        var locEl = document.getElementById("driverLoc");
-        if (locEl && locFromStorage !== null) locEl.value = locFromStorage;
-      } catch (e) {}
+      C.passengerRows = [];
+      C.applyPassengerRows();
+      if (C.renderPassengerList) C.renderPassengerList();
       var statusEl = document.getElementById("gpsStatus");
       if (statusEl) statusEl.innerHTML = "未连接数据库（" + (why.length ? why.join("、") : "未知") + "）。请部署 config.js 或检查登录后 <button type=\"button\" id=\"btnReloadDb\" class=\"underline text-accent\">重新加载</button>";
       var rel = document.getElementById("btnReloadDb");
@@ -220,7 +243,6 @@
       })
       .catch(function (e) {
         var msg = (e && e.message) ? e.message : String(e);
-        console.error("[loadFromDb] 拉取乘客/司机状态失败:", msg, e);
         C.passengerRows = [];
         C.applyPassengerRows();
         if (C.renderPassengerList) C.renderPassengerList();

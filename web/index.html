@@ -266,8 +266,23 @@
       setActive(navHome);
     }
     var mapLoaded = false;
+    function requestMapRefresh() {
+      try {
+        if (mapFrame && mapFrame.contentWindow) {
+          mapFrame.contentWindow.postMessage({ type: "smartdiaodu_refresh_route", reason: "show_map" }, "*");
+        }
+      } catch (e) {}
+    }
     function showMap() {
-      if (mapFrame && !mapLoaded) { mapFrame.src = "map.html"; mapLoaded = true; }
+      var justLoaded = false;
+      if (mapFrame && !mapLoaded) {
+        mapFrame.src = "map.html";
+        mapLoaded = true;
+        justLoaded = true;
+        mapFrame.addEventListener("load", function () {
+          requestMapRefresh();
+        }, { once: true });
+      }
       viewHome.classList.add("hidden");
       viewMap.classList.remove("hidden");
       if (viewPlans) viewPlans.classList.add("hidden");
@@ -277,6 +292,7 @@
       if (appHeader) appHeader.classList.add("app-header-hidden");
       if (appHeaderExtra) appHeaderExtra.classList.add("app-header-hidden");
       setActive(navMap);
+      if (!justLoaded) requestMapRefresh();
     }
     function showPlans() {
       viewHome.classList.add("hidden");
