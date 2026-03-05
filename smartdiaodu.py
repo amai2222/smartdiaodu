@@ -559,6 +559,34 @@ def _get_driver_current_loc(driver_id: str) -> Optional[str]:
         return None
 
 
+def _get_bark_key_for_driver(driver_id: Optional[str]) -> Optional[str]:
+    """按司机从 app_users 表读取 bark_key；无或异常时返回 None。"""
+    if not driver_id or not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return None
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/app_users"
+    params = {
+        "driver_id": f"eq.{driver_id.strip()}",
+        "select": "bark_key",
+        "limit": 1,
+    }
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Accept": "application/json",
+    }
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        if not isinstance(data, list) or not data:
+            return None
+        return (data[0].get("bark_key") or "").strip() or None
+    except Exception as e:
+        logger.warning("按 driver_id 读取 bark_key 失败: %s", e)
+        return None
+
+
 def _get_supabase_user_email_by_token(access_token: str) -> Optional[str]:
     """调 Supabase Auth 接口校验 token 并取邮箱，不依赖本地 JWT Secret。"""
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not access_token:
@@ -1276,13 +1304,16 @@ def push_to_bark(
     price: str,
     extra_mins: float,
     fingerprint: Optional[str] = None,
+    driver_bark_key: Optional[str] = None,
 ) -> None:
     """
     通过 Bark API 推送到 iPhone，level=timeSensitive 突破 iOS 专注模式。
     若传 fingerprint 且配置了 RESPONSE_PAGE_BASE，正文会带「接单/是否继续」操作链接。
+    支持按司机自定义 bark_key；未配置则回退到全局 BARK_KEY。
     """
-    if not BARK_KEY or BARK_KEY == "bGPZAHqjNjdiQZTg5GeWWG":
-        logger.info("未配置 BARK_KEY，跳过推送")
+    bark_key = (driver_bark_key or "").strip() or BARK_KEY
+    if not bark_key or bark_key == "bGPZAHqjNjdiQZTg5GeWWG":
+        logger.info("未配置 Bark Key（司机/全局均为空或占位），跳过推送")
         return
 
     title = "🚨 发现极品顺路单！"
@@ -1290,8 +1321,8 @@ def push_to_bark(
     if fingerprint and RESPONSE_PAGE_BASE:
         body += f"\n未在 {RESPONSE_TIMEOUT_SECONDS // 60} 分钟内操作将不再推送此单。接单/停推：{RESPONSE_PAGE_BASE.rstrip('/')}?fp={fingerprint}"
     elif fingerprint:
-        body += f"\n未在规定时间内操作将不再推送此单；接单或停推请打开网页操作。"
-    url = f"https://api.day.app/{BARK_KEY}/{title}/{body}"
+        body += "\n未在规定时间内操作将不再推送此单；接单或停推请打开网页操作。"
+    url = f"https://api.day.app/{bark_key}/{title}/{body}"
     params = {
         "sound": "minuet",
         "level": "timeSensitive",
@@ -2598,11 +2629,13 @@ async def evaluate_new_order(req: EvaluateRequest) -> dict:
     driver_id = (req.driver_id or "").strip() or None
     driver_mode = DRIVER_MODE
     cfg = _get_mode_config()
+    driver_bark_key: Optional[str] = None
     if driver_id:
         row = _get_driver_mode_from_db(driver_id)
         if row:
             driver_mode = row["mode"]
             cfg = row["config"]
+        driver_bark_key = _get_bark_key_for_driver(driver_id)
 
     # ---------- 0. 调度模式（按该司机设置） ----------
     if driver_mode == "pause":
@@ -2678,8 +2711,21 @@ async def evaluate_new_order(req: EvaluateRequest) -> dict:
 
             pushed_orders_cache[fingerprint] = now
             pending_response[fingerprint] = now
-            push_to_bark(new_order.pickup, new_order.delivery, new_order.price, extra_minutes, fingerprint)
-            push_to_supabase_realtime(new_order.pickup, new_order.delivery, new_order.price, extra_minutes, fingerprint)
+            push_to_bark(
+                new_order.pickup,
+                new_order.delivery,
+                new_order.price,
+                extra_minutes,
+                fingerprint,
+                driver_bark_key=driver_bark_key,
+            )
+            push_to_supabase_realtime(
+                new_order.pickup,
+                new_order.delivery,
+                new_order.price,
+                extra_minutes,
+                fingerprint,
+            )
             route_preview = [new_addr[i] for i in new_route_idx]
             return {
                 "status": "matched",
@@ -2765,6 +2811,7 @@ async def evaluate_new_order(req: EvaluateRequest) -> dict:
             new_order.price,
             extra_time_minutes,
             fingerprint,
+            driver_bark_key=driver_bark_key,
         )
         push_to_supabase_realtime(
             new_order.pickup,
