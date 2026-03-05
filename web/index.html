@@ -201,6 +201,78 @@
           </div>
         </div>
       </div>
+      <!-- 人工模式：上传截图 OCR，确认后按条件筛选推荐 -->
+      <div id="viewManual" class="app-view hidden overflow-auto">
+        <div class="px-4 pt-4 pb-6">
+          <h2 class="text-muted font-medium mb-3 flex items-center gap-2">
+            <span aria-hidden="true">🧾</span> 人工模式（截图 OCR）
+          </h2>
+          <div class="bg-panel border border-border rounded-2xl p-4 mb-4">
+            <label for="manualImageInput" class="text-sm text-muted block mb-2">上传截图（可多选，可重复上传）</label>
+            <input id="manualImageInput" type="file" accept="image/*" multiple class="block w-full text-sm text-gray-100" />
+            <label class="text-sm text-muted block mt-3">
+              OCR 平台模板
+              <select id="manualOcrPlatform" class="mt-1 w-full bg-[#0c0c0f] border border-border rounded-xl px-3 py-2 text-gray-100">
+                <option value="hello">哈啰（顺路订单）</option>
+                <option value="didi">滴滴（邀请同行）</option>
+                <option value="auto">自动识别（兼容）</option>
+              </select>
+            </label>
+            <div class="flex gap-2 mt-3 flex-wrap">
+              <button type="button" id="btnManualOcr" class="px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium">OCR 识别</button>
+              <button type="button" id="btnManualClearImages" class="px-4 py-2 rounded-xl border border-border text-muted text-sm font-medium">清空图片</button>
+            </div>
+            <p id="manualOcrStatus" class="text-sm text-muted mt-2">等待上传图片</p>
+          </div>
+
+          <div class="bg-panel border border-border rounded-2xl p-4 mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm text-muted font-medium">OCR 候选乘客</h3>
+              <div class="flex items-center gap-3 flex-wrap justify-end">
+                <button type="button" id="btnManualSelectAll" class="text-xs text-accent underline">全选</button>
+                <button type="button" id="btnManualInverseSelect" class="text-xs text-accent underline">反选</button>
+                <button type="button" id="btnManualClearCandidates" class="text-xs text-danger underline">清空候选</button>
+                <button type="button" id="btnManualExportCandidates" class="text-xs text-accent underline">导出</button>
+              </div>
+            </div>
+            <div id="manualCandidatesList" class="space-y-2 text-sm text-gray-100"></div>
+            <p id="manualCandidatesEmpty" class="text-sm text-muted">暂无候选，请先 OCR 识别</p>
+          </div>
+
+          <div class="bg-panel border border-border rounded-2xl p-4 mb-4">
+            <div class="grid grid-cols-2 gap-3">
+              <label class="text-sm text-muted">
+                选择数量
+                <select id="manualSelectCount" class="mt-1 w-full bg-[#0c0c0f] border border-border rounded-xl px-3 py-2 text-gray-100">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              </label>
+              <label class="text-sm text-muted">
+                路线策略
+                <select id="manualTactics" class="mt-1 w-full bg-[#0c0c0f] border border-border rounded-xl px-3 py-2 text-gray-100">
+                  <option value="0">默认</option>
+                  <option value="13">用时最短</option>
+                  <option value="12">距离最短</option>
+                  <option value="6">费用最省</option>
+                  <option value="5">躲避拥堵</option>
+                  <option value="3">不走高速</option>
+                </select>
+              </label>
+            </div>
+            <button type="button" id="btnManualRecommend" class="mt-3 w-full py-3 rounded-xl border-2 border-success text-success font-medium">智能挑选乘客</button>
+            <p class="text-xs text-muted mt-2">规则：到乘客起点预计 ≤ 1 小时，顺路度高，收益优先。</p>
+          </div>
+
+          <div class="bg-panel border border-border rounded-2xl p-4">
+            <h3 class="text-sm text-muted font-medium mb-2">推荐结果</h3>
+            <div id="manualRecommendList" class="space-y-2 text-sm text-gray-100"></div>
+            <p id="manualRecommendEmpty" class="text-sm text-muted">尚未生成推荐</p>
+          </div>
+        </div>
+      </div>
       <!-- 设置视图：内嵌 setup.html，预加载后点击即显，避免整页跳转卡顿 -->
       <div id="viewSetup" class="app-view hidden">
         <iframe id="setupFrame" src="about:blank" class="w-full h-full min-h-[60vh] border-0 block" title="设置"></iframe>
@@ -221,6 +293,10 @@
         <span class="text-lg">📋</span>
         <span class="text-xs font-medium">计划</span>
       </button>
+      <button type="button" id="navManual" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100">
+        <span class="text-lg">🧾</span>
+        <span class="text-xs font-medium">人工</span>
+      </button>
       <button type="button" id="navSettings" class="nav-tab flex-1 py-3 flex flex-col items-center gap-1 border-t-2 border-transparent bg-panel text-gray-100">
         <span class="text-lg">⚙️</span>
         <span class="text-xs font-medium">设置</span>
@@ -234,10 +310,12 @@
     var viewHome = document.getElementById("viewHome");
     var viewMap = document.getElementById("viewMap");
     var viewPlans = document.getElementById("viewPlans");
+    var viewManual = document.getElementById("viewManual");
     var viewSetup = document.getElementById("viewSetup");
     var navHome = document.getElementById("navHome");
     var navMap = document.getElementById("navMap");
     var navPlans = document.getElementById("navPlans");
+    var navManual = document.getElementById("navManual");
     var navSettings = document.getElementById("navSettings");
     var bottomNav = document.getElementById("bottomNav");
     var appMain = document.getElementById("appMain");
@@ -252,12 +330,13 @@
       el.addEventListener("touchend", function (e) { e.preventDefault(); fn(); }, { passive: false });
     }
     function setActive(tab) {
-      [navHome, navMap, navPlans, navSettings].forEach(function (n) { if (n) n.classList.toggle("active", n === tab); });
+      [navHome, navMap, navPlans, navManual, navSettings].forEach(function (n) { if (n) n.classList.toggle("active", n === tab); });
     }
     function showHome() {
       viewHome.classList.remove("hidden");
       viewMap.classList.add("hidden");
       if (viewPlans) viewPlans.classList.add("hidden");
+      if (viewManual) viewManual.classList.add("hidden");
       if (viewSetup) viewSetup.classList.add("hidden");
       if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
       if (appMain) appMain.classList.remove("map-fullscreen");
@@ -286,6 +365,7 @@
       viewHome.classList.add("hidden");
       viewMap.classList.remove("hidden");
       if (viewPlans) viewPlans.classList.add("hidden");
+      if (viewManual) viewManual.classList.add("hidden");
       if (viewSetup) viewSetup.classList.add("hidden");
       if (bottomNav) bottomNav.classList.add("bottom-nav-hidden");
       if (appMain) appMain.classList.add("map-fullscreen");
@@ -298,6 +378,7 @@
       viewHome.classList.add("hidden");
       viewMap.classList.add("hidden");
       if (viewPlans) viewPlans.classList.remove("hidden");
+      if (viewManual) viewManual.classList.add("hidden");
       if (viewSetup) viewSetup.classList.add("hidden");
       if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
       if (appMain) appMain.classList.remove("map-fullscreen");
@@ -305,6 +386,18 @@
       if (appHeaderExtra) appHeaderExtra.classList.remove("app-header-hidden");
       setActive(navPlans);
       loadPlansList();
+    }
+    function showManual() {
+      viewHome.classList.add("hidden");
+      viewMap.classList.add("hidden");
+      if (viewPlans) viewPlans.classList.add("hidden");
+      if (viewManual) viewManual.classList.remove("hidden");
+      if (viewSetup) viewSetup.classList.add("hidden");
+      if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
+      if (appMain) appMain.classList.remove("map-fullscreen");
+      if (appHeader) appHeader.classList.remove("app-header-hidden");
+      if (appHeaderExtra) appHeaderExtra.classList.remove("app-header-hidden");
+      setActive(navManual);
     }
     function loadPlansList() {
       var root = document.getElementById("plansListRoot");
@@ -391,6 +484,7 @@
       viewHome.classList.add("hidden");
       viewMap.classList.add("hidden");
       if (viewPlans) viewPlans.classList.add("hidden");
+      if (viewManual) viewManual.classList.add("hidden");
       if (viewSetup) viewSetup.classList.remove("hidden");
       if (bottomNav) bottomNav.classList.remove("bottom-nav-hidden");
       if (appMain) appMain.classList.remove("map-fullscreen");
@@ -401,6 +495,7 @@
     addTap(navHome, showHome);
     addTap(navMap, showMap);
     addTap(navPlans, showPlans);
+    addTap(navManual, showManual);
     addTap(navSettings, showSetup);
     var btnShowMap = document.getElementById("btnShowMap");
     if (btnShowMap) addTap(btnShowMap, showMap);
@@ -409,10 +504,12 @@
       if (e.data.type === "smartdiaodu_map_back") showHome();
       if (e.data.type === "smartdiaodu_show_home") showHome();
       if (e.data.type === "smartdiaodu_show_map") showMap();
+      if (e.data.type === "smartdiaodu_show_manual") showManual();
     });
     setActive(navHome);
     if (location.hash === "#map") showMap();
     else if (location.hash === "#plans") showPlans();
+    else if (location.hash === "#manual") showManual();
     else if (location.hash === "#setup") showSetup();
     if (setupFrame) setupFrame.src = "setup.html";
   }
@@ -425,6 +522,7 @@
   <script src="index-state.js"></script>
   <script src="auth.js"></script>
   <script src="index-ui.js"></script>
+  <script src="manual-mode.js"></script>
   <!-- Realtime 推送：复用同一 Supabase 客户端，避免多实例警告 -->
   <script>
 (function () {

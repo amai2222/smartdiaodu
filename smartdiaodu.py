@@ -7,6 +7,7 @@ import hashlib
 import logging
 import math
 import os
+import re
 import time
 import traceback
 from datetime import date, datetime, timedelta
@@ -22,12 +23,13 @@ except ImportError:
 import bcrypt
 import jwt
 import requests
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
+from baidu_ocr_service import BaiduOcrClient, extract_passenger_candidates
 
 # ================= 日志配置：500 排错必备 =================
 logging.basicConfig(
@@ -53,6 +55,8 @@ app.add_middleware(
 # 以下为默认值，启动时由 _load_app_config_from_db() 从 app_config 表覆盖（除 Supabase/JWT 外仅从 DB 读）
 BAIDU_AK = "wxw2PvK3nWeOCGk1rZDe2krnlc1jbzsc"
 BAIDU_SERVICE_ID = "119231078"
+BAIDU_OCR_API_KEY = os.environ.get("BAIDU_OCR_API_KEY", "").strip()
+BAIDU_OCR_SECRET_KEY = os.environ.get("BAIDU_OCR_SECRET_KEY", "").strip()
 BARK_KEY = "bGPZAHqjNjdiQZTg5GeWWG"
 MAX_DETOUR_SECONDS = 900
 REQUEST_TIMEOUT = 5
@@ -90,7 +94,8 @@ JWT_EXPIRE_SECONDS = 7 * 24 * 3600
 
 def _load_app_config_from_db() -> None:
     """从 app_config 表加载配置并覆盖全局变量（除 Supabase/JWT 外）。"""
-    global BAIDU_AK, BAIDU_SERVICE_ID, BARK_KEY, MAX_DETOUR_SECONDS, REQUEST_TIMEOUT
+    global BAIDU_AK, BAIDU_SERVICE_ID, BAIDU_OCR_API_KEY, BAIDU_OCR_SECRET_KEY
+    global BARK_KEY, MAX_DETOUR_SECONDS, REQUEST_TIMEOUT
     global DRIVER_MODE, MODE2_DETOUR_MINUTES_MIN, MODE2_DETOUR_MINUTES_MAX, MODE2_HIGH_PROFIT_THRESHOLD
     global MODE3_MAX_MINUTES_TO_PICKUP, MODE3_MAX_DETOUR_MINUTES
     global RESPONSE_TIMEOUT_SECONDS, RESPONSE_PAGE_BASE, DEFAULT_DRIVER_ID
@@ -118,6 +123,10 @@ def _load_app_config_from_db() -> None:
             BAIDU_AK = cfg["baidu_map_ak"]
         if cfg.get("baidu_service_id"):
             BAIDU_SERVICE_ID = cfg["baidu_service_id"]
+        if cfg.get("baidu_ocr_api_key"):
+            BAIDU_OCR_API_KEY = cfg["baidu_ocr_api_key"]
+        if cfg.get("baidu_ocr_secret_key"):
+            BAIDU_OCR_SECRET_KEY = cfg["baidu_ocr_secret_key"]
         if "bark_key" in cfg:
             BARK_KEY = cfg["bark_key"]
         if cfg.get("max_detour_seconds"):
@@ -304,6 +313,21 @@ def _sync_planned_trip_plans_to_db(driver_id: Optional[str] = None) -> None:
 
 _load_app_config_from_db()
 _load_planned_trip_from_db(DEFAULT_DRIVER_ID)
+_baidu_ocr_client: Optional[BaiduOcrClient] = None
+# ==========================================
+
+
+def _get_baidu_ocr_client() -> BaiduOcrClient:
+    global _baidu_ocr_client
+    if (
+        _baidu_ocr_client is None
+        or _baidu_ocr_client.api_key != BAIDU_OCR_API_KEY
+        or _baidu_ocr_client.secret_key != BAIDU_OCR_SECRET_KEY
+    ):
+        _baidu_ocr_client = BaiduOcrClient(BAIDU_OCR_API_KEY, BAIDU_OCR_SECRET_KEY, timeout=REQUEST_TIMEOUT)
+    return _baidu_ocr_client
+
+
 # ==========================================
 
 
@@ -393,6 +417,30 @@ class LoginRequest(BaseModel):
 class AuthExchangeRequest(BaseModel):
     """邮箱登录后用 Supabase access_token 换我们 JWT"""
     access_token: str
+
+
+class ManualOcrImage(BaseModel):
+    name: Optional[str] = None
+    content_base64: str
+
+
+class ManualOcrRequest(BaseModel):
+    images: List[ManualOcrImage]
+
+
+class ManualCandidate(BaseModel):
+    pickup: str
+    delivery: str
+    price: Optional[float] = None
+    departure_time: Optional[str] = None
+    toll_negotiable: Optional[bool] = None
+
+
+class ManualRecommendRequest(BaseModel):
+    candidates: List[ManualCandidate]
+    select_count: int = 1
+    tactics: int = 0
+    waypoints: Optional[List[str]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -611,6 +659,20 @@ async def auth_me(credentials: Optional[HTTPAuthorizationCredentials] = Depends(
     if driver_id:
         out["driver_id"] = driver_id
     return out
+
+
+def _require_driver_id_from_token(credentials: Optional[HTTPAuthorizationCredentials]) -> str:
+    """强制鉴权并返回当前账号绑定的 driver_id。"""
+    if not credentials or not credentials.credentials:
+        raise HTTPException(status_code=401, detail="未提供登录凭证")
+    username = _decode_token(credentials.credentials)
+    if not username:
+        raise HTTPException(status_code=401, detail="登录已过期或无效")
+    user = _get_user_by_username(username)
+    driver_id = str((user or {}).get("driver_id") or "").strip()
+    if not driver_id:
+        raise HTTPException(status_code=403, detail="当前账号未绑定司机")
+    return driver_id
 
 
 @app.post("/auth/exchange")
@@ -1806,6 +1868,380 @@ async def reverse_geocode_endpoint(body: ReverseGeocodeRequest) -> dict:
     return {"address": address, "lat": body.lat, "lng": body.lng}
 
 
+def _normalize_tactics(value: Any) -> int:
+    try:
+        t = int(value)
+    except Exception:
+        t = 0
+    if t not in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
+        t = 0
+    return t
+
+
+def _parse_manual_departure_to_dt(
+    raw: str,
+    now_dt: datetime,
+    eta_dt: Optional[datetime] = None,
+) -> Optional[datetime]:
+    s = (raw or "").strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M"):
+        try:
+            return datetime.strptime(s, fmt)
+        except Exception:
+            pass
+    m = re.search(r"^([01]?\d|2[0-3])[:：]([0-5]\d)$", s)
+    if not m:
+        m2 = re.search(r"([01]?\d|2[0-3])\s*点\s*([0-5]?\d)?", s)
+        if m2:
+            h = int(m2.group(1))
+            mm = int(m2.group(2) or 0)
+        else:
+            return None
+    else:
+        h = int(m.group(1))
+        mm = int(m.group(2))
+    base = eta_dt or now_dt
+    cands = [
+        base.replace(hour=h, minute=mm, second=0, microsecond=0),
+        (base + timedelta(days=1)).replace(hour=h, minute=mm, second=0, microsecond=0),
+        (base - timedelta(days=1)).replace(hour=h, minute=mm, second=0, microsecond=0),
+    ]
+    return min(cands, key=lambda dt: abs((dt - base).total_seconds()))
+
+
+def _compute_route_summary(
+    driver_loc: str,
+    pickups: List[str],
+    deliveries: List[str],
+    waypoints: List[str],
+    tactics: int,
+) -> Dict[str, Any]:
+    driver_loc = (driver_loc or "").strip()
+    pickups = [str(p or "").strip() for p in (pickups or [])]
+    deliveries = [str(d or "").strip() for d in (deliveries or [])]
+    waypoints = [str(w or "").strip() for w in (waypoints or []) if str(w or "").strip()]
+    if not driver_loc:
+        raise HTTPException(status_code=400, detail="driver_loc 不能为空")
+    if len(pickups) != len(deliveries):
+        raise HTTPException(status_code=400, detail="pickups 与 deliveries 数量须一致")
+
+    n = len(deliveries)
+    m = len(waypoints)
+    if n == 0 and m == 0:
+        coord_str = geocode_address(driver_loc)
+        return {
+            "total_time_seconds": 0,
+            "route_indices": [0],
+            "matrix": [[0]],
+            "addresses": [driver_loc],
+            "coords": [coord_str],
+            "pickup_node_by_passenger": {},
+        }
+
+    effective_pickups = [p for p in pickups if p]
+    k = len(effective_pickups)
+    addresses = [driver_loc] + list(effective_pickups) + list(deliveries) + list(waypoints)
+    coords = geocode_addresses(addresses)
+    matrix = get_duration_matrix(coords, tactics=tactics)
+
+    pickup_delivery_pairs: List[Tuple[int, int]] = []
+    for i in range(n):
+        if pickups[i]:
+            pickup_ord = sum(1 for j in range(i) if pickups[j])
+            pickup_node = 1 + pickup_ord
+            delivery_node = 1 + k + i
+            pickup_delivery_pairs.append((pickup_node, delivery_node))
+
+    route_indices, total_time = solve_pdp_route_flexible(matrix, pickup_delivery_pairs)
+    if not route_indices:
+        raise HTTPException(status_code=422, detail="OR-Tools 未求得可行路线")
+
+    passengers_with_pickup = [i for i in range(n) if pickups[i]]
+    pickup_node_by_passenger: Dict[int, int] = {}
+    for j, p_idx in enumerate(passengers_with_pickup):
+        pickup_node_by_passenger[p_idx] = 1 + j
+
+    return {
+        "total_time_seconds": int(total_time),
+        "route_indices": list(route_indices),
+        "matrix": matrix,
+        "addresses": addresses,
+        "coords": coords,
+        "pickup_node_by_passenger": pickup_node_by_passenger,
+    }
+
+
+@app.post("/manual_ocr_extract")
+async def manual_ocr_extract(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    files: Optional[List[UploadFile]] = File(default=None),
+    ocr_platform: Optional[str] = Form(default=None),
+) -> dict:
+    """人工模式：支持 multipart 多文件（优先）与 JSON(base64 兼容) 两种上传。"""
+    driver_id = _require_driver_id_from_token(credentials)
+    driver_loc = _get_driver_current_loc(driver_id) or ""
+    client = _get_baidu_ocr_client()
+    if not client.available():
+        raise HTTPException(status_code=503, detail="未配置百度 OCR（baidu_ocr_api_key / baidu_ocr_secret_key）")
+
+    max_files = 20
+    max_file_bytes = 6 * 1024 * 1024
+    max_total_bytes = 30 * 1024 * 1024
+    total_bytes = 0
+    platform_hint = (ocr_platform or "").strip().lower()
+    if platform_hint not in ("hello", "didi"):
+        platform_hint = None
+    image_results: List[Dict[str, Any]] = []
+    all_candidates: List[Dict[str, Any]] = []
+    if files:
+        if len(files) > max_files:
+            raise HTTPException(status_code=400, detail=f"一次最多上传 {max_files} 张图片")
+        for i, uf in enumerate(files):
+            name = (uf.filename or f"image_{i + 1}").strip() or f"image_{i + 1}"
+            try:
+                raw = await uf.read()
+                if not raw:
+                    image_results.append({"name": name, "lines": [], "pairs": [], "error": "文件为空"})
+                    continue
+                if len(raw) > max_file_bytes:
+                    image_results.append({"name": name, "lines": [], "pairs": [], "error": "文件过大，请压缩后再试（建议 <= 6MB）"})
+                    continue
+                total_bytes += len(raw)
+                if total_bytes > max_total_bytes:
+                    raise HTTPException(status_code=400, detail="本次上传总大小过大，请减少图片数量或继续压缩后重试（建议 <= 30MB）")
+                lines = client.ocr_text_lines_from_bytes(raw)
+                pairs = extract_passenger_candidates(lines, platform_hint=platform_hint, driver_loc=driver_loc)
+                image_results.append({"name": name, "lines": lines, "pairs": pairs})
+                for p in pairs:
+                    all_candidates.append(
+                        {
+                            "pickup": p.get("pickup", ""),
+                            "delivery": p.get("delivery", ""),
+                            "price": p.get("price"),
+                            "departure_time": p.get("departure_time"),
+                            "toll_negotiable": p.get("toll_negotiable"),
+                            "source_platform": p.get("source_platform"),
+                            "source_image": name,
+                            "source_text": p.get("source_text", ""),
+                        }
+                    )
+            except Exception as e:
+                image_results.append({"name": name, "lines": [], "pairs": [], "error": str(e)})
+            finally:
+                try:
+                    await uf.close()
+                except Exception:
+                    pass
+    else:
+        try:
+            body_json = await request.json()
+        except Exception:
+            body_json = {}
+        if platform_hint is None:
+            body_platform = str((body_json or {}).get("ocr_platform") or "").strip().lower()
+            if body_platform in ("hello", "didi"):
+                platform_hint = body_platform
+        images = (body_json or {}).get("images") or []
+        if not images:
+            raise HTTPException(status_code=400, detail="请上传图片（multipart files）或提供 images(base64)")
+        if len(images) > max_files:
+            raise HTTPException(status_code=400, detail=f"一次最多上传 {max_files} 张图片")
+        for i, img in enumerate(images):
+            name = (str((img or {}).get("name") or f"image_{i + 1}")).strip() or f"image_{i + 1}"
+            b64 = (img or {}).get("content_base64") or ""
+            try:
+                lines = client.ocr_text_lines(b64)
+                pairs = extract_passenger_candidates(lines, platform_hint=platform_hint, driver_loc=driver_loc)
+                image_results.append({"name": name, "lines": lines, "pairs": pairs})
+                for p in pairs:
+                    all_candidates.append(
+                        {
+                            "pickup": p.get("pickup", ""),
+                            "delivery": p.get("delivery", ""),
+                            "price": p.get("price"),
+                            "departure_time": p.get("departure_time"),
+                            "toll_negotiable": p.get("toll_negotiable"),
+                            "source_platform": p.get("source_platform"),
+                            "source_image": name,
+                            "source_text": p.get("source_text", ""),
+                        }
+                    )
+            except Exception as e:
+                image_results.append({"name": name, "lines": [], "pairs": [], "error": str(e)})
+
+    dedup: List[Dict[str, Any]] = []
+    seen = set()
+    for c in all_candidates:
+        key = (
+            (c.get("pickup") or "").strip(),
+            (c.get("delivery") or "").strip(),
+            (c.get("departure_time") or "").strip(),
+            "" if c.get("price") is None else str(c.get("price")),
+            "" if c.get("toll_negotiable") is None else str(bool(c.get("toll_negotiable"))),
+        )
+        if not key[0] or not key[1]:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        dedup.append(c)
+
+    return {
+        "images": image_results,
+        "candidates": dedup,
+        "count": len(dedup),
+    }
+
+
+@app.post("/manual_candidates_recommend")
+async def manual_candidates_recommend(
+    body: ManualRecommendRequest,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> dict:
+    """人工模式：根据候选乘客，按到起点 <= 1 小时 + 顺路度 + 收益评分，挑选建议人数（1-4）并给出顺路备选。"""
+    driver_id = _require_driver_id_from_token(credentials)
+    db_orders = _get_assigned_orders_for_driver(driver_id)
+    db_pickups = [o.get("pickup", "") for o in db_orders]
+    db_deliveries = [o.get("delivery", "") for o in db_orders]
+    driver_loc = _get_driver_current_loc(driver_id)
+    if not driver_loc:
+        raise HTTPException(status_code=400, detail="司机当前位置为空，请先在首页更新定位")
+
+    tactics = _normalize_tactics(body.tactics)
+    waypoints = [str(w or "").strip() for w in (body.waypoints or []) if str(w or "").strip()]
+    baseline = _compute_route_summary(driver_loc, db_pickups, db_deliveries, waypoints, tactics)
+    baseline_total = int(baseline["total_time_seconds"])
+
+    select_count = max(1, min(4, int(body.select_count or 1)))
+    evaluations: List[Dict[str, Any]] = []
+    base_n = len(db_deliveries)
+    now_dt = datetime.now()
+
+    for idx, cand in enumerate(body.candidates or []):
+        pickup = (cand.pickup or "").strip()
+        delivery = (cand.delivery or "").strip()
+        price = float(cand.price or 0)
+        departure_time = (cand.departure_time or "").strip()
+        toll_negotiable = cand.toll_negotiable
+        row: Dict[str, Any] = {
+            "index": idx,
+            "pickup": pickup,
+            "delivery": delivery,
+            "price": price,
+            "departure_time": departure_time,
+            "toll_negotiable": toll_negotiable,
+        }
+        if not pickup or not delivery:
+            row.update({"eligible": False, "reason": "缺少起点或终点", "score": -10**9})
+            evaluations.append(row)
+            continue
+
+        try:
+            plus_pickups = db_pickups + [pickup]
+            plus_deliveries = db_deliveries + [delivery]
+            summary = _compute_route_summary(driver_loc, plus_pickups, plus_deliveries, waypoints, tactics)
+            plus_total = int(summary["total_time_seconds"])
+            detour_seconds = max(0, plus_total - baseline_total)
+
+            cand_passenger_idx = base_n
+            pickup_node = summary["pickup_node_by_passenger"].get(cand_passenger_idx)
+            pickup_eta_seconds: Optional[int] = None
+            if pickup_node is not None:
+                acc = 0
+                route_indices = summary["route_indices"]
+                matrix = summary["matrix"]
+                for s in range(1, len(route_indices)):
+                    a = route_indices[s - 1]
+                    b = route_indices[s]
+                    acc += int(matrix[a][b])
+                    if b == pickup_node:
+                        pickup_eta_seconds = acc
+                        break
+
+            eta_ok = pickup_eta_seconds is not None and pickup_eta_seconds <= 3600
+            max_detour = max(15 * 60, MODE3_MAX_DETOUR_MINUTES * 60)
+            detour_ok = detour_seconds <= max_detour
+            departure_window_ok = True
+            departure_diff_seconds: Optional[int] = None
+            estimated_arrival_time = None
+            if pickup_eta_seconds is not None:
+                estimated_arrival_time = (now_dt + timedelta(seconds=pickup_eta_seconds)).strftime("%H:%M")
+            if departure_time:
+                if pickup_eta_seconds is None:
+                    departure_window_ok = False
+                else:
+                    eta_dt = now_dt + timedelta(seconds=pickup_eta_seconds)
+                    dep_dt = _parse_manual_departure_to_dt(departure_time, now_dt, eta_dt=eta_dt)
+                    if dep_dt is None:
+                        departure_window_ok = False
+                    else:
+                        departure_diff_seconds = int((eta_dt - dep_dt).total_seconds())
+                        departure_window_ok = abs(departure_diff_seconds) <= 30 * 60
+
+            base_for_ratio = baseline_total if baseline_total > 0 else max(1, plus_total)
+            detour_ratio = detour_seconds / max(1, base_for_ratio)
+
+            # 分数越高越优：收益加分，绕路/比例/接客时间扣分
+            score = int(price * 600) - detour_seconds - int(detour_ratio * 1200)
+            if pickup_eta_seconds is not None:
+                score -= int(pickup_eta_seconds * 0.05)
+            # 同等条件下优先“可协商高速费”的乘客
+            if toll_negotiable is True:
+                score += 1800
+            if not eta_ok:
+                score -= 100000
+            if not detour_ok:
+                score -= 50000
+            if not departure_window_ok:
+                score -= 80000
+
+            reason = "ok"
+            if not eta_ok:
+                reason = "到起点超 1 小时"
+            elif not detour_ok:
+                reason = "绕路过大"
+            elif not departure_window_ok:
+                reason = "预计到达起点时间不在乘客出发时间 ±30 分钟窗口内"
+
+            row.update(
+                {
+                    "eligible": bool(eta_ok and detour_ok and departure_window_ok),
+                    "reason": reason,
+                    "pickup_eta_seconds": pickup_eta_seconds,
+                    "estimated_arrival_time": estimated_arrival_time,
+                    "departure_window_ok": departure_window_ok,
+                    "departure_diff_seconds": departure_diff_seconds,
+                    "detour_seconds": detour_seconds,
+                    "detour_ratio": round(detour_ratio, 4),
+                    "total_time_seconds_if_added": plus_total,
+                    "score": score,
+                }
+            )
+        except Exception as e:
+            row.update({"eligible": False, "reason": f"不可行: {e}", "score": -10**9})
+        evaluations.append(row)
+
+    eligible = [r for r in evaluations if r.get("eligible")]
+    eligible.sort(key=lambda x: x.get("score", -10**9), reverse=True)
+    recommended = eligible[:select_count]
+    backup_limit = 5
+    backup_recommended = eligible[select_count : select_count + backup_limit]
+
+    return {
+        "driver_id": driver_id,
+        "baseline_total_time_seconds": baseline_total,
+        "evaluations": evaluations,
+        "recommended": recommended,
+        "backup_recommended": backup_recommended,
+        "requested_select_count": select_count,
+        "selected_count": len(recommended),
+        "backup_count": len(backup_recommended),
+    }
+
+
 @app.post("/current_route_preview")
 async def current_route_preview(
     req: dict,
@@ -1831,20 +2267,10 @@ async def current_route_preview(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"请求体格式错误: {e}") from e
 
-    tactics = int(req.get("tactics", 0))
-    if tactics not in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
-        tactics = 0
+    tactics = _normalize_tactics(req.get("tactics", 0))
 
     # 强制鉴权：仅允许已登录司机请求当前路线；driver_id 一律从 token 对应用户读取，忽略前端传入。
-    if not credentials or not credentials.credentials:
-        raise HTTPException(status_code=401, detail="未提供登录凭证")
-    username = _decode_token(credentials.credentials)
-    if not username:
-        raise HTTPException(status_code=401, detail="登录已过期或无效")
-    user = _get_user_by_username(username)
-    driver_id = str((user or {}).get("driver_id") or "").strip()
-    if not driver_id:
-        raise HTTPException(status_code=403, detail="当前账号未绑定司机，无法规划路线")
+    driver_id = _require_driver_id_from_token(credentials)
 
     # 只信数据库：按 token 绑定司机强制读取已分配订单与司机位置，不信任前端上传的乘客数组。
     db_orders = _get_assigned_orders_for_driver(driver_id)
