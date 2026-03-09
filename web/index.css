@@ -68,6 +68,10 @@ input, select, button { font-size: inherit; }
 #waypointsModalContent .waypoint-item:last-child { border-bottom: none; }
 #waypointsModal .voice-btn.listening { color: #ef4444; border-color: #ef4444; animation: voice-pulse 0.8s ease-in-out infinite; }
 
+#addPassengerModalOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 1rem; }
+#addPassengerModalOverlay.show { display: flex; }
+#addPassengerModal { max-height: 85vh; overflow: auto; }
+
 #editPassengerModalOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 1rem; }
 #editPassengerModalOverlay.show { display: flex; }
 #editPassengerModal { background: #14151a; border: 1px solid #2a2d35; border-radius: 1rem; max-width: 28rem; width: 100%; }

@@ -93,7 +93,10 @@
             <span aria-hidden="true">👥</span> 当前车上乘客
             <span id="passengerChevron" class="text-xs text-muted" aria-hidden="true">▼</span>
           </h3>
-          <button type="button" id="btnShowPlan" class="btn-touch px-4 py-2 rounded-xl border border-accent text-accent text-sm font-medium hover:bg-accent/20" onclick="event.stopPropagation();">查看当前计划</button>
+          <div class="flex items-center gap-2" onclick="event.stopPropagation();">
+            <button type="button" id="btnAddPassenger" class="btn-touch px-4 py-2 rounded-xl bg-accent hover:bg-blue-600 text-white text-sm font-medium">➕ 添加乘客</button>
+            <button type="button" id="btnShowPlan" class="btn-touch px-4 py-2 rounded-xl border border-accent text-accent text-sm font-medium hover:bg-accent/20">查看当前计划</button>
+          </div>
         </div>
         <div id="passengerSectionBody" class="hidden">
           <ul id="passengerList" class="space-y-3">
@@ -136,6 +139,27 @@
           <button type="button" id="waypointAddBtn" class="shrink-0 px-4 py-2 rounded-lg bg-accent text-white font-medium">添加</button>
         </div>
         <button type="button" id="waypointsModalClose" class="mt-3 w-full py-2 rounded-lg border border-border text-muted">关闭</button>
+      </div>
+    </div>
+
+    <!-- 添加乘客弹窗：录入起点、终点 -->
+    <div id="addPassengerModalOverlay" class="add-passenger-overlay" aria-hidden="true">
+      <div id="addPassengerModal" class="bg-panel border border-border rounded-xl max-w-md w-full shadow-xl" role="dialog" aria-labelledby="addPassengerModalTitle">
+        <h3 id="addPassengerModalTitle" class="text-console text-muted font-medium px-5 pt-4 pb-2 border-b border-border">添加乘客</h3>
+        <div class="p-5 space-y-4">
+          <div>
+            <label for="addPassengerPickup" class="block text-muted text-sm mb-1">起点（接客地址）</label>
+            <input type="text" id="addPassengerPickup" placeholder="输入起点地址" class="w-full px-3 py-2.5 rounded-xl bg-[#0c0c0f] border border-border text-gray-100 placeholder-gray-500" />
+          </div>
+          <div>
+            <label for="addPassengerDelivery" class="block text-muted text-sm mb-1">终点（送达地址）</label>
+            <input type="text" id="addPassengerDelivery" placeholder="输入终点地址" class="w-full px-3 py-2.5 rounded-xl bg-[#0c0c0f] border border-border text-gray-100 placeholder-gray-500" />
+          </div>
+        </div>
+        <div class="px-5 pb-5 flex gap-3">
+          <button type="button" id="addPassengerModalCancel" class="flex-1 py-2.5 rounded-xl border border-border text-muted font-medium">取消</button>
+          <button type="button" id="addPassengerModalSubmit" class="flex-1 py-2.5 rounded-xl bg-accent text-white font-medium">添加</button>
+        </div>
       </div>
     </div>
 

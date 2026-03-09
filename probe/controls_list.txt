@@ -1,0 +1,219 @@
+序号	bounds	clickable	text	content-desc	resource-id	class
+0	[0,0][1080,2042]	N				FrameLayout
+1	[0,0][1080,2042]	N				LinearLayout
+2	[0,0][1080,2042]	N				FrameLayout
+3	[0,0][1080,2042]	N			action_bar_root	LinearLayout
+4	[0,0][1080,2042]	N			android:id/content	FrameLayout
+5	[0,0][1080,2042]	N				LinearLayout
+6	[0,0][1080,2042]	N				FrameLayout
+7	[0,0][1080,2042]	N			fl_adv	FrameLayout
+8	[0,0][1080,2042]	N			fl_privacy	FrameLayout
+9	[0,0][1080,2042]	N			ll_home_page	LinearLayout
+10	[0,0][1080,2009]	N			register_tab_cnt_llt	LinearLayout
+11	[0,0][1080,2009]	N			hlph_home_container	ViewGroup
+12	[0,0][1080,239]	Y			statusBarNew	ViewGroup
+13	[0,0][1080,66]	N			vSpace	View
+14	[0,66][1080,239]	N			titleBar	FrameLayout
+15	[0,66][1080,239]	N			containerBar	ViewGroup
+16	[965,66][1080,239]	N			rightContainer	ViewGroup
+17	[281,89][798,216]	N			tabBar	FrameLayout
+18	[281,89][798,216]	N				LinearLayout
+19	[281,89][798,181]	N			rvTab	RecyclerView
+20	[309,89][429,181]	Y				ViewGroup
+21	[485,89][565,181]	Y				ViewGroup
+22	[621,89][741,181]	Y				ViewGroup
+23	[1005,95][1063,141]	N				FrameLayout
+24	[1005,95][1063,141]	N	10		tvBadgeText	TextView
+25	[965,118][1034,187]	Y				LinearLayout
+26	[965,118][1034,187]	N				ImageView
+27	[309,124][429,181]	N	顺风车		tvTabTitle	TextView
+28	[485,124][565,181]	N	打车		tvTabTitle	TextView
+29	[621,124][741,181]	N	车服务		tvTabTitle	TextView
+30	[281,181][798,216]	N			flLayoutIndicator	FrameLayout
+31	[341,187][398,198]	N			layoutIndicator	View
+32	[0,239][1080,2009]	N			homeFrameContainer	FrameLayout
+33	[0,239][1080,2009]	N				FrameLayout
+34	[0,239][1080,2009]	N			rlDriverContainer	RelativeLayout
+35	[0,239][1080,2009]	N			authContainer	FrameLayout
+36	[0,239][1080,2009]	N				FrameLayout
+37	[0,239][1080,2009]	N			securityRelativeLayout	RelativeLayout
+38	[0,239][1080,2009]	N			driveRefreshLayoutTotal	ViewGroup
+39	[0,239][1080,2009]	N			driver_new_scroll	ScrollView
+40	[0,239][1080,2009]	N				LinearLayout
+41	[0,239][1080,1677]	N			driver_order_area_container	ViewGroup
+42	[0,239][1080,1677]	N			driver_order_area	RelativeLayout
+43	[0,239][1080,1184]	N			llPublishView	LinearLayout
+44	[0,239][1080,671]	N				ViewGroup
+45	[0,239][1080,671]	N			topBackground	ImageView
+46	[35,239][1045,1155]	N			sllPublishView	LinearLayout
+47	[35,239][1045,1155]	N			publishView	FrameLayout
+48	[35,239][1045,1155]	N			containerView	FrameLayout
+49	[35,239][1045,380]	N			topLayout	FrameLayout
+50	[35,239][1045,380]	N			topTabLayout	HorizontalScrollView
+51	[35,239][1045,380]	N				LinearLayout
+52	[35,239][540,380]	N		市内		LinearLayout
+53	[540,239][1045,380]	Y		城际		LinearLayout
+54	[893,239][1066,412]	N			driverFloatView	FrameLayout
+55	[35,269][505,349]	N	市内			TextView
+56	[575,269][1045,349]	N	城际			TextView
+57	[35,349][1045,1155]	N			bottomContentLayout	LinearLayout
+58	[35,349][1045,683]	N				FrameLayout
+59	[35,349][1045,683]	N			clRoot	ViewGroup
+60	[35,349][1045,510]	Y			clStartAddress	ViewGroup
+61	[179,408][284,451]	N	你将从		tvStartPrefix	TextView
+62	[290,408][430,451]	N	古池社区		tvStartAddress	TextView
+63	[436,408][506,451]	N	出发		tvStartSuffix	TextView
+64	[518,418][532,441]	N			ivStartAddressArrow	ImageView
+65	[129,422][144,437]	N			lavStartPoint	ImageView
+66	[81,510][999,683]	Y			clEndAddress	ViewGroup
+67	[95,555][179,639]	N			lavEndPoint	ImageView
+68	[179,569][950,624]	N	输入你的目的地		tvEndAddress	TextView
+69	[35,683][1045,804]	N			flRecommendDestinations	ViewGroup
+70	[35,690][1045,798]	N			recommendDestinations	FrameLayout
+71	[964,718][1045,804]	N			ivSplit	ImageView
+72	[77,721][1003,798]	N				RecyclerView
+73	[77,721][423,798]	Y	海门碧乐汇地面停车场		textView	TextView
+74	[443,721][772,798]	Y	荣生·豪景花苑(东北...		textView	TextView
+75	[792,721][1003,798]	Y	浦江镇(地铁站)		textView	TextView
+76	[35,804][1045,948]	Y			clStartTime	ViewGroup
+77	[110,850][162,902]	N			ivStartIcon	ImageView
+78	[179,855][343,898]	N	今天11:35		tvStartTime	TextView
+79	[366,865][380,888]	N			ivStartTimeArrow	ImageView
+80	[35,948][1045,1155]	N			flPublish	ViewGroup
+81	[81,948][999,1109]	N			ivPublish	ImageView
+82	[81,948][999,1109]	Y	发布并搜索		tvPublishButton	TextView
+83	[0,1184][1080,1391]	N			magicCommonAddress	LinearLayout
+84	[0,1184][1080,1391]	N				ViewGroup
+85	[0,1184][1080,1391]	N				ViewGroup
+86	[0,1184][1080,1391]	N				ViewGroup
+87	[31,1184][1076,1391]	N				RecyclerView
+88	[31,1184][799,1391]	N				FrameLayout
+89	[31,1184][799,1391]	N				ViewGroup
+90	[31,1184][771,1391]	N				ViewGroup
+91	[31,1184][771,1391]	Y				ViewGroup
+92	[31,1184][771,1391]	N				ViewGroup
+93	[31,1184][771,1241]	N				ViewGroup
+94	[77,1184][700,1391]	N				ViewGroup
+95	[700,1184][771,1391]	N				ViewGroup
+96	[799,1184][1076,1391]	N				FrameLayout
+97	[799,1184][1076,1391]	N				ViewGroup
+98	[799,1184][1076,1391]	N				ViewGroup
+99	[799,1184][1076,1391]	Y				ViewGroup
+100	[799,1184][1076,1391]	N				ViewGroup
+101	[799,1184][1076,1241]	N				ViewGroup
+102	[845,1184][1076,1391]	N				ViewGroup
+103	[77,1231][621,1343]	N				ViewGroup
+104	[77,1231][280,1285]	N	上海08:00			TextView
+105	[845,1231][1076,1343]	N				ViewGroup
+106	[845,1231][1048,1285]	N	无锡08:00			TextView
+107	[77,1285][621,1343]	N				ViewGroup
+108	[845,1285][1076,1343]	N				ViewGroup
+109	[77,1296][310,1343]	N	荣生·豪景花...			TextView
+110	[384,1296][621,1343]	N	浦江镇(地铁...			TextView
+111	[845,1296][1076,1343]	N	荣生·豪景花...			TextView
+112	[0,1420][1080,1648]	N			dslGrid	FrameLayout
+113	[0,1420][1080,1648]	N				LinearLayout
+114	[0,1420][1078,1648]	N				ViewGroup
+115	[29,1420][1051,1648]	N				ViewGroup
+116	[58,1443][299,1614]	Y				ViewGroup
+117	[299,1443][540,1614]	Y				ViewGroup
+118	[419,1443][511,1483]	N				ImageView
+119	[540,1443][781,1614]	Y				ViewGroup
+120	[781,1443][1022,1614]	Y				ViewGroup
+121	[87,1455][271,1614]	N				ViewGroup
+122	[127,1455][230,1558]	N				ImageView
+123	[328,1455][512,1614]	N				ViewGroup
+124	[368,1455][471,1558]	N				ImageView
+125	[569,1455][753,1614]	N				ViewGroup
+126	[609,1455][712,1558]	N				ImageView
+127	[810,1455][994,1614]	N				ViewGroup
+128	[850,1455][953,1558]	N				ImageView
+129	[87,1558][271,1614]	N				FrameLayout
+130	[87,1558][271,1614]	N	邀请有奖			TextView
+131	[328,1558][512,1614]	N				FrameLayout
+132	[328,1558][512,1614]	N	优惠加油			TextView
+133	[569,1558][753,1614]	N				FrameLayout
+134	[569,1558][753,1614]	N	个人中心			TextView
+135	[810,1558][994,1614]	N				FrameLayout
+136	[810,1558][994,1614]	N	接单攻略			TextView
+137	[0,1677][1080,2009]	N			driver_pax_filter_area	RelativeLayout
+138	[0,1677][1080,1929]	N			sllFilter	LinearLayout
+139	[0,1677][1080,1929]	N			llPassengerList	RelativeLayout
+140	[0,1677][1080,1811]	N			llPaxFirstFilter	RelativeLayout
+141	[0,1677][1080,1811]	N				RelativeLayout
+142	[46,1677][464,1811]	N			llFirstPaxContentGroupClick	RelativeLayout
+143	[46,1677][226,1811]	Y			tvNearPaxClick	View
+144	[284,1677][464,1811]	Y			tvAcrossPaxClick	View
+145	[0,1729][464,1792]	N			llFirstPaxContentGroup	RelativeLayout
+146	[46,1729][226,1792]	N	市内路线		tvNearPax	TextView
+147	[284,1729][464,1792]	N	城际路线		tvAcrossPax	TextView
+148	[46,1778][230,1792]	N			tvSelectedBg	TextView
+149	[334,1801][745,2009]	N			flAutoReceiveEntrance	FrameLayout
+150	[334,1801][745,2009]	N				FrameLayout
+151	[334,1801][745,2009]	Y				ViewGroup
+152	[334,1801][745,2009]	N				FrameLayout
+153	[334,1801][743,2007]	N				View
+154	[0,1829][1080,1883]	N			hcFilterBar	FrameLayout
+155	[0,1829][1080,1883]	N				ViewGroup
+156	[0,1829][1080,1883]	N			recyclerViewCity	RecyclerView
+157	[75,1829][270,1883]	Y				ViewGroup
+158	[75,1829][270,1883]	N	距我最近		tvFilterName	TextView
+159	[500,1829][657,1883]	Y				ViewGroup
+160	[500,1829][657,1883]	N	目的地		tvFilterName	TextView
+161	[886,1829][1005,1883]	Y				ViewGroup
+162	[886,1829][1005,1883]	N	筛选		tvFilterName	TextView
+163	[368,1835][709,1973]	N				FrameLayout
+164	[230,1836][270,1876]	N			ivArrowDown	ImageView
+165	[369,1836][710,1974]	N			clAutoReceiver	ViewGroup
+166	[369,1836][710,1974]	Y			clSettings	ViewGroup
+167	[617,1836][657,1876]	N			ivArrowDown	ImageView
+168	[965,1836][1005,1876]	N			ivArrowDown	ImageView
+169	[398,1839][530,1971]	N			lavSettings	ImageView
+170	[501,1880][641,1931]	N	自动抢单		tvSettingsNew	TextView
+171	[0,1929][1080,2009]	N			flMatchOrders	FrameLayout
+172	[0,1929][1080,2009]	N			hcIntercityFilterContent	FrameLayout
+173	[0,1929][1080,2009]	N				FrameLayout
+174	[0,1929][1080,2009]	N				LinearLayout
+175	[0,1929][1080,2009]	N			flQuickScreen	FrameLayout
+176	[0,1929][1080,2009]	N			hcCityQuickScreen	FrameLayout
+177	[0,1929][1080,2009]	N				FrameLayout
+178	[0,1929][1080,2009]	N			rcQuickScreen	RecyclerView
+179	[0,1929][279,2009]	Y			flRoot	FrameLayout
+180	[0,1929][1080,2009]	N			hcCityFilterContent	FrameLayout
+181	[0,1929][1080,2009]	N				FrameLayout
+182	[8,1929][256,2009]	N	愿摊高速费		tvText	TextView
+183	[279,1929][436,2009]	Y			flRoot	FrameLayout
+184	[279,1929][413,2009]	N	独享		tvText	TextView
+185	[436,1929][593,2009]	Y			flRoot	FrameLayout
+186	[436,1929][570,2009]	N	送货		tvText	TextView
+187	[593,1929][810,2009]	Y			flRoot	FrameLayout
+188	[593,1929][787,2009]	N	1小时内		tvText	TextView
+189	[810,1929][1080,2009]	Y			flRoot	FrameLayout
+190	[810,1929][1080,2009]	N	距我5公里内		tvText	TextView
+191	[0,2010][1080,2042]	N				FrameLayout
+192	[0,2010][1080,2042]	N			register_tab_llt	LinearLayout
+193	[0,2010][216,2042]	Y				FrameLayout
+194	[0,2010][216,2042]	N			eventTabLayout	RelativeLayout
+195	[0,2010][216,2042]	N			tabIconContainer	RelativeLayout
+196	[216,2010][432,2042]	Y				FrameLayout
+197	[216,2010][432,2042]	N			eventTabLayout	RelativeLayout
+198	[216,2010][432,2042]	N			tabIconContainer	RelativeLayout
+199	[432,2010][648,2042]	Y				FrameLayout
+200	[432,2010][648,2042]	N			eventTabLayout	RelativeLayout
+201	[432,2010][648,2042]	N			tabIconContainer	RelativeLayout
+202	[648,2010][864,2042]	Y				FrameLayout
+203	[648,2010][864,2042]	N			eventTabLayout	RelativeLayout
+204	[648,2010][864,2042]	N			tabIconContainer	RelativeLayout
+205	[864,2010][1080,2042]	Y				FrameLayout
+206	[864,2010][1080,2042]	N			eventTabLayout	RelativeLayout
+207	[864,2010][1080,2042]	N			tabIconContainer	RelativeLayout
+208	[44,2018][171,2042]	N			tabBigIconContainer	RelativeLayout
+209	[260,2018][387,2042]	N			tabBigIconContainer	RelativeLayout
+210	[476,2018][603,2042]	N			tabBigIconContainer	RelativeLayout
+211	[692,2018][819,2042]	N			tabBigIconContainer	RelativeLayout
+212	[908,2018][1035,2042]	N			tabBigIconContainer	RelativeLayout
+213	[65,2022][151,2042]	N			iv_tab_icon	ImageView
+214	[281,2022][367,2042]	N			iv_tab_icon	ImageView
+215	[497,2022][583,2042]	N			iv_tab_icon	ImageView
+216	[713,2022][799,2042]	N			iv_tab_icon	ImageView
+217	[929,2022][1015,2042]	N			iv_tab_icon	ImageView

@@ -389,6 +389,76 @@
     setActiveTab(navHome);
   })();
 
+  (function setupAddPassengerModal() {
+    var overlay = document.getElementById("addPassengerModalOverlay");
+    var btnOpen = document.getElementById("btnAddPassenger");
+    var btnCancel = document.getElementById("addPassengerModalCancel");
+    var btnSubmit = document.getElementById("addPassengerModalSubmit");
+    var inputPickup = document.getElementById("addPassengerPickup");
+    var inputDelivery = document.getElementById("addPassengerDelivery");
+    if (!overlay || !btnOpen || !btnSubmit) return;
+
+    function openAddPassengerModal() {
+      if (inputPickup) inputPickup.value = "";
+      if (inputDelivery) inputDelivery.value = "";
+      overlay.classList.add("show");
+      setTimeout(function () { if (inputPickup) inputPickup.focus(); }, 100);
+    }
+    function closeAddPassengerModal() {
+      overlay.classList.remove("show");
+    }
+
+    if (btnOpen) btnOpen.addEventListener("click", openAddPassengerModal);
+    if (btnCancel) btnCancel.addEventListener("click", closeAddPassengerModal);
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) closeAddPassengerModal();
+    });
+
+    function makeOrderHash() {
+      var s = "manual_" + Date.now() + "_" + Math.random().toString(36).slice(2, 15);
+      return s.length >= 32 ? s.slice(0, 32) : s + "x".repeat(32 - s.length);
+    }
+
+    if (btnSubmit) btnSubmit.addEventListener("click", function () {
+      var pickup = (inputPickup && inputPickup.value) ? inputPickup.value.trim() : "";
+      var delivery = (inputDelivery && inputDelivery.value) ? inputDelivery.value.trim() : "";
+      if (!pickup || !delivery) {
+        var status = document.getElementById("gpsStatus");
+        if (status) status.textContent = "请填写起点和终点";
+        return;
+      }
+      var sup = C.getSupabaseClient();
+      var driverId = C.getDriverId();
+      if (!sup || !driverId) {
+        var s = document.getElementById("gpsStatus");
+        if (s) s.textContent = "请先登录并选择司机，乘客数据仅通过数据库读写";
+        return;
+      }
+      var orderHash = makeOrderHash();
+      sup.from("order_pool").insert({
+        order_hash: orderHash,
+        pickup: pickup,
+        delivery: delivery,
+        price: 0,
+        status: "assigned",
+        assigned_driver_id: driverId
+      }).then(function () {
+        return sup.from("driver_state").select("empty_seats").eq("driver_id", driverId).maybeSingle();
+      }).then(function (r) {
+        var next = (r.data && r.data.empty_seats != null) ? Math.max(0, r.data.empty_seats - 1) : 3;
+        return sup.from("driver_state").update({ empty_seats: next }).eq("driver_id", driverId);
+      }).then(function () {
+        closeAddPassengerModal();
+        C.loadFromDb();
+        var s = document.getElementById("gpsStatus");
+        if (s) s.textContent = "已添加乘客并写库";
+      }).catch(function (e) {
+        var s = document.getElementById("gpsStatus");
+        if (s) s.textContent = "添加失败: " + (e.message || String(e)).slice(0, 50);
+      });
+    });
+  })();
+
   function closeEditPassengerModal() {
     C.editingPassengerIdx = -1;
     document.getElementById("editPassengerModalOverlay").classList.remove("show");

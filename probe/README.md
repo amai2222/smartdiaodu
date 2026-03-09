@@ -62,21 +62,27 @@
 - **运行位置**：**PC**，手机 USB 或 adb over WiFi。
 - **特点**：不依赖手机无障碍，风控更小；已带 `human_delay` 与循环间隔抖动。
 - **步骤**：安装 uiautomator2、requests，用 weditor 确认大厅控件，改 SELECTOR_* 与 CURRENT_STATE（API_BASE、DRIVER_ID 已按项目 config 设好），在 PC 运行 `python tanzi.py`。
+- **环境变量**（可选）：`TANZI_API_BASE`、`TANZI_DRIVER_ID` 覆盖 API 与司机；`TANZI_CURRENT_STATE` 为 JSON 字符串可覆盖当前状态；`TANZI_LOOP_INTERVAL` 覆盖轮询间隔（秒）。**默认仅从哈啰获取订单**：不切换、不启动任何 app，请先运行 `helo_setup_then_orders.py` 进入哈啰订单列表，再运行 `tanzi.py`，脚本只读当前前台界面并上报大脑。若需脚本自动切到哈啰，可设 `TANZI_USE_APP_ROTATION=1`（此时仅会切到哈啰，不会打开滴滴）。
 
 ### 2. Python UIAutomator2：`uiautomator2_publish_trip.py`
 
 - **运行位置**：PC，同上。
 - **作用**：轮询大脑 `POST /probe_publish_trip`，拿到建议行程后填表发布；收到 `cancel_current_trip` 时在 App 内取消已发布行程。每次点击前随机延迟。
 
-### 3. AutoX.js：`autox_capture.js`
+### 3. 手机独立运行（无需连电脑）：`autox_capture_helo.js`
 
-- **运行位置**：**直接在 Root 安卓机上**运行，无需 PC。
-- **适合**：24 小时挂机、家里放一台二手三星专门当探针。
+- **运行位置**：**直接在三星/安卓机上**运行，不连电脑、不依赖 ADB。
+- **适合**：手机单独当探针、你手动打开哈啰进入订单列表后，脚本自动采集订单并上报大脑。
 - **步骤**：
-  1. 安装 [AutoX.js](https://github.com/kkevsekk1/AutoX)（或 Auto.js），授予无障碍 + 悬浮窗等权限。
-  2. 用其「布局分析」或「无障碍」查看顺风车大厅列表页，记下「起点 / 终点 / 价格」对应控件的 `id` 或 `className`+ 层级。
-  3. 打开 `autox_capture.js`，修改顶部 `CONFIG.API_BASE` 和 `CONFIG.CURRENT_STATE`，把 `SELECTORS` 改成你实际抓到的选择器。
-  4. 前台打开顺风车大厅列表，运行脚本；脚本会循环抓取当前屏订单并 POST 到大脑 `/evaluate_new_order`。
+  1. 在手机上安装 [AutoX.js](https://github.com/kkevsekk1/AutoX)（或 Auto.js），授予**无障碍服务**权限。
+  2. 将项目里的 `probe/autox_capture_helo.js` 拷到手机（或通过 AutoX 的「电脑连接」同步），打开脚本，修改顶部 `CONFIG`：`API_BASE`（大脑地址）、`DRIVER_ID`（与 Web 一致）。
+  3. **手动**打开哈啰 App，进入「车主」→ 发布行程或点「寻找乘客中」进入**订单列表页**，并保持该页在前台。
+  4. 在 AutoX.js 中运行 `autox_capture_helo.js`（可后台运行）。脚本会按间隔读取当前屏幕上的「出发」「到达」「价格」，去重后 POST 到大脑 `/evaluate_new_order`，由大脑判断是否顺路并推送。
+- **风控**：哈啰可能检测无障碍，建议用 LSPosed + HideMyApplist 对哈啰隐藏 AutoX.js；脚本内已加随机延迟，`LOOP_INTERVAL_MS` 建议 ≥1200。
+
+### 3'. AutoX.js 通用模板：`autox_capture.js`
+
+- 通用模板，需根据实际大厅页用「布局分析」改 `SELECTORS`；哈啰订单列表可直接用上面的 `autox_capture_helo.js`。
 
 ### 2. Python UIAutomator2：`tanzi.py`
 
@@ -91,7 +97,15 @@
 两种脚本都是：**从当前界面提取一条订单 → 组装 `current_state` + `new_order` → POST 到大脑 `POST /evaluate_new_order`**。  
 若你后续改为「先写入 Supabase 订单池再由后端统一匹配」，只需把上报地址改为后端的「订单接入」接口即可。
 
-### 4. 自动发布行程：`uiautomator2_publish_trip.py`（推荐）/ `autox_publish_trip.js`
+### 4. 哈啰车主页同步出发地/目的地：`navigate_helo.py`
+
+- **用途**：用数据库中的**司机位置**替换哈啰「你将从 XXX 出发」，用数据库中的**目的地**替换哈啰「目的地」。出发地来自 `driver_state.current_loc`，目的地来自 `planned_trip_plans` 第一条未完成计划的 `destination` 或 `planned_trip_cycle_config.cycle_destination`。
+- **前提**：先手动打开哈啰并进入车主页（已登录）；配置 `.env` 中 `SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`TANZI_DRIVER_ID`（可选 `TANZI_DEVICE`）。
+- **重要**：哈啰对 adb 坐标点击不响应，**必须安装 uiautomator2**（`pip install uiautomator2`）才能弹出地址栏并写入。脚本会优先用 u2 按控件点击，无 u2 时再回退 adb。
+- **环境变量**：无数据库时可设 `TANZI_DRIVER_LOC`（出发地）、`TANZI_DRIVER_DEST`（目的地）做测试。
+- **仅测试点击**：`TANZI_ONLY_OPEN_ADDRESS=1 python probe/navigate_helo.py` 只点击出发地、不填地址。
+
+### 5. 自动发布行程：`uiautomator2_publish_trip.py`（推荐）/ `autox_publish_trip.js`
 
 - **用途**：模式2 下从「第一个客人下车点」找顺路单时，部分平台可能要求**先发布行程**才展示匹配订单；探针自动填起点/终点/时间并发布，接单后自动取消已发布行程。
 - **Python 版**（`uiautomator2_publish_trip.py`）：在 **PC** 运行，不依赖无障碍，已带拟人化延迟；轮询 `POST /probe_publish_trip`，收到 `cancel_current_trip` 时在 App 内执行取消。**模式1 多计划**：若大脑返回 `trips` 数组，脚本会轮换发布每条行程，汇总多路线订单供选择。

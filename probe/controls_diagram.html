@@ -1,0 +1,236 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>车主页控件示意图</title>
+<style>
+body { font-family: sans-serif; margin: 12px; background: #1a1a1a; color: #eee; }
+h2 { margin-bottom: 4px; }
+#screen { position: relative; width: 432px; height: 816px; background: #333; border: 2px solid #666; }
+.ctl { position: absolute; border: 1px solid rgba(100,200,255,0.8); background: rgba(100,200,255,0.15); 
+  box-sizing: border-box; font-size: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center;
+  word-break: break-all; text-align: center; }
+.ctl.clickable { border-color: rgba(100,255,100,0.9); background: rgba(100,255,100,0.2); }
+.ctl:hover { background: rgba(255,200,100,0.35); }
+.idx { position: absolute; left: 2px; top: 2px; font-weight: bold; color: #ffc; }
+</style></head><body>
+<h2>车主页控件示意图（比例 40%）</h2>
+<p>绿色边框=可点击。悬停高亮。矩形内数字为序号，对应下方列表。</p>
+<div id="screen">
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:816px" title="0 "><span class="idx">0</span> </div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:816px" title="1 "><span class="idx">1</span> </div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:816px" title="2 "><span class="idx">2</span> </div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:816px" title="3 action_bar_…"><span class="idx">3</span> action_bar_…</div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:816px" title="4 android:id/…"><span class="idx">4</span> android:id/…</div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:816px" title="5 "><span class="idx">5</span> </div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:816px" title="6 "><span class="idx">6</span> </div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:816px" title="7 fl_adv"><span class="idx">7</span> fl_adv</div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:816px" title="8 fl_privacy"><span class="idx">8</span> fl_privacy</div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:816px" title="9 ll_home_page"><span class="idx">9</span> ll_home_page</div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:803px" title="10 register_ta…"><span class="idx">10</span> register_ta…</div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:803px" title="11 hlph_home_c…"><span class="idx">11</span> hlph_home_c…</div>
+  <div class="ctl clickable" style="left:0px;top:0px;width:432px;height:95px" title="12 statusBarNew"><span class="idx">12</span> statusBarNew</div>
+  <div class="ctl" style="left:0px;top:0px;width:432px;height:26px" title="13 vSpace"><span class="idx">13</span> vSpace</div>
+  <div class="ctl" style="left:0px;top:26px;width:432px;height:69px" title="14 titleBar"><span class="idx">14</span> titleBar</div>
+  <div class="ctl" style="left:0px;top:26px;width:432px;height:69px" title="15 containerBar"><span class="idx">15</span> containerBar</div>
+  <div class="ctl" style="left:386px;top:26px;width:46px;height:69px" title="16 rightContai…"><span class="idx">16</span> rightContai…</div>
+  <div class="ctl" style="left:112px;top:35px;width:206px;height:50px" title="17 tabBar"><span class="idx">17</span> tabBar</div>
+  <div class="ctl" style="left:112px;top:35px;width:206px;height:50px" title="18 "><span class="idx">18</span> </div>
+  <div class="ctl" style="left:112px;top:35px;width:206px;height:36px" title="19 rvTab"><span class="idx">19</span> rvTab</div>
+  <div class="ctl clickable" style="left:123px;top:35px;width:48px;height:36px" title="20 "><span class="idx">20</span> </div>
+  <div class="ctl clickable" style="left:194px;top:35px;width:32px;height:36px" title="21 "><span class="idx">21</span> </div>
+  <div class="ctl clickable" style="left:248px;top:35px;width:48px;height:36px" title="22 "><span class="idx">22</span> </div>
+  <div class="ctl" style="left:402px;top:38px;width:23px;height:18px" title="23 "><span class="idx">23</span> </div>
+  <div class="ctl" style="left:402px;top:38px;width:23px;height:18px" title="24 10"><span class="idx">24</span> 10</div>
+  <div class="ctl clickable" style="left:386px;top:47px;width:27px;height:27px" title="25 "><span class="idx">25</span> </div>
+  <div class="ctl" style="left:386px;top:47px;width:27px;height:27px" title="26 "><span class="idx">26</span> </div>
+  <div class="ctl" style="left:123px;top:49px;width:48px;height:22px" title="27 顺风车"><span class="idx">27</span> 顺风车</div>
+  <div class="ctl" style="left:194px;top:49px;width:32px;height:22px" title="28 打车"><span class="idx">28</span> 打车</div>
+  <div class="ctl" style="left:248px;top:49px;width:48px;height:22px" title="29 车服务"><span class="idx">29</span> 车服务</div>
+  <div class="ctl" style="left:112px;top:72px;width:206px;height:14px" title="30 flLayoutInd…"><span class="idx">30</span> flLayoutInd…</div>
+  <div class="ctl" style="left:136px;top:74px;width:22px;height:4px" title="31 layoutIndic…"><span class="idx">31</span> layoutIndic…</div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:708px" title="32 homeFrameCo…"><span class="idx">32</span> homeFrameCo…</div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:708px" title="33 "><span class="idx">33</span> </div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:708px" title="34 rlDriverCon…"><span class="idx">34</span> rlDriverCon…</div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:708px" title="35 authContain…"><span class="idx">35</span> authContain…</div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:708px" title="36 "><span class="idx">36</span> </div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:708px" title="37 securityRel…"><span class="idx">37</span> securityRel…</div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:708px" title="38 driveRefres…"><span class="idx">38</span> driveRefres…</div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:708px" title="39 driver_new_…"><span class="idx">39</span> driver_new_…</div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:708px" title="40 "><span class="idx">40</span> </div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:575px" title="41 driver_orde…"><span class="idx">41</span> driver_orde…</div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:575px" title="42 driver_orde…"><span class="idx">42</span> driver_orde…</div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:378px" title="43 llPublishVi…"><span class="idx">43</span> llPublishVi…</div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:172px" title="44 "><span class="idx">44</span> </div>
+  <div class="ctl" style="left:0px;top:95px;width:432px;height:172px" title="45 topBackgrou…"><span class="idx">45</span> topBackgrou…</div>
+  <div class="ctl" style="left:14px;top:95px;width:404px;height:366px" title="46 sllPublishV…"><span class="idx">46</span> sllPublishV…</div>
+  <div class="ctl" style="left:14px;top:95px;width:404px;height:366px" title="47 publishView"><span class="idx">47</span> publishView</div>
+  <div class="ctl" style="left:14px;top:95px;width:404px;height:366px" title="48 containerVi…"><span class="idx">48</span> containerVi…</div>
+  <div class="ctl" style="left:14px;top:95px;width:404px;height:56px" title="49 topLayout"><span class="idx">49</span> topLayout</div>
+  <div class="ctl" style="left:14px;top:95px;width:404px;height:56px" title="50 topTabLayout"><span class="idx">50</span> topTabLayout</div>
+  <div class="ctl" style="left:14px;top:95px;width:404px;height:56px" title="51 "><span class="idx">51</span> </div>
+  <div class="ctl" style="left:14px;top:95px;width:202px;height:56px" title="52 市内"><span class="idx">52</span> 市内</div>
+  <div class="ctl clickable" style="left:216px;top:95px;width:202px;height:56px" title="53 城际"><span class="idx">53</span> 城际</div>
+  <div class="ctl" style="left:357px;top:95px;width:69px;height:69px" title="54 driverFloat…"><span class="idx">54</span> driverFloat…</div>
+  <div class="ctl" style="left:14px;top:107px;width:188px;height:32px" title="55 市内"><span class="idx">55</span> 市内</div>
+  <div class="ctl" style="left:230px;top:107px;width:188px;height:32px" title="56 城际"><span class="idx">56</span> 城际</div>
+  <div class="ctl" style="left:14px;top:139px;width:404px;height:322px" title="57 bottomConte…"><span class="idx">57</span> bottomConte…</div>
+  <div class="ctl" style="left:14px;top:139px;width:404px;height:133px" title="58 "><span class="idx">58</span> </div>
+  <div class="ctl" style="left:14px;top:139px;width:404px;height:133px" title="59 clRoot"><span class="idx">59</span> clRoot</div>
+  <div class="ctl clickable" style="left:14px;top:139px;width:404px;height:64px" title="60 clStartAddr…"><span class="idx">60</span> clStartAddr…</div>
+  <div class="ctl" style="left:71px;top:163px;width:42px;height:17px" title="61 你将从"><span class="idx">61</span> 你将从</div>
+  <div class="ctl" style="left:116px;top:163px;width:56px;height:17px" title="62 古池社区"><span class="idx">62</span> 古池社区</div>
+  <div class="ctl" style="left:174px;top:163px;width:28px;height:17px" title="63 出发"><span class="idx">63</span> 出发</div>
+  <div class="ctl" style="left:207px;top:167px;width:5px;height:9px" title="64 ivStartAddr…"><span class="idx">64</span> ivStartAddr…</div>
+  <div class="ctl" style="left:51px;top:168px;width:6px;height:6px" title="65 lavStartPoi…"><span class="idx">65</span> lavStartPoi…</div>
+  <div class="ctl clickable" style="left:32px;top:204px;width:367px;height:69px" title="66 clEndAddress"><span class="idx">66</span> clEndAddress</div>
+  <div class="ctl" style="left:38px;top:222px;width:33px;height:33px" title="67 lavEndPoint"><span class="idx">67</span> lavEndPoint</div>
+  <div class="ctl" style="left:71px;top:227px;width:308px;height:22px" title="68 输入你的目的地"><span class="idx">68</span> 输入你的目的地</div>
+  <div class="ctl" style="left:14px;top:273px;width:404px;height:48px" title="69 flRecommend…"><span class="idx">69</span> flRecommend…</div>
+  <div class="ctl" style="left:14px;top:276px;width:404px;height:43px" title="70 recommendDe…"><span class="idx">70</span> recommendDe…</div>
+  <div class="ctl" style="left:385px;top:287px;width:32px;height:34px" title="71 ivSplit"><span class="idx">71</span> ivSplit</div>
+  <div class="ctl" style="left:30px;top:288px;width:370px;height:30px" title="72 "><span class="idx">72</span> </div>
+  <div class="ctl clickable" style="left:30px;top:288px;width:138px;height:30px" title="73 海门碧乐汇地面停车场"><span class="idx">73</span> 海门碧乐汇地面停车场</div>
+  <div class="ctl clickable" style="left:177px;top:288px;width:131px;height:30px" title="74 荣生·豪景花苑(东北.…"><span class="idx">74</span> 荣生·豪景花苑(东北.…</div>
+  <div class="ctl clickable" style="left:316px;top:288px;width:84px;height:30px" title="75 浦江镇(地铁站)"><span class="idx">75</span> 浦江镇(地铁站)</div>
+  <div class="ctl clickable" style="left:14px;top:321px;width:404px;height:57px" title="76 clStartTime"><span class="idx">76</span> clStartTime</div>
+  <div class="ctl" style="left:44px;top:340px;width:20px;height:20px" title="77 ivStartIcon"><span class="idx">77</span> ivStartIcon</div>
+  <div class="ctl" style="left:71px;top:342px;width:65px;height:17px" title="78 今天11:35"><span class="idx">78</span> 今天11:35</div>
+  <div class="ctl" style="left:146px;top:346px;width:5px;height:9px" title="79 ivStartTime…"><span class="idx">79</span> ivStartTime…</div>
+  <div class="ctl" style="left:14px;top:379px;width:404px;height:82px" title="80 flPublish"><span class="idx">80</span> flPublish</div>
+  <div class="ctl" style="left:32px;top:379px;width:367px;height:64px" title="81 ivPublish"><span class="idx">81</span> ivPublish</div>
+  <div class="ctl clickable" style="left:32px;top:379px;width:367px;height:64px" title="82 发布并搜索"><span class="idx">82</span> 发布并搜索</div>
+  <div class="ctl" style="left:0px;top:473px;width:432px;height:82px" title="83 magicCommon…"><span class="idx">83</span> magicCommon…</div>
+  <div class="ctl" style="left:0px;top:473px;width:432px;height:82px" title="84 "><span class="idx">84</span> </div>
+  <div class="ctl" style="left:0px;top:473px;width:432px;height:82px" title="85 "><span class="idx">85</span> </div>
+  <div class="ctl" style="left:0px;top:473px;width:432px;height:82px" title="86 "><span class="idx">86</span> </div>
+  <div class="ctl" style="left:12px;top:473px;width:418px;height:82px" title="87 "><span class="idx">87</span> </div>
+  <div class="ctl" style="left:12px;top:473px;width:307px;height:82px" title="88 "><span class="idx">88</span> </div>
+  <div class="ctl" style="left:12px;top:473px;width:307px;height:82px" title="89 "><span class="idx">89</span> </div>
+  <div class="ctl" style="left:12px;top:473px;width:296px;height:82px" title="90 "><span class="idx">90</span> </div>
+  <div class="ctl clickable" style="left:12px;top:473px;width:296px;height:82px" title="91 "><span class="idx">91</span> </div>
+  <div class="ctl" style="left:12px;top:473px;width:296px;height:82px" title="92 "><span class="idx">92</span> </div>
+  <div class="ctl" style="left:12px;top:473px;width:296px;height:22px" title="93 "><span class="idx">93</span> </div>
+  <div class="ctl" style="left:30px;top:473px;width:249px;height:82px" title="94 "><span class="idx">94</span> </div>
+  <div class="ctl" style="left:280px;top:473px;width:28px;height:82px" title="95 "><span class="idx">95</span> </div>
+  <div class="ctl" style="left:319px;top:473px;width:110px;height:82px" title="96 "><span class="idx">96</span> </div>
+  <div class="ctl" style="left:319px;top:473px;width:110px;height:82px" title="97 "><span class="idx">97</span> </div>
+  <div class="ctl" style="left:319px;top:473px;width:110px;height:82px" title="98 "><span class="idx">98</span> </div>
+  <div class="ctl clickable" style="left:319px;top:473px;width:110px;height:82px" title="99 "><span class="idx">99</span> </div>
+  <div class="ctl" style="left:319px;top:473px;width:110px;height:82px" title="100 "><span class="idx">100</span> </div>
+  <div class="ctl" style="left:319px;top:473px;width:110px;height:22px" title="101 "><span class="idx">101</span> </div>
+  <div class="ctl" style="left:338px;top:473px;width:92px;height:82px" title="102 "><span class="idx">102</span> </div>
+  <div class="ctl" style="left:30px;top:492px;width:217px;height:44px" title="103 "><span class="idx">103</span> </div>
+  <div class="ctl" style="left:30px;top:492px;width:81px;height:21px" title="104 上海08:00"><span class="idx">104</span> 上海08:00</div>
+  <div class="ctl" style="left:338px;top:492px;width:92px;height:44px" title="105 "><span class="idx">105</span> </div>
+  <div class="ctl" style="left:338px;top:492px;width:81px;height:21px" title="106 无锡08:00"><span class="idx">106</span> 无锡08:00</div>
+  <div class="ctl" style="left:30px;top:514px;width:217px;height:23px" title="107 "><span class="idx">107</span> </div>
+  <div class="ctl" style="left:338px;top:514px;width:92px;height:23px" title="108 "><span class="idx">108</span> </div>
+  <div class="ctl" style="left:30px;top:518px;width:93px;height:18px" title="109 荣生·豪景花..."><span class="idx">109</span> 荣生·豪景花...</div>
+  <div class="ctl" style="left:153px;top:518px;width:94px;height:18px" title="110 浦江镇(地铁..."><span class="idx">110</span> 浦江镇(地铁...</div>
+  <div class="ctl" style="left:338px;top:518px;width:92px;height:18px" title="111 荣生·豪景花..."><span class="idx">111</span> 荣生·豪景花...</div>
+  <div class="ctl" style="left:0px;top:568px;width:432px;height:91px" title="112 dslGrid"><span class="idx">112</span> dslGrid</div>
+  <div class="ctl" style="left:0px;top:568px;width:432px;height:91px" title="113 "><span class="idx">113</span> </div>
+  <div class="ctl" style="left:0px;top:568px;width:431px;height:91px" title="114 "><span class="idx">114</span> </div>
+  <div class="ctl" style="left:11px;top:568px;width:408px;height:91px" title="115 "><span class="idx">115</span> </div>
+  <div class="ctl clickable" style="left:23px;top:577px;width:96px;height:68px" title="116 "><span class="idx">116</span> </div>
+  <div class="ctl clickable" style="left:119px;top:577px;width:96px;height:68px" title="117 "><span class="idx">117</span> </div>
+  <div class="ctl" style="left:167px;top:577px;width:36px;height:16px" title="118 "><span class="idx">118</span> </div>
+  <div class="ctl clickable" style="left:216px;top:577px;width:96px;height:68px" title="119 "><span class="idx">119</span> </div>
+  <div class="ctl clickable" style="left:312px;top:577px;width:96px;height:68px" title="120 "><span class="idx">120</span> </div>
+  <div class="ctl" style="left:34px;top:582px;width:73px;height:63px" title="121 "><span class="idx">121</span> </div>
+  <div class="ctl" style="left:50px;top:582px;width:41px;height:41px" title="122 "><span class="idx">122</span> </div>
+  <div class="ctl" style="left:131px;top:582px;width:73px;height:63px" title="123 "><span class="idx">123</span> </div>
+  <div class="ctl" style="left:147px;top:582px;width:41px;height:41px" title="124 "><span class="idx">124</span> </div>
+  <div class="ctl" style="left:227px;top:582px;width:73px;height:63px" title="125 "><span class="idx">125</span> </div>
+  <div class="ctl" style="left:243px;top:582px;width:41px;height:41px" title="126 "><span class="idx">126</span> </div>
+  <div class="ctl" style="left:324px;top:582px;width:73px;height:63px" title="127 "><span class="idx">127</span> </div>
+  <div class="ctl" style="left:340px;top:582px;width:41px;height:41px" title="128 "><span class="idx">128</span> </div>
+  <div class="ctl" style="left:34px;top:623px;width:73px;height:22px" title="129 "><span class="idx">129</span> </div>
+  <div class="ctl" style="left:34px;top:623px;width:73px;height:22px" title="130 邀请有奖"><span class="idx">130</span> 邀请有奖</div>
+  <div class="ctl" style="left:131px;top:623px;width:73px;height:22px" title="131 "><span class="idx">131</span> </div>
+  <div class="ctl" style="left:131px;top:623px;width:73px;height:22px" title="132 优惠加油"><span class="idx">132</span> 优惠加油</div>
+  <div class="ctl" style="left:227px;top:623px;width:73px;height:22px" title="133 "><span class="idx">133</span> </div>
+  <div class="ctl" style="left:227px;top:623px;width:73px;height:22px" title="134 个人中心"><span class="idx">134</span> 个人中心</div>
+  <div class="ctl" style="left:324px;top:623px;width:73px;height:22px" title="135 "><span class="idx">135</span> </div>
+  <div class="ctl" style="left:324px;top:623px;width:73px;height:22px" title="136 接单攻略"><span class="idx">136</span> 接单攻略</div>
+  <div class="ctl" style="left:0px;top:670px;width:432px;height:132px" title="137 driver_pax_…"><span class="idx">137</span> driver_pax_…</div>
+  <div class="ctl" style="left:0px;top:670px;width:432px;height:100px" title="138 sllFilter"><span class="idx">138</span> sllFilter</div>
+  <div class="ctl" style="left:0px;top:670px;width:432px;height:100px" title="139 llPassenger…"><span class="idx">139</span> llPassenger…</div>
+  <div class="ctl" style="left:0px;top:670px;width:432px;height:53px" title="140 llPaxFirstF…"><span class="idx">140</span> llPaxFirstF…</div>
+  <div class="ctl" style="left:0px;top:670px;width:432px;height:53px" title="141 "><span class="idx">141</span> </div>
+  <div class="ctl" style="left:18px;top:670px;width:167px;height:53px" title="142 llFirstPaxC…"><span class="idx">142</span> llFirstPaxC…</div>
+  <div class="ctl clickable" style="left:18px;top:670px;width:72px;height:53px" title="143 tvNearPaxCl…"><span class="idx">143</span> tvNearPaxCl…</div>
+  <div class="ctl clickable" style="left:113px;top:670px;width:72px;height:53px" title="144 tvAcrossPax…"><span class="idx">144</span> tvAcrossPax…</div>
+  <div class="ctl" style="left:0px;top:691px;width:185px;height:25px" title="145 llFirstPaxC…"><span class="idx">145</span> llFirstPaxC…</div>
+  <div class="ctl" style="left:18px;top:691px;width:72px;height:25px" title="146 市内路线"><span class="idx">146</span> 市内路线</div>
+  <div class="ctl" style="left:113px;top:691px;width:72px;height:25px" title="147 城际路线"><span class="idx">147</span> 城际路线</div>
+  <div class="ctl" style="left:18px;top:711px;width:73px;height:5px" title="148 tvSelectedBg"><span class="idx">148</span> tvSelectedBg</div>
+  <div class="ctl" style="left:133px;top:720px;width:164px;height:83px" title="149 flAutoRecei…"><span class="idx">149</span> flAutoRecei…</div>
+  <div class="ctl" style="left:133px;top:720px;width:164px;height:83px" title="150 "><span class="idx">150</span> </div>
+  <div class="ctl clickable" style="left:133px;top:720px;width:164px;height:83px" title="151 "><span class="idx">151</span> </div>
+  <div class="ctl" style="left:133px;top:720px;width:164px;height:83px" title="152 "><span class="idx">152</span> </div>
+  <div class="ctl" style="left:133px;top:720px;width:163px;height:82px" title="153 "><span class="idx">153</span> </div>
+  <div class="ctl" style="left:0px;top:731px;width:432px;height:21px" title="154 hcFilterBar"><span class="idx">154</span> hcFilterBar</div>
+  <div class="ctl" style="left:0px;top:731px;width:432px;height:21px" title="155 "><span class="idx">155</span> </div>
+  <div class="ctl" style="left:0px;top:731px;width:432px;height:21px" title="156 recyclerVie…"><span class="idx">156</span> recyclerVie…</div>
+  <div class="ctl clickable" style="left:30px;top:731px;width:78px;height:21px" title="157 "><span class="idx">157</span> </div>
+  <div class="ctl" style="left:30px;top:731px;width:78px;height:21px" title="158 距我最近"><span class="idx">158</span> 距我最近</div>
+  <div class="ctl clickable" style="left:200px;top:731px;width:62px;height:21px" title="159 "><span class="idx">159</span> </div>
+  <div class="ctl" style="left:200px;top:731px;width:62px;height:21px" title="160 目的地"><span class="idx">160</span> 目的地</div>
+  <div class="ctl clickable" style="left:354px;top:731px;width:47px;height:21px" title="161 "><span class="idx">161</span> </div>
+  <div class="ctl" style="left:354px;top:731px;width:47px;height:21px" title="162 筛选"><span class="idx">162</span> 筛选</div>
+  <div class="ctl" style="left:147px;top:734px;width:136px;height:55px" title="163 "><span class="idx">163</span> </div>
+  <div class="ctl" style="left:92px;top:734px;width:16px;height:16px" title="164 ivArrowDown"><span class="idx">164</span> ivArrowDown</div>
+  <div class="ctl" style="left:147px;top:734px;width:136px;height:55px" title="165 clAutoRecei…"><span class="idx">165</span> clAutoRecei…</div>
+  <div class="ctl clickable" style="left:147px;top:734px;width:136px;height:55px" title="166 clSettings"><span class="idx">166</span> clSettings</div>
+  <div class="ctl" style="left:246px;top:734px;width:16px;height:16px" title="167 ivArrowDown"><span class="idx">167</span> ivArrowDown</div>
+  <div class="ctl" style="left:386px;top:734px;width:16px;height:16px" title="168 ivArrowDown"><span class="idx">168</span> ivArrowDown</div>
+  <div class="ctl" style="left:159px;top:735px;width:52px;height:52px" title="169 lavSettings"><span class="idx">169</span> lavSettings</div>
+  <div class="ctl" style="left:200px;top:752px;width:56px;height:20px" title="170 自动抢单"><span class="idx">170</span> 自动抢单</div>
+  <div class="ctl" style="left:0px;top:771px;width:432px;height:32px" title="171 flMatchOrde…"><span class="idx">171</span> flMatchOrde…</div>
+  <div class="ctl" style="left:0px;top:771px;width:432px;height:32px" title="172 hcIntercity…"><span class="idx">172</span> hcIntercity…</div>
+  <div class="ctl" style="left:0px;top:771px;width:432px;height:32px" title="173 "><span class="idx">173</span> </div>
+  <div class="ctl" style="left:0px;top:771px;width:432px;height:32px" title="174 "><span class="idx">174</span> </div>
+  <div class="ctl" style="left:0px;top:771px;width:432px;height:32px" title="175 flQuickScre…"><span class="idx">175</span> flQuickScre…</div>
+  <div class="ctl" style="left:0px;top:771px;width:432px;height:32px" title="176 hcCityQuick…"><span class="idx">176</span> hcCityQuick…</div>
+  <div class="ctl" style="left:0px;top:771px;width:432px;height:32px" title="177 "><span class="idx">177</span> </div>
+  <div class="ctl" style="left:0px;top:771px;width:432px;height:32px" title="178 rcQuickScre…"><span class="idx">178</span> rcQuickScre…</div>
+  <div class="ctl clickable" style="left:0px;top:771px;width:111px;height:32px" title="179 flRoot"><span class="idx">179</span> flRoot</div>
+  <div class="ctl" style="left:0px;top:771px;width:432px;height:32px" title="180 hcCityFilte…"><span class="idx">180</span> hcCityFilte…</div>
+  <div class="ctl" style="left:0px;top:771px;width:432px;height:32px" title="181 "><span class="idx">181</span> </div>
+  <div class="ctl" style="left:3px;top:771px;width:99px;height:32px" title="182 愿摊高速费"><span class="idx">182</span> 愿摊高速费</div>
+  <div class="ctl clickable" style="left:111px;top:771px;width:62px;height:32px" title="183 flRoot"><span class="idx">183</span> flRoot</div>
+  <div class="ctl" style="left:111px;top:771px;width:53px;height:32px" title="184 独享"><span class="idx">184</span> 独享</div>
+  <div class="ctl clickable" style="left:174px;top:771px;width:62px;height:32px" title="185 flRoot"><span class="idx">185</span> flRoot</div>
+  <div class="ctl" style="left:174px;top:771px;width:53px;height:32px" title="186 送货"><span class="idx">186</span> 送货</div>
+  <div class="ctl clickable" style="left:237px;top:771px;width:86px;height:32px" title="187 flRoot"><span class="idx">187</span> flRoot</div>
+  <div class="ctl" style="left:237px;top:771px;width:77px;height:32px" title="188 1小时内"><span class="idx">188</span> 1小时内</div>
+  <div class="ctl clickable" style="left:324px;top:771px;width:108px;height:32px" title="189 flRoot"><span class="idx">189</span> flRoot</div>
+  <div class="ctl" style="left:324px;top:771px;width:108px;height:32px" title="190 距我5公里内"><span class="idx">190</span> 距我5公里内</div>
+  <div class="ctl" style="left:0px;top:804px;width:432px;height:12px" title="191 "><span class="idx">191</span> </div>
+  <div class="ctl" style="left:0px;top:804px;width:432px;height:12px" title="192 register_ta…"><span class="idx">192</span> register_ta…</div>
+  <div class="ctl clickable" style="left:0px;top:804px;width:86px;height:12px" title="193 "><span class="idx">193</span> </div>
+  <div class="ctl" style="left:0px;top:804px;width:86px;height:12px" title="194 eventTabLay…"><span class="idx">194</span> eventTabLay…</div>
+  <div class="ctl" style="left:0px;top:804px;width:86px;height:12px" title="195 tabIconCont…"><span class="idx">195</span> tabIconCont…</div>
+  <div class="ctl clickable" style="left:86px;top:804px;width:86px;height:12px" title="196 "><span class="idx">196</span> </div>
+  <div class="ctl" style="left:86px;top:804px;width:86px;height:12px" title="197 eventTabLay…"><span class="idx">197</span> eventTabLay…</div>
+  <div class="ctl" style="left:86px;top:804px;width:86px;height:12px" title="198 tabIconCont…"><span class="idx">198</span> tabIconCont…</div>
+  <div class="ctl clickable" style="left:172px;top:804px;width:86px;height:12px" title="199 "><span class="idx">199</span> </div>
+  <div class="ctl" style="left:172px;top:804px;width:86px;height:12px" title="200 eventTabLay…"><span class="idx">200</span> eventTabLay…</div>
+  <div class="ctl" style="left:172px;top:804px;width:86px;height:12px" title="201 tabIconCont…"><span class="idx">201</span> tabIconCont…</div>
+  <div class="ctl clickable" style="left:259px;top:804px;width:86px;height:12px" title="202 "><span class="idx">202</span> </div>
+  <div class="ctl" style="left:259px;top:804px;width:86px;height:12px" title="203 eventTabLay…"><span class="idx">203</span> eventTabLay…</div>
+  <div class="ctl" style="left:259px;top:804px;width:86px;height:12px" title="204 tabIconCont…"><span class="idx">204</span> tabIconCont…</div>
+  <div class="ctl clickable" style="left:345px;top:804px;width:86px;height:12px" title="205 "><span class="idx">205</span> </div>
+  <div class="ctl" style="left:345px;top:804px;width:86px;height:12px" title="206 eventTabLay…"><span class="idx">206</span> eventTabLay…</div>
+  <div class="ctl" style="left:345px;top:804px;width:86px;height:12px" title="207 tabIconCont…"><span class="idx">207</span> tabIconCont…</div>
+  <div class="ctl" style="left:17px;top:807px;width:50px;height:9px" title="208 tabBigIconC…"><span class="idx">208</span> tabBigIconC…</div>
+  <div class="ctl" style="left:104px;top:807px;width:50px;height:9px" title="209 tabBigIconC…"><span class="idx">209</span> tabBigIconC…</div>
+  <div class="ctl" style="left:190px;top:807px;width:50px;height:9px" title="210 tabBigIconC…"><span class="idx">210</span> tabBigIconC…</div>
+  <div class="ctl" style="left:276px;top:807px;width:50px;height:9px" title="211 tabBigIconC…"><span class="idx">211</span> tabBigIconC…</div>
+  <div class="ctl" style="left:363px;top:807px;width:50px;height:9px" title="212 tabBigIconC…"><span class="idx">212</span> tabBigIconC…</div>
+  <div class="ctl" style="left:26px;top:808px;width:34px;height:8px" title="213 iv_tab_icon"><span class="idx">213</span> iv_tab_icon</div>
+  <div class="ctl" style="left:112px;top:808px;width:34px;height:8px" title="214 iv_tab_icon"><span class="idx">214</span> iv_tab_icon</div>
+  <div class="ctl" style="left:198px;top:808px;width:34px;height:8px" title="215 iv_tab_icon"><span class="idx">215</span> iv_tab_icon</div>
+  <div class="ctl" style="left:285px;top:808px;width:34px;height:8px" title="216 iv_tab_icon"><span class="idx">216</span> iv_tab_icon</div>
+  <div class="ctl" style="left:371px;top:808px;width:34px;height:8px" title="217 iv_tab_icon"><span class="idx">217</span> iv_tab_icon</div>
+</div>
+<p><strong>序号 → 控件列表见 controls_list.txt，或运行本脚本时的控制台输出。</strong></p>
+</body></html>
